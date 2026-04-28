@@ -89,6 +89,7 @@ describe('appReducer', () => {
     )
 
     const state = appReducer(loadingState, {
+      filePath: 'README.md',
       message: 'Unable to read README.md',
       type: 'file/load-failed'
     })
@@ -96,5 +97,57 @@ describe('appReducer', () => {
     expect(state.isLoadingFile).toBe(false)
     expect(state.loadedFile).toBeNull()
     expect(state.fileErrorMessage).toBe('Unable to read README.md')
+  })
+
+  it('ignores stale file contents for a previously selected file', () => {
+    const readmeLoadingState = appReducer(
+      { ...createInitialAppState(), workspace },
+      {
+        type: 'file/load-started',
+        filePath: 'README.md'
+      }
+    )
+    const introLoadingState = appReducer(readmeLoadingState, {
+      type: 'file/load-started',
+      filePath: 'docs/intro.md'
+    })
+
+    const state = appReducer(introLoadingState, {
+      file: {
+        contents: '# Old README',
+        path: 'README.md'
+      },
+      type: 'file/loaded'
+    })
+
+    expect(state.selectedFilePath).toBe('docs/intro.md')
+    expect(state.isLoadingFile).toBe(true)
+    expect(state.loadedFile).toBeNull()
+    expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('ignores stale file load failures for a previously selected file', () => {
+    const readmeLoadingState = appReducer(
+      { ...createInitialAppState(), workspace },
+      {
+        type: 'file/load-started',
+        filePath: 'README.md'
+      }
+    )
+    const introLoadingState = appReducer(readmeLoadingState, {
+      type: 'file/load-started',
+      filePath: 'docs/intro.md'
+    })
+
+    const state = appReducer(introLoadingState, {
+      filePath: 'README.md',
+      message: 'Unable to read README.md',
+      type: 'file/load-failed'
+    })
+
+    expect(state.selectedFilePath).toBe('docs/intro.md')
+    expect(state.isLoadingFile).toBe(true)
+    expect(state.loadedFile).toBeNull()
+    expect(state.fileErrorMessage).toBeNull()
   })
 })

@@ -50,7 +50,11 @@ export const App = (): React.JSX.Element => {
 
       dispatch({ type: 'file/loaded', file })
     } catch (error) {
-      dispatch({ type: 'file/load-failed', message: getErrorMessage(error) })
+      dispatch({
+        filePath,
+        message: getErrorMessage(error),
+        type: 'file/load-failed'
+      })
     }
   }
 

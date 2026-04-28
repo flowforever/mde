@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -110,5 +110,46 @@ describe('workspaceService integration', () => {
     await expect(listDirectory?.({}, outsideWorkspacePath, '')).rejects.toThrow(
       /outside workspace/i
     )
+  })
+
+  it('keeps listDirectory pinned to the canonical workspace root after an opened symlink is retargeted', async () => {
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
+    const retargetedWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-retargeted-'))
+    const workspaceLinkPath = join(
+      await mkdtemp(join(tmpdir(), 'mdv-link-parent-')),
+      'workspace-link'
+    )
+
+    await writeFile(join(originalWorkspacePath, 'original.md'), '# Original')
+    await writeFile(join(retargetedWorkspacePath, 'retargeted.md'), '# Retargeted')
+    await symlink(originalWorkspacePath, workspaceLinkPath)
+    const canonicalOriginalWorkspacePath = await realpath(originalWorkspacePath)
+
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      testWorkspacePath: workspaceLinkPath,
+      workspaceService: createWorkspaceService()
+    })
+
+    const openWorkspace = handlers.get(WORKSPACE_CHANNELS.openWorkspace)
+    const listDirectory = handlers.get(WORKSPACE_CHANNELS.listDirectory)
+
+    const workspace = await openWorkspace?.({})
+
+    await rm(workspaceLinkPath)
+    await symlink(retargetedWorkspacePath, workspaceLinkPath)
+
+    const nodes = (await listDirectory?.({}, '')) as TreeNode[]
+
+    expect(workspace).toMatchObject({ rootPath: canonicalOriginalWorkspacePath })
+    expect(nodes.map((node) => node.path)).toEqual(['original.md'])
   })
 })

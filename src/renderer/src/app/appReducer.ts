@@ -54,6 +54,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         selectedFilePath: action.filePath
       }
     case 'file/loaded':
+      if (action.file.path !== state.selectedFilePath) {
+        return state
+      }
+
       return {
         ...state,
         fileErrorMessage: null,
@@ -61,6 +65,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         loadedFile: action.file
       }
     case 'file/load-failed':
+      if (action.filePath !== state.selectedFilePath) {
+        return state
+      }
+
       return {
         ...state,
         fileErrorMessage: action.message,

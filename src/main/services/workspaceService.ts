@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
 import type { TreeNode } from '../../shared/fileTree'
@@ -93,16 +93,17 @@ export const createWorkspaceService = (): WorkspaceService => {
   return {
     async openWorkspace(workspacePath) {
       const safeWorkspacePath = assertPathInsideWorkspace(workspacePath, workspacePath)
-      const workspaceStats = await stat(safeWorkspacePath)
+      const canonicalWorkspacePath = await realpath(safeWorkspacePath)
+      const workspaceStats = await stat(canonicalWorkspacePath)
 
       if (!workspaceStats.isDirectory()) {
         throw new Error('Workspace path must be a directory')
       }
 
       return Object.freeze({
-        name: basename(safeWorkspacePath),
-        rootPath: safeWorkspacePath,
-        tree: await readTree(safeWorkspacePath, '')
+        name: basename(canonicalWorkspacePath),
+        rootPath: canonicalWorkspacePath,
+        tree: await readTree(canonicalWorkspacePath, '')
       })
     },
     listDirectory(workspacePath, directoryPath) {

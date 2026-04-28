@@ -18,4 +18,8 @@ export type AppAction =
   | { readonly type: 'file/selected'; readonly filePath: string }
   | { readonly type: 'file/load-started'; readonly filePath: string }
   | { readonly type: 'file/loaded'; readonly file: FileContents }
-  | { readonly type: 'file/load-failed'; readonly message: string }
+  | {
+      readonly type: 'file/load-failed'
+      readonly filePath: string
+      readonly message: string
+    }

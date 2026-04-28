@@ -1,4 +1,4 @@
-import { mkdtemp, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -111,5 +111,33 @@ describe('fileHandlers integration', () => {
     await expect(
       handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'leak.md')
     ).rejects.toThrow(/markdown/i)
+  })
+
+  it('keeps file reads pinned to the canonical workspace root after an opened symlink is retargeted', async () => {
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
+    const retargetedWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-retargeted-'))
+    const workspaceLinkPath = join(
+      await mkdtemp(join(tmpdir(), 'mdv-link-parent-')),
+      'workspace-link'
+    )
+
+    await writeFile(join(originalWorkspacePath, 'README.md'), '# Original')
+    await writeFile(join(retargetedWorkspacePath, 'README.md'), '# Retargeted')
+    await symlink(originalWorkspacePath, workspaceLinkPath)
+
+    const { handlers } = registerHandlers(workspaceLinkPath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    await rm(workspaceLinkPath)
+    await symlink(retargetedWorkspacePath, workspaceLinkPath)
+
+    const result = (await handlers
+      .get(FILE_CHANNELS.readMarkdownFile)
+      ?.({}, 'README.md')) as FileContents
+
+    expect(result).toEqual({
+      contents: '# Original',
+      path: 'README.md'
+    })
   })
 })
