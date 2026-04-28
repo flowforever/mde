@@ -23,7 +23,11 @@ export const launchElectronApp = async (): Promise<LaunchedElectronApp> => {
     output: []
   }
   const app = await electron.launch({
-    args: ['out/main/index.js']
+    args: ['out/main/index.js'],
+    env: {
+      ...process.env,
+      MDV_CAPTURE_STARTUP_DIAGNOSTICS: '1'
+    }
   })
 
   const childProcess = app.process()
@@ -59,6 +63,20 @@ export const launchElectronApp = async (): Promise<LaunchedElectronApp> => {
   })
 
   const window = await app.firstWindow()
+  const mainDiagnostics = await app.evaluate(() => {
+    const diagnostics = globalThis.__mdvStartupDiagnostics as
+      | StartupDiagnostics
+      | undefined
+
+    if (!diagnostics) {
+      throw new Error('Main-process startup diagnostics were not initialized')
+    }
+
+    return diagnostics
+  })
+
+  startupDiagnostics.errors.push(...mainDiagnostics.errors)
+  startupDiagnostics.output.push(...mainDiagnostics.output)
 
   return { app, startupDiagnostics, window }
 }

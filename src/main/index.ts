@@ -4,9 +4,66 @@ import type {
   App,
   BrowserWindow,
   BrowserWindowConstructorOptions,
+  WebContents,
 } from 'electron'
 
 type BrowserWindowConstructor = typeof BrowserWindow
+interface StartupDiagnostics {
+  errors: string[]
+  output: string[]
+}
+
+declare global {
+  var __mdvStartupDiagnostics: StartupDiagnostics | undefined
+}
+
+const startupDiagnosticPattern = /preload|security|unable to load preload/i
+
+const getStartupDiagnostics = (): StartupDiagnostics | undefined => {
+  if (process.env.MDV_CAPTURE_STARTUP_DIAGNOSTICS !== '1') {
+    return undefined
+  }
+
+  globalThis.__mdvStartupDiagnostics ??= {
+    errors: [],
+    output: []
+  }
+
+  return globalThis.__mdvStartupDiagnostics
+}
+
+const recordStartupError = (message: string): void => {
+  const diagnostics = getStartupDiagnostics()
+
+  if (!diagnostics) {
+    return
+  }
+
+  diagnostics.errors.push(message)
+  diagnostics.output.push(message)
+}
+
+const captureStartupDiagnostics = (webContents: WebContents): void => {
+  if (!getStartupDiagnostics()) {
+    return
+  }
+
+  webContents.on('preload-error', (_event, preloadPath, error) => {
+    recordStartupError(`Preload error in ${preloadPath}: ${error.message}`)
+  })
+
+  webContents.on('console-message', (_event, level, message) => {
+    if (level >= 2 || startupDiagnosticPattern.test(message)) {
+      recordStartupError(message)
+    }
+  })
+
+  webContents.on('render-process-gone', (_event, details) => {
+    recordStartupError(
+      `Render process gone: ${details.reason} (${details.exitCode})`
+    )
+  })
+}
 
 export const createPreloadPath = (mainDirectory: string): string =>
   join(mainDirectory, '../preload/index.mjs')
@@ -34,6 +91,8 @@ const createMainWindow = async (
   const window = new BrowserWindow(
     createWindowOptions(createPreloadPath(__dirname))
   )
+
+  captureStartupDiagnostics(window.webContents)
 
   window.once('ready-to-show', () => {
     window.show()
