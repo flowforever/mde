@@ -17,5 +17,26 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       Awaited<ReturnType<EditorApi['openWorkspace']>>
     >,
   readMarkdownFile: (filePath) =>
-    ipcRenderer.invoke(FILE_CHANNELS.readMarkdownFile, filePath) as Promise<FileContents>
+    ipcRenderer.invoke(FILE_CHANNELS.readMarkdownFile, filePath) as Promise<FileContents>,
+  writeMarkdownFile: (filePath, contents) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.writeMarkdownFile,
+      filePath,
+      contents
+    ) as Promise<FileContents>,
+  createMarkdownFile: (filePath) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.createMarkdownFile,
+      filePath
+    ) as Promise<FileContents>,
+  createFolder: (folderPath) =>
+    ipcRenderer.invoke(FILE_CHANNELS.createFolder, folderPath) as Promise<void>,
+  renameEntry: (oldPath, newPath) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.renameEntry,
+      oldPath,
+      newPath
+    ) as Promise<Awaited<ReturnType<EditorApi['renameEntry']>>>,
+  deleteEntry: (entryPath) =>
+    ipcRenderer.invoke(FILE_CHANNELS.deleteEntry, entryPath) as Promise<void>
 })

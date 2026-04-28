@@ -249,4 +249,97 @@ describe('appReducer', () => {
     expect(state.loadedFile).toBeNull()
     expect(state.fileErrorMessage).toBeNull()
   })
+
+  it('marks the current file dirty after editor changes', () => {
+    const loadedState = appReducer(
+      appReducer(
+        { ...createInitialAppState(), workspace },
+        {
+          filePath: 'README.md',
+          type: 'file/load-started',
+          workspaceRoot: workspace.rootPath
+        }
+      ),
+      {
+        file: {
+          contents: '# Fixture Workspace',
+          path: 'README.md'
+        },
+        type: 'file/loaded',
+        workspaceRoot: workspace.rootPath
+      }
+    )
+
+    const state = appReducer(loadedState, {
+      contents: '# Changed',
+      type: 'file/content-changed'
+    })
+
+    expect(state.isDirty).toBe(true)
+    expect(state.draftMarkdown).toBe('# Changed')
+  })
+
+  it('clears dirty state after a successful save', () => {
+    const dirtyState = appReducer(
+      {
+        ...createInitialAppState(),
+        loadedFile: {
+          contents: '# Original',
+          path: 'README.md'
+        },
+        selectedFilePath: 'README.md',
+        workspace
+      },
+      {
+        contents: '# Changed',
+        type: 'file/content-changed'
+      }
+    )
+
+    const state = appReducer(dirtyState, {
+      contents: '# Changed',
+      filePath: 'README.md',
+      type: 'file/save-succeeded',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(state.isDirty).toBe(false)
+    expect(state.isSavingFile).toBe(false)
+    expect(state.draftMarkdown).toBe('# Changed')
+    expect(state.loadedFile).toEqual({
+      contents: '# Changed',
+      path: 'README.md'
+    })
+  })
+
+  it('preserves dirty state after a failed save', () => {
+    const dirtyState = appReducer(
+      {
+        ...createInitialAppState(),
+        isSavingFile: true,
+        loadedFile: {
+          contents: '# Original',
+          path: 'README.md'
+        },
+        selectedFilePath: 'README.md',
+        workspace
+      },
+      {
+        contents: '# Changed',
+        type: 'file/content-changed'
+      }
+    )
+
+    const state = appReducer(dirtyState, {
+      filePath: 'README.md',
+      message: 'Unable to save README.md',
+      type: 'file/save-failed',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(state.isDirty).toBe(true)
+    expect(state.isSavingFile).toBe(false)
+    expect(state.draftMarkdown).toBe('# Changed')
+    expect(state.fileErrorMessage).toBe('Unable to save README.md')
+  })
 })

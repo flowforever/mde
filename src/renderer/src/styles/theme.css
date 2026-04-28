@@ -95,6 +95,85 @@ button {
   white-space: nowrap;
 }
 
+.explorer-toolbar,
+.explorer-selection-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.explorer-toolbar button,
+.explorer-selection-actions button {
+  min-height: 30px;
+  padding: 0 8px;
+  color: #d8dee9;
+  background: #2b3137;
+  border: 1px solid #3a434b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.explorer-toolbar button:hover,
+.explorer-selection-actions button:hover {
+  background: #343c44;
+}
+
+.explorer-entry-form,
+.explorer-delete-confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: #242a30;
+  border: 1px solid #343b42;
+  border-radius: 6px;
+}
+
+.explorer-entry-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #b7c2cc;
+  font-size: 12px;
+}
+
+.explorer-entry-form input {
+  min-height: 30px;
+  padding: 0 8px;
+  color: #f4f6f8;
+  background: #171b1f;
+  border: 1px solid #3a434b;
+  border-radius: 4px;
+}
+
+.explorer-form-actions,
+.explorer-delete-confirmation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.explorer-form-actions {
+  gap: 6px;
+}
+
+.explorer-form-actions button,
+.explorer-delete-confirmation button {
+  min-height: 28px;
+  color: #d8dee9;
+  background: #2b3137;
+  border: 1px solid #3a434b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.explorer-delete-confirmation p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #ffcfbf;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .explorer-tree {
   display: flex;
   flex-direction: column;
@@ -198,6 +277,8 @@ button {
   display: flex;
   min-height: 34px;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   border-bottom: 1px solid #e5ded2;
 }
 
@@ -208,6 +289,21 @@ button {
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.markdown-editor-save-button {
+  min-height: 30px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: #2f6f9f;
+  border: 1px solid #2d638d;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.markdown-editor-save-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .markdown-editor-surface {

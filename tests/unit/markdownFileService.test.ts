@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises'
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  stat,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -67,5 +74,80 @@ describe('markdownFileService', () => {
     await expect(
       createMarkdownFileService().readMarkdownFile(rootPath, 'leak.md')
     ).rejects.toThrow(/markdown/i)
+  })
+
+  it('writes Markdown files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    await mkdir(join(rootPath, 'docs'))
+    await writeFile(join(rootPath, 'docs', 'intro.md'), '# Intro')
+
+    await createMarkdownFileService().writeMarkdownFile(
+      rootPath,
+      'docs/intro.md',
+      '# Changed\n\nSaved from editor.\n'
+    )
+
+    await expect(readFile(join(rootPath, 'docs', 'intro.md'), 'utf8')).resolves.toBe(
+      '# Changed\n\nSaved from editor.\n'
+    )
+  })
+
+  it('creates Markdown files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    const result = await createMarkdownFileService().createMarkdownFile(
+      rootPath,
+      'notes/today.md'
+    )
+
+    expect(result).toEqual({
+      contents: '',
+      path: 'notes/today.md'
+    })
+    await expect(readFile(join(rootPath, 'notes', 'today.md'), 'utf8')).resolves.toBe(
+      ''
+    )
+  })
+
+  it('creates folders inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await createMarkdownFileService().createFolder(rootPath, 'notes/daily')
+
+    const createdFolderStats = await stat(join(rootPath, 'notes', 'daily'))
+
+    expect(createdFolderStats.isDirectory()).toBe(true)
+  })
+
+  it('renames files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    await writeFile(join(rootPath, 'draft.md'), '# Draft')
+
+    const result = await createMarkdownFileService().renameEntry(
+      rootPath,
+      'draft.md',
+      'final.md'
+    )
+
+    expect(result).toEqual({
+      path: 'final.md'
+    })
+    await expect(readFile(join(rootPath, 'final.md'), 'utf8')).resolves.toBe(
+      '# Draft'
+    )
+    await expect(stat(join(rootPath, 'draft.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
+  it('deletes entries inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    await writeFile(join(rootPath, 'old.md'), '# Old')
+
+    await createMarkdownFileService().deleteEntry(rootPath, 'old.md')
+
+    await expect(stat(join(rootPath, 'old.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
   })
 })

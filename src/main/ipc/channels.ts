@@ -4,5 +4,10 @@ export const WORKSPACE_CHANNELS = Object.freeze({
 })
 
 export const FILE_CHANNELS = Object.freeze({
-  readMarkdownFile: 'file:read-markdown'
+  createFolder: 'file:create-folder',
+  createMarkdownFile: 'file:create-markdown',
+  deleteEntry: 'file:delete-entry',
+  readMarkdownFile: 'file:read-markdown',
+  renameEntry: 'file:rename-entry',
+  writeMarkdownFile: 'file:write-markdown'
 })

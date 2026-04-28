@@ -16,11 +16,15 @@ interface ExplorerTreeRootProps extends ExplorerTreeProps {
 const ExplorerTreeNode = ({
   depth,
   node,
+  onSelectEntry,
   onSelectFile,
+  selectedEntryPath,
   selectedFilePath
 }: ExplorerTreeNodeProps): React.JSX.Element => {
   const [isExpanded, setIsExpanded] = useState(false)
-  const isSelected = node.type === 'file' && selectedFilePath === node.path
+  const isSelected =
+    selectedEntryPath === node.path ||
+    (node.type === 'file' && selectedFilePath === node.path)
   const rowStyle = { '--depth': depth } as CSSProperties
   const toggleExpanded = (): void => {
     setIsExpanded((currentValue) => !currentValue)
@@ -41,8 +45,14 @@ const ExplorerTreeNode = ({
           </button>
           <button
             aria-expanded={isExpanded}
-            className="explorer-row-button"
-            onClick={toggleExpanded}
+            aria-current={isSelected ? 'true' : undefined}
+            className={
+              isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
+            }
+            onClick={() => {
+              onSelectEntry(node.path)
+              toggleExpanded()
+            }}
             type="button"
           >
             {node.name}
@@ -55,7 +65,9 @@ const ExplorerTreeNode = ({
                 depth={depth + 1}
                 key={childNode.path}
                 node={childNode}
+                onSelectEntry={onSelectEntry}
                 onSelectFile={onSelectFile}
+                selectedEntryPath={selectedEntryPath}
                 selectedFilePath={selectedFilePath}
               />
             ))}
@@ -75,6 +87,7 @@ const ExplorerTreeNode = ({
             isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
           }
           onClick={() => {
+            onSelectEntry(node.path)
             onSelectFile(node.path)
           }}
           type="button"
@@ -88,7 +101,9 @@ const ExplorerTreeNode = ({
 
 export const ExplorerTree = ({
   nodes,
+  onSelectEntry,
   onSelectFile,
+  selectedEntryPath,
   selectedFilePath
 }: ExplorerTreeRootProps): React.JSX.Element => (
   <ul className="explorer-tree">
@@ -97,7 +112,9 @@ export const ExplorerTree = ({
         depth={0}
         key={node.path}
         node={node}
+        onSelectEntry={onSelectEntry}
         onSelectFile={onSelectFile}
+        selectedEntryPath={selectedEntryPath}
         selectedFilePath={selectedFilePath}
       />
     ))}

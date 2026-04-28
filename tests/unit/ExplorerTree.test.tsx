@@ -47,7 +47,15 @@ describe('ExplorerTree', () => {
   it('renders nested folders and files after expansion', async () => {
     const user = userEvent.setup()
 
-    render(<ExplorerTree nodes={tree} selectedFilePath={null} onSelectFile={vi.fn()} />)
+    render(
+      <ExplorerTree
+        nodes={tree}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        selectedEntryPath={null}
+        selectedFilePath={null}
+      />
+    )
 
     await user.click(screen.getByRole('button', { name: /expand docs/i }))
     await user.click(screen.getByRole('button', { name: /expand nested/i }))
@@ -60,7 +68,15 @@ describe('ExplorerTree', () => {
   it('toggles a directory from the visible row button with expanded state', async () => {
     const user = userEvent.setup()
 
-    render(<ExplorerTree nodes={tree} selectedFilePath={null} onSelectFile={vi.fn()} />)
+    render(
+      <ExplorerTree
+        nodes={tree}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        selectedEntryPath={null}
+        selectedFilePath={null}
+      />
+    )
 
     const docsRow = screen.getByRole('button', { name: /^docs$/ })
 
@@ -84,8 +100,10 @@ describe('ExplorerTree', () => {
     render(
       <ExplorerTree
         nodes={tree}
-        selectedFilePath={null}
+        onSelectEntry={vi.fn()}
         onSelectFile={onSelectFile}
+        selectedEntryPath={null}
+        selectedFilePath={null}
       />
     )
 
@@ -97,12 +115,16 @@ describe('ExplorerTree', () => {
   it('resets expanded folders when the workspace root changes', async () => {
     const user = userEvent.setup()
     const createState = (rootPath: string): AppState => ({
+      draftMarkdown: null,
       errorMessage: null,
       fileErrorMessage: null,
+      isDirty: false,
       isLoadingFile: false,
       isOpeningWorkspace: false,
+      isSavingFile: false,
       loadedFile: null,
       loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
       selectedFilePath: null,
       workspace: {
         name: 'workspace',
@@ -113,7 +135,12 @@ describe('ExplorerTree', () => {
 
     const { rerender } = render(
       <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
         onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
         onSelectFile={vi.fn()}
         state={createState('/workspace-one')}
       />
@@ -124,7 +151,12 @@ describe('ExplorerTree', () => {
 
     rerender(
       <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
         onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
         onSelectFile={vi.fn()}
         state={createState('/workspace-two')}
       />

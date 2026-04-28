@@ -1,4 +1,4 @@
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -138,6 +138,85 @@ describe('fileHandlers integration', () => {
     expect(result).toEqual({
       contents: '# Original',
       path: 'README.md'
+    })
+  })
+
+  it('saves edited Markdown through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Original\n')
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    await handlers
+      .get(FILE_CHANNELS.writeMarkdownFile)
+      ?.({}, 'README.md', '# Edited\n\nSaved from integration.\n')
+
+    await expect(readFile(join(workspacePath, 'README.md'), 'utf8')).resolves.toBe(
+      '# Edited\n\nSaved from integration.\n'
+    )
+  })
+
+  it('creates a Markdown file through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Workspace')
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const result = (await handlers
+      .get(FILE_CHANNELS.createMarkdownFile)
+      ?.({}, 'notes/today.md')) as FileContents
+
+    expect(result).toEqual({
+      contents: '',
+      path: 'notes/today.md'
+    })
+    await expect(readFile(join(workspacePath, 'notes', 'today.md'), 'utf8')).resolves.toBe(
+      ''
+    )
+  })
+
+  it('creates a folder through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Workspace')
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    await handlers.get(FILE_CHANNELS.createFolder)?.({}, 'notes/daily')
+
+    const createdFolderStats = await stat(join(workspacePath, 'notes', 'daily'))
+
+    expect(createdFolderStats.isDirectory()).toBe(true)
+  })
+
+  it('renames an entry through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    await writeFile(join(workspacePath, 'draft.md'), '# Draft')
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const result = (await handlers
+      .get(FILE_CHANNELS.renameEntry)
+      ?.({}, 'draft.md', 'final.md')) as { path: string }
+
+    expect(result).toEqual({ path: 'final.md' })
+    await expect(readFile(join(workspacePath, 'final.md'), 'utf8')).resolves.toBe(
+      '# Draft'
+    )
+    await expect(stat(join(workspacePath, 'draft.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
+  it('deletes an entry through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    await writeFile(join(workspacePath, 'old.md'), '# Old')
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    await handlers.get(FILE_CHANNELS.deleteEntry)?.({}, 'old.md')
+
+    await expect(stat(join(workspacePath, 'old.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
     })
   })
 })
