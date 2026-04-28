@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -42,6 +42,19 @@ describe('markdownFileService', () => {
         rootPath,
         join(outsidePath, 'outside.md')
       )
+    ).rejects.toThrow(/outside workspace/i)
+  })
+
+  it('rejects Markdown symlinks that resolve outside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideFilePath = join(outsidePath, 'outside.md')
+
+    await writeFile(outsideFilePath, '# Outside')
+    await symlink(outsideFilePath, join(rootPath, 'leak.md'))
+
+    await expect(
+      createMarkdownFileService().readMarkdownFile(rootPath, 'leak.md')
     ).rejects.toThrow(/outside workspace/i)
   })
 })

@@ -1,4 +1,6 @@
-import { resolve } from 'node:path'
+import { mkdtemp, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -11,8 +13,14 @@ import type { FileContents } from '../../src/shared/workspace'
 
 const fixtureWorkspacePath = resolve('tests/fixtures/workspace')
 
+interface RegisteredHandlers {
+  readonly handlers: Map<string, (...args: unknown[]) => unknown>
+}
+
 describe('fileHandlers integration', () => {
-  const registerHandlers = (): Map<string, (...args: unknown[]) => unknown> => {
+  const registerHandlers = (
+    workspacePath = fixtureWorkspacePath
+  ): RegisteredHandlers => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -23,7 +31,7 @@ describe('fileHandlers integration', () => {
     const workspaceSession = registerWorkspaceHandlers({
       dialog: { showOpenDialog: vi.fn() },
       ipcMain,
-      testWorkspacePath: fixtureWorkspacePath,
+      testWorkspacePath: workspacePath,
       workspaceService: createWorkspaceService()
     })
 
@@ -33,11 +41,11 @@ describe('fileHandlers integration', () => {
       markdownFileService: createMarkdownFileService()
     })
 
-    return handlers
+    return { handlers }
   }
 
   it('reads a Markdown file from the active fixture workspace', async () => {
-    const handlers = registerHandlers()
+    const { handlers } = registerHandlers()
 
     await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
 
@@ -52,7 +60,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects non-Markdown files', async () => {
-    const handlers = registerHandlers()
+    const { handlers } = registerHandlers()
 
     await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
 
@@ -62,12 +70,30 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects path traversal outside the active workspace', async () => {
-    const handlers = registerHandlers()
+    const { handlers } = registerHandlers()
 
     await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
 
     await expect(
       handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, '../package.json')
+    ).rejects.toThrow(/outside workspace/i)
+  })
+
+  it('rejects Markdown symlinks that resolve outside the active workspace', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideFilePath = join(outsidePath, 'outside.md')
+
+    await writeFile(join(workspacePath, 'README.md'), '# Workspace')
+    await writeFile(outsideFilePath, '# Outside')
+    await symlink(outsideFilePath, join(workspacePath, 'leak.md'))
+
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+
+    await expect(
+      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'leak.md')
     ).rejects.toThrow(/outside workspace/i)
   })
 })
