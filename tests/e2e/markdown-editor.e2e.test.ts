@@ -7,17 +7,7 @@ test.beforeAll(async () => {
 })
 
 test('shows the initial open folder action', async () => {
-  const startupErrors: string[] = []
-  const { app, window } = await launchElectronApp()
-
-  window.on('console', (message) => {
-    if (message.type() === 'error' || /preload|security/i.test(message.text())) {
-      startupErrors.push(message.text())
-    }
-  })
-  window.on('pageerror', (error) => {
-    startupErrors.push(error.message)
-  })
+  const { app, startupDiagnostics, window } = await launchElectronApp()
 
   try {
     await expect(window.getByRole('button', { name: /open folder/i })).toBeVisible()
@@ -32,7 +22,7 @@ test('shows the initial open folder action', async () => {
         })
       )
       .toBe(true)
-    expect(startupErrors).toEqual([])
+    expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
   }

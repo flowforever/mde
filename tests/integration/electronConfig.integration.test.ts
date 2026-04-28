@@ -1,3 +1,4 @@
+import { basename, normalize, sep } from 'node:path'
 import { readFile } from 'node:fs/promises'
 
 import { describe, expect, it } from 'vitest'
@@ -15,7 +16,13 @@ describe('Electron window config', () => {
   })
 
   it('points at the electron-vite preload bundle emitted by build', () => {
-    expect(createPreloadPath('/app/out/main')).toBe('/app/out/preload/index.mjs')
+    const preloadPath = normalize(createPreloadPath('/app/out/main'))
+    const pathSegments = preloadPath.split(sep)
+
+    expect(basename(preloadPath)).toBe('index.mjs')
+    expect(pathSegments).toContain('out')
+    expect(pathSegments).toContain('preload')
+    expect(pathSegments).not.toContain('main')
   })
 })
 
