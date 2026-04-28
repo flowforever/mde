@@ -16,6 +16,12 @@ describe('pathSafety', () => {
     expect(assertPathInsideWorkspace(workspacePath, filePath)).toBe(filePath)
   })
 
+  it('accepts paths inside dot-prefixed workspace folders', () => {
+    const filePath = join(workspacePath, '..notes', 'file.md')
+
+    expect(assertPathInsideWorkspace(workspacePath, filePath)).toBe(filePath)
+  })
+
   it('rejects traversal outside the workspace', () => {
     const outsidePath = resolve(workspacePath, '..', 'secrets.md')
 

@@ -1,4 +1,4 @@
-import { relative, resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 export const assertPathInsideWorkspace = (
   workspacePath: string,
@@ -8,10 +8,13 @@ export const assertPathInsideWorkspace = (
   const resolvedTargetPath = resolve(targetPath)
   const relativePath = relative(resolvedWorkspacePath, resolvedTargetPath)
 
-  if (
+  const isInsideWorkspace =
     relativePath === '' ||
-    (!relativePath.startsWith('..') && !resolve(relativePath).startsWith('..'))
-  ) {
+    (!isAbsolute(relativePath) &&
+      relativePath !== '..' &&
+      !relativePath.startsWith(`..${sep}`))
+
+  if (isInsideWorkspace) {
     return resolvedTargetPath
   }
 
