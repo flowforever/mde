@@ -49,7 +49,12 @@ export type AppAction =
       readonly message: string
       readonly workspaceRoot: string
     }
-  | { readonly type: 'file/content-changed'; readonly contents: string }
+  | {
+      readonly type: 'file/content-changed'
+      readonly contents: string
+      readonly filePath: string
+      readonly workspaceRoot: string
+    }
   | {
       readonly type: 'file/save-started'
       readonly filePath: string

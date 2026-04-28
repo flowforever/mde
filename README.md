@@ -27,6 +27,7 @@ npm run lint
 npm run typecheck
 npm run test:unit
 npm run test:integration
+npm run test:coverage
 npm run test:e2e
 npm run test
 ```

@@ -289,4 +289,108 @@ describe('ExplorerTree', () => {
       screen.getByText(/open a folder to browse markdown files/i)
     ).toBeVisible()
   })
+
+  it('submits create file and create folder actions from the toolbar', async () => {
+    const user = userEvent.setup()
+    const onCreateFile = vi.fn()
+    const onCreateFolder = vi.fn()
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={onCreateFile}
+        onCreateFolder={onCreateFolder}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /new markdown file/i }))
+    await user.clear(screen.getByLabelText(/markdown file path/i))
+    await user.type(screen.getByLabelText(/markdown file path/i), 'daily.md')
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(onCreateFile).toHaveBeenCalledWith('daily.md')
+
+    await user.click(screen.getByRole('button', { name: /new folder/i }))
+    await user.clear(screen.getByLabelText(/folder path/i))
+    await user.type(screen.getByLabelText(/folder path/i), 'daily')
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(onCreateFolder).toHaveBeenCalledWith('daily')
+  })
+
+  it('submits rename and confirmed delete for the selected entry', async () => {
+    const user = userEvent.setup()
+    const onRenameEntry = vi.fn()
+    const onDeleteEntry = vi.fn()
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={onDeleteEntry}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={onRenameEntry}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /rename selected README\.md/i }))
+    await user.clear(screen.getByLabelText(/entry name/i))
+    await user.type(screen.getByLabelText(/entry name/i), 'renamed.md')
+    await user.click(screen.getByRole('button', { name: /^rename$/i }))
+
+    expect(onRenameEntry).toHaveBeenCalledWith('renamed.md')
+
+    await user.click(screen.getByRole('button', { name: /delete selected README\.md/i }))
+    expect(screen.getByText(/delete README\.md/i)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: /confirm delete/i }))
+
+    expect(onDeleteEntry).toHaveBeenCalledTimes(1)
+  })
 })

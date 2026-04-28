@@ -2,6 +2,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  readdir,
   realpath,
   rename,
   rm,
@@ -12,6 +13,15 @@ import { dirname, extname, join, relative, sep } from 'node:path'
 
 import type { FileContents, RenamedEntry } from '../../shared/workspace'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
+
+const ignoredEntryNames = new Set([
+  '.DS_Store',
+  '.git',
+  'dist',
+  'node_modules',
+  'out',
+  'release'
+])
 
 export interface MarkdownFileService {
   readonly readMarkdownFile: (
@@ -74,6 +84,20 @@ const assertPathDoesNotExist = async (targetPath: string): Promise<void> => {
   throw new Error('Path already exists')
 }
 
+const assertSupportedEntryName = (entryName: string): void => {
+  if (ignoredEntryNames.has(entryName)) {
+    throw new Error('Unsupported workspace entry')
+  }
+}
+
+const assertSupportedWorkspacePath = (entryPath: string): void => {
+  assertNonEmptyWorkspacePath(entryPath)
+  entryPath
+    .split(/[\\/]/)
+    .filter((segment) => segment.length > 0)
+    .forEach(assertSupportedEntryName)
+}
+
 const assertSupportedMarkdownFileStats = (
   fileStats: Awaited<ReturnType<typeof stat>>
 ): void => {
@@ -91,7 +115,7 @@ const assertNoSymlinkPathComponents = async (
   targetPath: string,
   options: { readonly allowMissing: boolean }
 ): Promise<string> => {
-  assertNonEmptyWorkspacePath(targetPath)
+  assertSupportedWorkspacePath(targetPath)
 
   const realWorkspacePath = await realpath(workspacePath)
   const absoluteTargetPath = resolveWorkspacePath(realWorkspacePath, targetPath)
@@ -103,6 +127,7 @@ const assertNoSymlinkPathComponents = async (
   let currentPath = realWorkspacePath
 
   for (const segment of pathSegments) {
+    assertSupportedEntryName(segment)
     currentPath = join(currentPath, segment)
 
     try {
@@ -127,7 +152,7 @@ const resolveExistingMarkdownFile = async (
   workspacePath: string,
   filePath: string
 ): Promise<string> => {
-  assertNonEmptyWorkspacePath(filePath)
+  assertSupportedWorkspacePath(filePath)
 
   const absoluteFilePath = resolveWorkspacePath(workspacePath, filePath)
 
@@ -167,6 +192,79 @@ const resolveMutableMarkdownFile = async (
   assertSupportedMarkdownFileStats(fileStats)
 
   return absoluteFilePath
+}
+
+const assertManageableDirectoryContents = async (
+  directoryPath: string
+): Promise<void> => {
+  const entries = await readdir(directoryPath, { withFileTypes: true })
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      assertSupportedEntryName(entry.name)
+
+      const entryPath = join(directoryPath, entry.name)
+      const entryStats = await lstat(entryPath)
+
+      if (entryStats.isSymbolicLink()) {
+        throw new Error('Symlink paths are unsupported for file changes')
+      }
+
+      if (entryStats.isDirectory()) {
+        await assertManageableDirectoryContents(entryPath)
+        return
+      }
+
+      if (entryStats.isFile() && isMarkdownPath(entry.name)) {
+        assertSupportedMarkdownFileStats(await stat(entryPath))
+        return
+      }
+
+      throw new Error('Unsupported workspace entry')
+    })
+  )
+}
+
+interface MutableEntry {
+  readonly absolutePath: string
+  readonly type: 'directory' | 'file'
+}
+
+const resolveMutableEntry = async (
+  workspacePath: string,
+  entryPath: string
+): Promise<MutableEntry> => {
+  const absoluteEntryPath = await assertNoSymlinkPathComponents(
+    workspacePath,
+    entryPath,
+    { allowMissing: false }
+  )
+  const entryStats = await lstat(absoluteEntryPath)
+
+  if (entryStats.isSymbolicLink()) {
+    throw new Error('Symlink paths are unsupported for file changes')
+  }
+
+  if (entryStats.isFile()) {
+    assertMarkdownPath(entryPath)
+    assertSupportedMarkdownFileStats(await stat(absoluteEntryPath))
+
+    return {
+      absolutePath: absoluteEntryPath,
+      type: 'file'
+    }
+  }
+
+  if (entryStats.isDirectory()) {
+    await assertManageableDirectoryContents(absoluteEntryPath)
+
+    return {
+      absolutePath: absoluteEntryPath,
+      type: 'directory'
+    }
+  }
+
+  throw new Error('Unsupported workspace entry')
 }
 
 const prepareMutableNewPath = async (
@@ -236,21 +334,16 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
     assertNonEmptyWorkspacePath(oldPath)
     assertNonEmptyWorkspacePath(newPath)
 
-    const absoluteOldPath = await assertNoSymlinkPathComponents(
-      workspacePath,
-      oldPath,
-      { allowMissing: false }
-    )
-    const oldStats = await stat(absoluteOldPath)
+    const oldEntry = await resolveMutableEntry(workspacePath, oldPath)
 
-    if (oldStats.isFile() && !isMarkdownPath(newPath)) {
-      throw new Error('Only Markdown files can be renamed')
+    if (oldEntry.type === 'file') {
+      assertMarkdownPath(newPath)
     }
 
     const absoluteNewPath = await prepareMutableNewPath(workspacePath, newPath)
 
     await assertPathDoesNotExist(absoluteNewPath)
-    await rename(absoluteOldPath, absoluteNewPath)
+    await rename(oldEntry.absolutePath, absoluteNewPath)
 
     return Object.freeze({
       path: newPath
@@ -259,13 +352,9 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
   async deleteEntry(workspacePath, entryPath) {
     assertNonEmptyWorkspacePath(entryPath)
 
-    const absoluteEntryPath = await assertNoSymlinkPathComponents(
-      workspacePath,
-      entryPath,
-      { allowMissing: false }
-    )
+    const entry = await resolveMutableEntry(workspacePath, entryPath)
 
-    await rm(absoluteEntryPath, {
+    await rm(entry.absolutePath, {
       force: false,
       recursive: true
     })

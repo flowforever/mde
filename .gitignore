@@ -5,4 +5,5 @@ out/
 release/
 test-results/
 playwright-report/
+coverage/
 .DS_Store

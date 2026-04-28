@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { expect, test } from '@playwright/test'
@@ -151,6 +151,46 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
       window.getByRole('button', { name: /notes\.md Markdown file/i })
     ).toBeVisible()
     await expect(readFile(join(workspacePath, 'notes.md'), 'utf8')).resolves.toBe('')
+
+    await window.getByRole('button', { name: /new folder/i }).click()
+    await window.getByLabel(/folder path/i).fill('drafts')
+    await window.getByRole('button', { name: /^create$/i }).click()
+
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeVisible()
+    await expect(stat(join(workspacePath, 'drafts'))).resolves.toMatchObject({})
+
+    const notesRow = window.getByRole('button', {
+      name: /notes\.md Markdown file/i
+    })
+
+    await notesRow.click()
+    await window
+      .getByRole('button', { name: /rename selected notes\.md/i })
+      .click()
+    await window.getByLabel(/entry name/i).fill('renamed')
+    await window.getByRole('button', { name: /^rename$/i }).click()
+
+    await expect(
+      window.getByRole('button', { name: /renamed\.md Markdown file/i })
+    ).toBeVisible()
+    await expect(stat(join(workspacePath, 'renamed.md'))).resolves.toMatchObject({})
+    await expect(stat(join(workspacePath, 'notes.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+
+    await window
+      .getByRole('button', { name: /delete selected renamed\.md/i })
+      .click()
+    await window.getByRole('button', { name: /confirm delete/i }).click()
+
+    await expect(
+      window.getByRole('button', { name: /renamed\.md Markdown file/i })
+    ).toBeHidden()
+    await expect(stat(join(workspacePath, 'renamed.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

@@ -55,11 +55,13 @@ describe('fileHandlers integration', () => {
   it('reads a Markdown file from the active fixture workspace', async () => {
     const { handlers } = registerHandlers()
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     const result = (await handlers
       .get(FILE_CHANNELS.readMarkdownFile)
-      ?.({}, 'README.md')) as FileContents
+      ?.({}, 'README.md', workspace.rootPath)) as FileContents
 
     expect(result).toEqual({
       contents: '# Fixture Workspace\n\nRoot markdown file.\n',
@@ -70,20 +72,28 @@ describe('fileHandlers integration', () => {
   it('rejects non-Markdown files', async () => {
     const { handlers } = registerHandlers()
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     await expect(
-      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'package.json')
+      handlers
+        .get(FILE_CHANNELS.readMarkdownFile)
+        ?.({}, 'package.json', workspace.rootPath)
     ).rejects.toThrow(/markdown/i)
   })
 
   it('rejects path traversal outside the active workspace', async () => {
     const { handlers } = registerHandlers()
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     await expect(
-      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, '../package.json')
+      handlers
+        .get(FILE_CHANNELS.readMarkdownFile)
+        ?.({}, '../package.json', workspace.rootPath)
     ).rejects.toThrow(/outside workspace/i)
   })
 
@@ -98,10 +108,14 @@ describe('fileHandlers integration', () => {
 
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     await expect(
-      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'leak.md')
+      handlers
+        .get(FILE_CHANNELS.readMarkdownFile)
+        ?.({}, 'leak.md', workspace.rootPath)
     ).rejects.toThrow(/outside workspace/i)
   })
 
@@ -114,10 +128,14 @@ describe('fileHandlers integration', () => {
 
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     await expect(
-      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'leak.md')
+      handlers
+        .get(FILE_CHANNELS.readMarkdownFile)
+        ?.({}, 'leak.md', workspace.rootPath)
     ).rejects.toThrow(/markdown/i)
   })
 
@@ -135,13 +153,15 @@ describe('fileHandlers integration', () => {
 
     const { handlers } = registerHandlers(workspaceLinkPath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
     await rm(workspaceLinkPath)
     await symlink(retargetedWorkspacePath, workspaceLinkPath)
 
     const result = (await handlers
       .get(FILE_CHANNELS.readMarkdownFile)
-      ?.({}, 'README.md')) as FileContents
+      ?.({}, 'README.md', workspace.rootPath)) as FileContents
 
     expect(result).toEqual({
       contents: '# Original',
@@ -160,10 +180,14 @@ describe('fileHandlers integration', () => {
 
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     await expect(
-      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'inside.md')
+      handlers
+        .get(FILE_CHANNELS.readMarkdownFile)
+        ?.({}, 'inside.md', workspace.rootPath)
     ).rejects.toThrow(/hard-linked/i)
   })
 
@@ -178,14 +202,74 @@ describe('fileHandlers integration', () => {
 
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
 
     await expect(
       handlers
         .get(FILE_CHANNELS.writeMarkdownFile)
-        ?.({}, 'inside.md', '# Changed')
+        ?.({}, 'inside.md', '# Changed', workspace.rootPath)
     ).rejects.toThrow(/hard-linked/i)
     await expect(readFile(outsideFilePath, 'utf8')).resolves.toBe('# Outside')
+  })
+
+  it('rejects stale writes when the expected workspace is no longer active', async () => {
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-active-'))
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await writeFile(join(originalWorkspacePath, 'README.md'), '# Original')
+    await writeFile(join(activeWorkspacePath, 'README.md'), '# Active')
+
+    registerFileHandlers({
+      getActiveWorkspaceRoot: () => activeWorkspacePath,
+      ipcMain,
+      markdownFileService: createMarkdownFileService()
+    })
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.writeMarkdownFile)
+        ?.({}, 'README.md', '# Stale write', originalWorkspacePath)
+    ).rejects.toThrow(/workspace changed/i)
+    await expect(readFile(join(activeWorkspacePath, 'README.md'), 'utf8')).resolves.toBe(
+      '# Active'
+    )
+  })
+
+  it('rejects stale destructive operations when the expected workspace is no longer active', async () => {
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-active-'))
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await writeFile(join(originalWorkspacePath, 'README.md'), '# Original')
+    await writeFile(join(activeWorkspacePath, 'README.md'), '# Active')
+
+    registerFileHandlers({
+      getActiveWorkspaceRoot: () => activeWorkspacePath,
+      ipcMain,
+      markdownFileService: createMarkdownFileService()
+    })
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.deleteEntry)
+        ?.({}, 'README.md', originalWorkspacePath)
+    ).rejects.toThrow(/workspace changed/i)
+    await expect(readFile(join(activeWorkspacePath, 'README.md'), 'utf8')).resolves.toBe(
+      '# Active'
+    )
   })
 
   it('saves edited Markdown through the file IPC handler', async () => {
@@ -193,10 +277,12 @@ describe('fileHandlers integration', () => {
     await writeFile(join(workspacePath, 'README.md'), '# Original\n')
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
     await handlers
       .get(FILE_CHANNELS.writeMarkdownFile)
-      ?.({}, 'README.md', '# Edited\n\nSaved from integration.\n')
+      ?.({}, 'README.md', '# Edited\n\nSaved from integration.\n', workspace.rootPath)
 
     await expect(readFile(join(workspacePath, 'README.md'), 'utf8')).resolves.toBe(
       '# Edited\n\nSaved from integration.\n'
@@ -208,10 +294,12 @@ describe('fileHandlers integration', () => {
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
     const result = (await handlers
       .get(FILE_CHANNELS.createMarkdownFile)
-      ?.({}, 'notes/today.md')) as FileContents
+      ?.({}, 'notes/today.md', workspace.rootPath)) as FileContents
 
     expect(result).toEqual({
       contents: '',
@@ -227,8 +315,10 @@ describe('fileHandlers integration', () => {
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
-    await handlers.get(FILE_CHANNELS.createFolder)?.({}, 'notes/daily')
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers.get(FILE_CHANNELS.createFolder)?.({}, 'notes/daily', workspace.rootPath)
 
     const createdFolderStats = await stat(join(workspacePath, 'notes', 'daily'))
 
@@ -240,10 +330,12 @@ describe('fileHandlers integration', () => {
     await writeFile(join(workspacePath, 'draft.md'), '# Draft')
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
     const result = (await handlers
       .get(FILE_CHANNELS.renameEntry)
-      ?.({}, 'draft.md', 'final.md')) as { path: string }
+      ?.({}, 'draft.md', 'final.md', workspace.rootPath)) as { path: string }
 
     expect(result).toEqual({ path: 'final.md' })
     await expect(readFile(join(workspacePath, 'final.md'), 'utf8')).resolves.toBe(
@@ -259,8 +351,10 @@ describe('fileHandlers integration', () => {
     await writeFile(join(workspacePath, 'old.md'), '# Old')
     const { handlers } = registerHandlers(workspacePath)
 
-    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
-    await handlers.get(FILE_CHANNELS.deleteEntry)?.({}, 'old.md')
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers.get(FILE_CHANNELS.deleteEntry)?.({}, 'old.md', workspace.rootPath)
 
     await expect(stat(join(workspacePath, 'old.md'))).rejects.toMatchObject({
       code: 'ENOENT'

@@ -124,6 +124,23 @@ describe('markdownFileService', () => {
     )
   })
 
+  it('rejects writes to non-Markdown files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await writeFile(join(rootPath, 'package.json'), '{}')
+
+    await expect(
+      createMarkdownFileService().writeMarkdownFile(
+        rootPath,
+        'package.json',
+        '# Changed'
+      )
+    ).rejects.toThrow(/markdown/i)
+    await expect(readFile(join(rootPath, 'package.json'), 'utf8')).resolves.toBe(
+      '{}'
+    )
+  })
+
   it('rejects writes through symlinked parent paths', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
 
@@ -160,6 +177,22 @@ describe('markdownFileService', () => {
     )
   })
 
+  it('rejects Markdown file creation in ignored workspace paths', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'node_modules'))
+
+    await expect(
+      createMarkdownFileService().createMarkdownFile(
+        rootPath,
+        'node_modules/hidden.md'
+      )
+    ).rejects.toThrow(/unsupported/i)
+    await expect(stat(join(rootPath, 'node_modules', 'hidden.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
   it('rejects Markdown file creation through symlinked parent paths', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
 
@@ -182,6 +215,17 @@ describe('markdownFileService', () => {
     const createdFolderStats = await stat(join(rootPath, 'notes', 'daily'))
 
     expect(createdFolderStats.isDirectory()).toBe(true)
+  })
+
+  it('rejects ignored folder creation targets', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await expect(
+      createMarkdownFileService().createFolder(rootPath, '.git')
+    ).rejects.toThrow(/unsupported/i)
+    await expect(stat(join(rootPath, '.git'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
   })
 
   it('rejects folder creation through symlinked parent paths', async () => {
@@ -219,6 +263,26 @@ describe('markdownFileService', () => {
     })
   })
 
+  it('rejects renames of non-Markdown files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await writeFile(join(rootPath, 'package.json'), '{}')
+
+    await expect(
+      createMarkdownFileService().renameEntry(
+        rootPath,
+        'package.json',
+        'package.md'
+      )
+    ).rejects.toThrow(/markdown/i)
+    await expect(readFile(join(rootPath, 'package.json'), 'utf8')).resolves.toBe(
+      '{}'
+    )
+    await expect(stat(join(rootPath, 'package.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
   it('rejects renames through symlinked parent paths', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
 
@@ -250,6 +314,33 @@ describe('markdownFileService', () => {
     await expect(stat(join(rootPath, 'old.md'))).rejects.toMatchObject({
       code: 'ENOENT'
     })
+  })
+
+  it('rejects deletion of non-Markdown files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await writeFile(join(rootPath, 'package.json'), '{}')
+
+    await expect(
+      createMarkdownFileService().deleteEntry(rootPath, 'package.json')
+    ).rejects.toThrow(/markdown/i)
+    await expect(readFile(join(rootPath, 'package.json'), 'utf8')).resolves.toBe(
+      '{}'
+    )
+  })
+
+  it('rejects recursive deletion of directories containing unsupported entries', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'notes'))
+    await writeFile(join(rootPath, 'notes', 'keep.txt'), 'plain text')
+
+    await expect(
+      createMarkdownFileService().deleteEntry(rootPath, 'notes')
+    ).rejects.toThrow(/unsupported/i)
+    await expect(readFile(join(rootPath, 'notes', 'keep.txt'), 'utf8')).resolves.toBe(
+      'plain text'
+    )
   })
 
   it('rejects deletes through symlinked parent paths', async () => {

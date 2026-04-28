@@ -43,6 +43,45 @@ describe('appReducer', () => {
     expect(state.selectedFilePath).toBeNull()
   })
 
+  it('clears opening state when workspace open is cancelled or fails', () => {
+    const openingState = appReducer(createInitialAppState(), {
+      type: 'workspace/open-started'
+    })
+    const cancelledState = appReducer(openingState, {
+      type: 'workspace/open-cancelled'
+    })
+    const failedState = appReducer(openingState, {
+      message: 'Unable to open workspace',
+      type: 'workspace/open-failed'
+    })
+
+    expect(cancelledState.isOpeningWorkspace).toBe(false)
+    expect(failedState).toMatchObject({
+      errorMessage: 'Unable to open workspace',
+      isOpeningWorkspace: false
+    })
+  })
+
+  it('stores refreshed trees and current workspace operation errors', () => {
+    const workspaceState = appReducer(createInitialAppState(), {
+      type: 'workspace/opened',
+      workspace
+    })
+    const refreshedState = appReducer(workspaceState, {
+      tree: refreshedTree,
+      type: 'workspace/tree-refreshed',
+      workspaceRoot: workspace.rootPath
+    })
+    const failedState = appReducer(refreshedState, {
+      message: 'Unable to create file',
+      type: 'workspace/operation-failed',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(refreshedState.workspace?.tree).toEqual(refreshedTree)
+    expect(failedState.errorMessage).toBe('Unable to create file')
+  })
+
   it('stores the selected file path', () => {
     const state = appReducer(
       { ...createInitialAppState(), workspace },
@@ -367,7 +406,9 @@ describe('appReducer', () => {
 
     const state = appReducer(loadedState, {
       contents: '# Changed',
-      type: 'file/content-changed'
+      filePath: 'README.md',
+      type: 'file/content-changed',
+      workspaceRoot: workspace.rootPath
     })
 
     expect(state.isDirty).toBe(true)
@@ -387,7 +428,9 @@ describe('appReducer', () => {
       },
       {
         contents: '# Changed',
-        type: 'file/content-changed'
+        filePath: 'README.md',
+        type: 'file/content-changed',
+        workspaceRoot: workspace.rootPath
       }
     )
 
@@ -421,7 +464,9 @@ describe('appReducer', () => {
       },
       {
         contents: '# Changed',
-        type: 'file/content-changed'
+        filePath: 'README.md',
+        type: 'file/content-changed',
+        workspaceRoot: workspace.rootPath
       }
     )
 
@@ -436,5 +481,113 @@ describe('appReducer', () => {
     expect(state.isSavingFile).toBe(false)
     expect(state.draftMarkdown).toBe('# Changed')
     expect(state.fileErrorMessage).toBe('Unable to save README.md')
+  })
+
+  it('ignores stale save lifecycle actions', () => {
+    const dirtyState = {
+      ...createInitialAppState(),
+      isDirty: true,
+      loadedFile: {
+        contents: '# Workspace B',
+        path: 'README.md'
+      },
+      selectedFilePath: 'README.md',
+      workspace: workspaceB
+    }
+
+    const saveStartedState = appReducer(dirtyState, {
+      filePath: 'README.md',
+      type: 'file/save-started',
+      workspaceRoot: workspaceA.rootPath
+    })
+    const saveSucceededState = appReducer(dirtyState, {
+      contents: '# Workspace A',
+      filePath: 'README.md',
+      type: 'file/save-succeeded',
+      workspaceRoot: workspaceA.rootPath
+    })
+    const saveFailedState = appReducer(dirtyState, {
+      filePath: 'README.md',
+      message: 'Unable to save workspace A',
+      type: 'file/save-failed',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(saveStartedState).toEqual(dirtyState)
+    expect(saveSucceededState).toEqual(dirtyState)
+    expect(saveFailedState).toEqual(dirtyState)
+  })
+
+  it('ignores stale editor changes for a previously loaded file', () => {
+    const workspaceBState = {
+      ...createInitialAppState(),
+      draftMarkdown: '# Workspace B',
+      loadedFile: {
+        contents: '# Workspace B',
+        path: 'README.md'
+      },
+      selectedFilePath: 'README.md',
+      workspace: workspaceB
+    }
+
+    const state = appReducer(workspaceBState, {
+      contents: '# Workspace A async change',
+      filePath: 'README.md',
+      type: 'file/content-changed',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state).toEqual(workspaceBState)
+  })
+
+  it('renames loaded files and selected nested entries when a folder is renamed', () => {
+    const loadedState = {
+      ...createInitialAppState(),
+      draftMarkdown: '# Deep',
+      loadedFile: {
+        contents: '# Deep',
+        path: 'docs/deep.md'
+      },
+      selectedEntryPath: 'docs/deep.md',
+      selectedFilePath: 'docs/deep.md',
+      workspace
+    }
+
+    const state = appReducer(loadedState, {
+      newPath: 'notes',
+      oldPath: 'docs',
+      type: 'file/entry-renamed',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(state.loadedFile?.path).toBe('notes/deep.md')
+    expect(state.selectedEntryPath).toBe('notes/deep.md')
+    expect(state.selectedFilePath).toBe('notes/deep.md')
+  })
+
+  it('keeps editor content when deleting an unrelated selected entry', () => {
+    const loadedState = {
+      ...createInitialAppState(),
+      draftMarkdown: '# README',
+      isDirty: true,
+      loadedFile: {
+        contents: '# README',
+        path: 'README.md'
+      },
+      selectedEntryPath: 'docs',
+      selectedFilePath: 'README.md',
+      workspace
+    }
+
+    const state = appReducer(loadedState, {
+      entryPath: 'docs',
+      type: 'file/entry-deleted',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(state.loadedFile).toEqual(loadedState.loadedFile)
+    expect(state.selectedEntryPath).toBeNull()
+    expect(state.selectedFilePath).toBe('README.md')
+    expect(state.isDirty).toBe(true)
   })
 })

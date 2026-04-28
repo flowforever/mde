@@ -152,7 +152,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         loadingWorkspaceRoot: null
       }
     case 'file/content-changed':
-      if (!state.loadedFile) {
+      if (
+        state.loadedFile?.path !== action.filePath ||
+        !isCurrentWorkspace(state, action.workspaceRoot)
+      ) {
         return state
       }
 

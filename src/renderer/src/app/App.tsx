@@ -79,8 +79,11 @@ export const App = (): React.JSX.Element => {
     }
   }
 
-  const loadFile = useCallback(async (filePath: string): Promise<void> => {
-    const workspaceRoot = state.workspace?.rootPath
+  const loadFile = useCallback(async (
+    filePath: string,
+    expectedWorkspaceRoot?: string
+  ): Promise<void> => {
+    const workspaceRoot = expectedWorkspaceRoot ?? state.workspace?.rootPath
 
     if (!workspaceRoot) {
       dispatch({
@@ -99,7 +102,7 @@ export const App = (): React.JSX.Element => {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
-      const file = await window.editorApi.readMarkdownFile(filePath)
+      const file = await window.editorApi.readMarkdownFile(filePath, workspaceRoot)
 
       dispatch({ type: 'file/loaded', file, workspaceRoot })
     } catch (error) {
@@ -166,7 +169,11 @@ export const App = (): React.JSX.Element => {
           state.draftMarkdown ??
           loadedFile.contents
 
-        await window.editorApi.writeMarkdownFile(loadedFile.path, contents)
+        await window.editorApi.writeMarkdownFile(
+          loadedFile.path,
+          contents,
+          workspaceRoot
+        )
         dispatch({
           contents,
           filePath: loadedFile.path,
@@ -215,9 +222,9 @@ export const App = (): React.JSX.Element => {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
-      await window.editorApi.createMarkdownFile(filePath)
+      await window.editorApi.createMarkdownFile(filePath, workspaceRoot)
       await refreshWorkspaceTree(workspaceRoot)
-      await loadFile(filePath)
+      await loadFile(filePath, workspaceRoot)
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to create Markdown file'),
@@ -239,7 +246,7 @@ export const App = (): React.JSX.Element => {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
-      await window.editorApi.createFolder(folderPath)
+      await window.editorApi.createFolder(folderPath, workspaceRoot)
       await refreshWorkspaceTree(workspaceRoot)
     } catch (error) {
       dispatch({
@@ -277,7 +284,8 @@ export const App = (): React.JSX.Element => {
 
       const result = await window.editorApi.renameEntry(
         selectedEntryPath,
-        nextEntryPath
+        nextEntryPath,
+        workspaceRoot
       )
 
       dispatch({
@@ -309,7 +317,7 @@ export const App = (): React.JSX.Element => {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
-      await window.editorApi.deleteEntry(selectedEntryPath)
+      await window.editorApi.deleteEntry(selectedEntryPath, workspaceRoot)
       dispatch({
         entryPath: selectedEntryPath,
         type: 'file/entry-deleted',
@@ -354,13 +362,24 @@ export const App = (): React.JSX.Element => {
       <section className="editor-pane" aria-label="Editor">
         {state.loadedFile ? (
           <MarkdownBlockEditor
-            key={state.loadedFile.path}
+            key={`${state.workspace?.rootPath ?? ''}:${state.loadedFile.path}`}
             errorMessage={state.fileErrorMessage}
             isDirty={state.isDirty}
             isSaving={state.isSavingFile}
             markdown={state.loadedFile.contents}
             onMarkdownChange={(contents) => {
-              dispatch({ type: 'file/content-changed', contents })
+              const workspaceRoot = state.workspace?.rootPath
+
+              if (!workspaceRoot || !state.loadedFile) {
+                return
+              }
+
+              dispatch({
+                contents,
+                filePath: state.loadedFile.path,
+                type: 'file/content-changed',
+                workspaceRoot
+              })
             }}
             onSaveRequest={(contents) => {
               void saveCurrentFile(contents)

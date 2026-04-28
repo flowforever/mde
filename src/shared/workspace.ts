@@ -18,13 +18,24 @@ export interface RenamedEntry {
 export interface EditorApi {
   readonly openWorkspace: () => Promise<Workspace | null>
   readonly listDirectory: (directoryPath: string) => Promise<readonly TreeNode[]>
-  readonly readMarkdownFile: (filePath: string) => Promise<FileContents>
+  readonly readMarkdownFile: (
+    filePath: string,
+    workspaceRoot: string
+  ) => Promise<FileContents>
   readonly writeMarkdownFile: (
     filePath: string,
-    contents: string
+    contents: string,
+    workspaceRoot: string
   ) => Promise<FileContents>
-  readonly createMarkdownFile: (filePath: string) => Promise<FileContents>
-  readonly createFolder: (folderPath: string) => Promise<void>
-  readonly renameEntry: (oldPath: string, newPath: string) => Promise<RenamedEntry>
-  readonly deleteEntry: (entryPath: string) => Promise<void>
+  readonly createMarkdownFile: (
+    filePath: string,
+    workspaceRoot: string
+  ) => Promise<FileContents>
+  readonly createFolder: (folderPath: string, workspaceRoot: string) => Promise<void>
+  readonly renameEntry: (
+    oldPath: string,
+    newPath: string,
+    workspaceRoot: string
+  ) => Promise<RenamedEntry>
+  readonly deleteEntry: (entryPath: string, workspaceRoot: string) => Promise<void>
 }
