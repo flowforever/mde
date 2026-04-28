@@ -20,7 +20,11 @@ export const App = (): React.JSX.Element => {
     dispatch({ type: 'workspace/open-started' })
 
     try {
-      const workspace = await window.editorApi?.openWorkspace()
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const workspace = await window.editorApi.openWorkspace()
 
       if (!workspace) {
         dispatch({ type: 'workspace/open-cancelled' })

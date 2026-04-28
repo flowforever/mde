@@ -31,6 +31,7 @@ export const ExplorerPane = ({
       <div className="explorer-workspace">
         <div className="explorer-workspace-name">{state.workspace.name}</div>
         <ExplorerTree
+          key={state.workspace.rootPath}
           nodes={state.workspace.tree}
           onSelectFile={onSelectFile}
           selectedFilePath={state.selectedFilePath}

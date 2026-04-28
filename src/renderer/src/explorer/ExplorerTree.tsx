@@ -22,22 +22,29 @@ const ExplorerTreeNode = ({
   const [isExpanded, setIsExpanded] = useState(false)
   const isSelected = node.type === 'file' && selectedFilePath === node.path
   const rowStyle = { '--depth': depth } as CSSProperties
+  const toggleExpanded = (): void => {
+    setIsExpanded((currentValue) => !currentValue)
+  }
 
   if (node.type === 'directory') {
     return (
       <li>
         <div className="explorer-tree-row" style={rowStyle}>
           <button
+            aria-expanded={isExpanded}
             aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.name}`}
             className="explorer-disclosure-button"
-            onClick={() => {
-              setIsExpanded((currentValue) => !currentValue)
-            }}
+            onClick={toggleExpanded}
             type="button"
           >
             {isExpanded ? 'v' : '>'}
           </button>
-          <button className="explorer-row-button" type="button">
+          <button
+            aria-expanded={isExpanded}
+            className="explorer-row-button"
+            onClick={toggleExpanded}
+            type="button"
+          >
             {node.name}
           </button>
         </div>
