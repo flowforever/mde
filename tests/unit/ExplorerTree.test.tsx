@@ -98,7 +98,10 @@ describe('ExplorerTree', () => {
     const user = userEvent.setup()
     const createState = (rootPath: string): AppState => ({
       errorMessage: null,
+      fileErrorMessage: null,
+      isLoadingFile: false,
       isOpeningWorkspace: false,
+      loadedFile: null,
       selectedFilePath: null,
       workspace: {
         name: 'workspace',

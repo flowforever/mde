@@ -2,7 +2,10 @@ import type { AppAction, AppState } from './appTypes'
 
 export const createInitialAppState = (): AppState => ({
   errorMessage: null,
+  fileErrorMessage: null,
+  isLoadingFile: false,
   isOpeningWorkspace: false,
+  loadedFile: null,
   selectedFilePath: null,
   workspace: null
 })
@@ -20,6 +23,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         ...state,
         errorMessage: null,
         isOpeningWorkspace: false,
+        fileErrorMessage: null,
+        isLoadingFile: false,
+        loadedFile: null,
         selectedFilePath: null,
         workspace: action.workspace
       }
@@ -38,6 +44,28 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       return {
         ...state,
         selectedFilePath: action.filePath
+      }
+    case 'file/load-started':
+      return {
+        ...state,
+        fileErrorMessage: null,
+        isLoadingFile: true,
+        loadedFile: null,
+        selectedFilePath: action.filePath
+      }
+    case 'file/loaded':
+      return {
+        ...state,
+        fileErrorMessage: null,
+        isLoadingFile: false,
+        loadedFile: action.file
+      }
+    case 'file/load-failed':
+      return {
+        ...state,
+        fileErrorMessage: action.message,
+        isLoadingFile: false,
+        loadedFile: null
       }
   }
 }

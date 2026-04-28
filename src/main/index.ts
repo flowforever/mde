@@ -11,6 +11,8 @@ import {
   getTestWorkspacePath,
   registerWorkspaceHandlers
 } from './ipc/registerWorkspaceHandlers'
+import { registerFileHandlers } from './ipc/registerFileHandlers'
+import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
 
 type BrowserWindowConstructor = typeof BrowserWindow
@@ -121,11 +123,16 @@ const bootstrap = async (): Promise<void> => {
   }
 
   await app.whenReady()
-  registerWorkspaceHandlers({
+  const workspaceSession = registerWorkspaceHandlers({
     dialog,
     ipcMain,
     testWorkspacePath: getTestWorkspacePath(),
     workspaceService: createWorkspaceService()
+  })
+  registerFileHandlers({
+    getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
+    ipcMain,
+    markdownFileService: createMarkdownFileService()
   })
   await createMainWindow(BrowserWindow)
 

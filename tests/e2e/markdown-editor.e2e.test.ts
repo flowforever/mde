@@ -53,3 +53,24 @@ test('opens a workspace and expands the docs folder', async () => {
     await app.close()
   }
 })
+
+test('loads README markdown into the block editor surface', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await window.getByRole('button', { name: /open folder/i }).click()
+    await window.getByRole('button', { name: 'README.md' }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+
+    await expect(editor).toBeVisible()
+    await expect(editor).toContainText('Fixture Workspace')
+    await expect(editor).toContainText('Root markdown file.')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

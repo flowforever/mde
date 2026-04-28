@@ -38,4 +38,63 @@ describe('appReducer', () => {
     expect(state.selectedFilePath).toBe('README.md')
     expect(state.workspace).toEqual(workspace)
   })
+
+  it('tracks file loading for the selected file', () => {
+    const state = appReducer(
+      { ...createInitialAppState(), workspace },
+      {
+        type: 'file/load-started',
+        filePath: 'README.md'
+      }
+    )
+
+    expect(state.selectedFilePath).toBe('README.md')
+    expect(state.isLoadingFile).toBe(true)
+    expect(state.loadedFile).toBeNull()
+    expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('stores loaded file contents', () => {
+    const loadingState = appReducer(
+      { ...createInitialAppState(), workspace },
+      {
+        type: 'file/load-started',
+        filePath: 'README.md'
+      }
+    )
+
+    const state = appReducer(loadingState, {
+      file: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      type: 'file/loaded'
+    })
+
+    expect(state.isLoadingFile).toBe(false)
+    expect(state.loadedFile).toEqual({
+      contents: '# Fixture Workspace',
+      path: 'README.md'
+    })
+    expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('stores file load failures', () => {
+    const loadingState = appReducer(
+      { ...createInitialAppState(), workspace },
+      {
+        type: 'file/load-started',
+        filePath: 'README.md'
+      }
+    )
+
+    const state = appReducer(loadingState, {
+      message: 'Unable to read README.md',
+      type: 'file/load-failed'
+    })
+
+    expect(state.isLoadingFile).toBe(false)
+    expect(state.loadedFile).toBeNull()
+    expect(state.fileErrorMessage).toBe('Unable to read README.md')
+  })
 })

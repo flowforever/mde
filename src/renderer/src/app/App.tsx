@@ -2,6 +2,7 @@ import { useReducer } from 'react'
 
 import type { EditorApi } from '../../../shared/workspace'
 import { appReducer, createInitialAppState } from './appReducer'
+import { MarkdownBlockEditor } from '../editor/MarkdownBlockEditor'
 import { ExplorerPane } from '../explorer/ExplorerPane'
 
 declare global {
@@ -37,6 +38,22 @@ export const App = (): React.JSX.Element => {
     }
   }
 
+  const loadFile = async (filePath: string): Promise<void> => {
+    dispatch({ type: 'file/load-started', filePath })
+
+    try {
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const file = await window.editorApi.readMarkdownFile(filePath)
+
+      dispatch({ type: 'file/loaded', file })
+    } catch (error) {
+      dispatch({ type: 'file/load-failed', message: getErrorMessage(error) })
+    }
+  }
+
   return (
     <main className="app-shell">
       <ExplorerPane
@@ -44,15 +61,29 @@ export const App = (): React.JSX.Element => {
           void openWorkspace()
         }}
         onSelectFile={(filePath) => {
-          dispatch({ type: 'file/selected', filePath })
+          void loadFile(filePath)
         }}
         state={state}
       />
       <section className="editor-pane" aria-label="Editor">
-        <div className="editor-empty-state">
-          <p className="editor-kicker">Markdown Editor</p>
-          <h1>{state.selectedFilePath ?? 'Select a folder to begin'}</h1>
-        </div>
+        {state.loadedFile ? (
+          <MarkdownBlockEditor
+            key={state.loadedFile.path}
+            markdown={state.loadedFile.contents}
+            path={state.loadedFile.path}
+          />
+        ) : (
+          <div className="editor-empty-state">
+            <p className="editor-kicker">Markdown Editor</p>
+            <h1>{state.selectedFilePath ?? 'Select a folder to begin'}</h1>
+            {state.isLoadingFile ? <p>Loading file...</p> : null}
+            {state.fileErrorMessage ? (
+              <p className="editor-error" role="alert">
+                {state.fileErrorMessage}
+              </p>
+            ) : null}
+          </div>
+        )}
       </section>
     </main>
   )

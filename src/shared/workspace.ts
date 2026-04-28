@@ -14,4 +14,5 @@ export interface FileContents {
 export interface EditorApi {
   readonly openWorkspace: () => Promise<Workspace | null>
   readonly listDirectory: (directoryPath: string) => Promise<readonly TreeNode[]>
+  readonly readMarkdownFile: (filePath: string) => Promise<FileContents>
 }

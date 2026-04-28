@@ -154,14 +154,15 @@ button {
 }
 
 .editor-pane {
-  display: grid;
-  place-items: center;
+  display: flex;
   padding: 48px;
   background: #fbf7ef;
+  overflow: auto;
 }
 
 .editor-empty-state {
   width: min(520px, 100%);
+  margin: auto;
 }
 
 .editor-kicker {
@@ -177,6 +178,47 @@ button {
   font-size: 30px;
   font-weight: 650;
   letter-spacing: 0;
+}
+
+.editor-error,
+.markdown-editor-error {
+  color: #a33a2f;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.markdown-editor-shell {
+  width: min(920px, 100%);
+  min-height: calc(100vh - 96px);
+  margin: 0 auto;
+  color: #211f1c;
+}
+
+.markdown-editor-titlebar {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  border-bottom: 1px solid #e5ded2;
+}
+
+.markdown-editor-path {
+  overflow: hidden;
+  color: #6f675d;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-editor-surface {
+  min-height: calc(100vh - 150px);
+  padding: 28px 0 64px;
+  background: transparent;
+}
+
+.markdown-editor-surface .bn-editor {
+  padding-inline: 0;
+  background: transparent;
 }
 
 @media (max-width: 700px) {

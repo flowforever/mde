@@ -10,6 +10,10 @@ interface RegisterWorkspaceHandlersOptions {
   readonly workspaceService: WorkspaceService
 }
 
+export interface WorkspaceHandlerSession {
+  readonly getActiveWorkspaceRoot: () => string | null
+}
+
 export const getTestWorkspacePath = (
   argv: readonly string[] = process.argv
 ): string | undefined => {
@@ -24,7 +28,7 @@ export const registerWorkspaceHandlers = ({
   ipcMain,
   testWorkspacePath,
   workspaceService
-}: RegisterWorkspaceHandlersOptions): void => {
+}: RegisterWorkspaceHandlersOptions): WorkspaceHandlerSession => {
   let activeWorkspaceRoot: string | null = null
 
   ipcMain.handle(WORKSPACE_CHANNELS.openWorkspace, async () => {
@@ -59,4 +63,8 @@ export const registerWorkspaceHandlers = ({
       return workspaceService.listDirectory(activeWorkspaceRoot, directoryPath)
     }
   )
+
+  return {
+    getActiveWorkspaceRoot: () => activeWorkspaceRoot
+  }
 }
