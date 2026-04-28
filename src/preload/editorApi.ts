@@ -7,10 +7,9 @@ import type { EditorApi } from '../shared/workspace'
 type IpcRenderer = Pick<typeof Electron.ipcRenderer, 'invoke'>
 
 export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
-  listDirectory: (workspacePath, directoryPath) =>
+  listDirectory: (directoryPath) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.listDirectory,
-      workspacePath,
       directoryPath
     ) as Promise<readonly TreeNode[]>,
   openWorkspace: () =>

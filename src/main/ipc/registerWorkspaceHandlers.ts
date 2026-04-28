@@ -25,9 +25,14 @@ export const registerWorkspaceHandlers = ({
   testWorkspacePath,
   workspaceService
 }: RegisterWorkspaceHandlersOptions): void => {
+  let activeWorkspaceRoot: string | null = null
+
   ipcMain.handle(WORKSPACE_CHANNELS.openWorkspace, async () => {
     if (testWorkspacePath) {
-      return workspaceService.openWorkspace(testWorkspacePath)
+      const workspace = await workspaceService.openWorkspace(testWorkspacePath)
+      activeWorkspaceRoot = workspace.rootPath
+
+      return workspace
     }
 
     const result = await dialog.showOpenDialog({
@@ -38,12 +43,20 @@ export const registerWorkspaceHandlers = ({
       return null
     }
 
-    return workspaceService.openWorkspace(result.filePaths[0] ?? '')
+    const workspace = await workspaceService.openWorkspace(result.filePaths[0] ?? '')
+    activeWorkspaceRoot = workspace.rootPath
+
+    return workspace
   })
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.listDirectory,
-    (_event, workspacePath: string, directoryPath: string) =>
-      workspaceService.listDirectory(workspacePath, directoryPath)
+    async (_event, directoryPath: string) => {
+      if (!activeWorkspaceRoot) {
+        throw new Error('Open a workspace before listing directories')
+      }
+
+      return workspaceService.listDirectory(activeWorkspaceRoot, directoryPath)
+    }
   )
 }

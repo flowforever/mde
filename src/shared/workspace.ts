@@ -13,8 +13,5 @@ export interface FileContents {
 
 export interface EditorApi {
   readonly openWorkspace: () => Promise<Workspace | null>
-  readonly listDirectory: (
-    workspacePath: string,
-    directoryPath: string
-  ) => Promise<readonly TreeNode[]>
+  readonly listDirectory: (directoryPath: string) => Promise<readonly TreeNode[]>
 }
