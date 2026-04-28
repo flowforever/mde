@@ -27,6 +27,10 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
 
     assertPathInsideWorkspace(realWorkspacePath, realFilePath)
 
+    if (!isMarkdownPath(realFilePath)) {
+      throw new Error('Only Markdown files can be opened')
+    }
+
     const fileStats = await stat(realFilePath)
 
     if (!fileStats.isFile()) {

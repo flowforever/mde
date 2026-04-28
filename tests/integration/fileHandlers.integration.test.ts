@@ -96,4 +96,20 @@ describe('fileHandlers integration', () => {
       handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'leak.md')
     ).rejects.toThrow(/outside workspace/i)
   })
+
+  it('rejects Markdown symlinks that resolve to non-Markdown files inside the active workspace', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+
+    await writeFile(join(workspacePath, 'README.md'), '# Workspace')
+    await writeFile(join(workspacePath, 'secret.txt'), 'plain text')
+    await symlink(join(workspacePath, 'secret.txt'), join(workspacePath, 'leak.md'))
+
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+
+    await expect(
+      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'leak.md')
+    ).rejects.toThrow(/markdown/i)
+  })
 })

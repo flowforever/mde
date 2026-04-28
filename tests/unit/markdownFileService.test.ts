@@ -57,4 +57,15 @@ describe('markdownFileService', () => {
       createMarkdownFileService().readMarkdownFile(rootPath, 'leak.md')
     ).rejects.toThrow(/outside workspace/i)
   })
+
+  it('rejects Markdown symlinks that resolve to non-Markdown files inside the workspace', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await writeFile(join(rootPath, 'secret.txt'), 'plain text')
+    await symlink(join(rootPath, 'secret.txt'), join(rootPath, 'leak.md'))
+
+    await expect(
+      createMarkdownFileService().readMarkdownFile(rootPath, 'leak.md')
+    ).rejects.toThrow(/markdown/i)
+  })
 })
