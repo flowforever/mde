@@ -17,7 +17,7 @@
     "useDefineForClassFields": true
   },
   "include": [
-    "eslint.config.mjs",
+    "*.config.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "tests/**/*.ts",
