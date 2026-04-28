@@ -39,7 +39,19 @@ export const App = (): React.JSX.Element => {
   }
 
   const loadFile = async (filePath: string): Promise<void> => {
-    dispatch({ type: 'file/load-started', filePath })
+    const workspaceRoot = state.workspace?.rootPath
+
+    if (!workspaceRoot) {
+      dispatch({
+        filePath,
+        message: 'Open a workspace before reading files',
+        type: 'file/load-failed',
+        workspaceRoot: ''
+      })
+      return
+    }
+
+    dispatch({ type: 'file/load-started', filePath, workspaceRoot })
 
     try {
       if (!window.editorApi) {
@@ -48,12 +60,13 @@ export const App = (): React.JSX.Element => {
 
       const file = await window.editorApi.readMarkdownFile(filePath)
 
-      dispatch({ type: 'file/loaded', file })
+      dispatch({ type: 'file/loaded', file, workspaceRoot })
     } catch (error) {
       dispatch({
         filePath,
         message: getErrorMessage(error),
-        type: 'file/load-failed'
+        type: 'file/load-failed',
+        workspaceRoot
       })
     }
   }

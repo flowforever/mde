@@ -102,6 +102,7 @@ describe('ExplorerTree', () => {
       isLoadingFile: false,
       isOpeningWorkspace: false,
       loadedFile: null,
+      loadingWorkspaceRoot: null,
       selectedFilePath: null,
       workspace: {
         name: 'workspace',

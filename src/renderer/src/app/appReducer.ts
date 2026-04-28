@@ -6,6 +6,7 @@ export const createInitialAppState = (): AppState => ({
   isLoadingFile: false,
   isOpeningWorkspace: false,
   loadedFile: null,
+  loadingWorkspaceRoot: null,
   selectedFilePath: null,
   workspace: null
 })
@@ -26,6 +27,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         fileErrorMessage: null,
         isLoadingFile: false,
         loadedFile: null,
+        loadingWorkspaceRoot: null,
         selectedFilePath: null,
         workspace: action.workspace
       }
@@ -51,10 +53,14 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         fileErrorMessage: null,
         isLoadingFile: true,
         loadedFile: null,
+        loadingWorkspaceRoot: action.workspaceRoot,
         selectedFilePath: action.filePath
       }
     case 'file/loaded':
-      if (action.file.path !== state.selectedFilePath) {
+      if (
+        action.file.path !== state.selectedFilePath ||
+        action.workspaceRoot !== state.loadingWorkspaceRoot
+      ) {
         return state
       }
 
@@ -62,10 +68,14 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         ...state,
         fileErrorMessage: null,
         isLoadingFile: false,
-        loadedFile: action.file
+        loadedFile: action.file,
+        loadingWorkspaceRoot: null
       }
     case 'file/load-failed':
-      if (action.filePath !== state.selectedFilePath) {
+      if (
+        action.filePath !== state.selectedFilePath ||
+        action.workspaceRoot !== state.loadingWorkspaceRoot
+      ) {
         return state
       }
 
@@ -73,7 +83,8 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         ...state,
         fileErrorMessage: action.message,
         isLoadingFile: false,
-        loadedFile: null
+        loadedFile: null,
+        loadingWorkspaceRoot: null
       }
   }
 }

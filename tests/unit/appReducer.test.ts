@@ -15,6 +15,16 @@ describe('appReducer', () => {
       }
     ])
   }
+  const workspaceA: Workspace = {
+    ...workspace,
+    name: 'workspace-a',
+    rootPath: '/workspace-a'
+  }
+  const workspaceB: Workspace = {
+    ...workspace,
+    name: 'workspace-b',
+    rootPath: '/workspace-b'
+  }
 
   it('stores an opened workspace', () => {
     const state = appReducer(createInitialAppState(), {
@@ -44,7 +54,8 @@ describe('appReducer', () => {
       { ...createInitialAppState(), workspace },
       {
         type: 'file/load-started',
-        filePath: 'README.md'
+        filePath: 'README.md',
+        workspaceRoot: workspace.rootPath
       }
     )
 
@@ -59,7 +70,8 @@ describe('appReducer', () => {
       { ...createInitialAppState(), workspace },
       {
         type: 'file/load-started',
-        filePath: 'README.md'
+        filePath: 'README.md',
+        workspaceRoot: workspace.rootPath
       }
     )
 
@@ -68,7 +80,8 @@ describe('appReducer', () => {
         contents: '# Fixture Workspace',
         path: 'README.md'
       },
-      type: 'file/loaded'
+      type: 'file/loaded',
+      workspaceRoot: workspace.rootPath
     })
 
     expect(state.isLoadingFile).toBe(false)
@@ -84,14 +97,16 @@ describe('appReducer', () => {
       { ...createInitialAppState(), workspace },
       {
         type: 'file/load-started',
-        filePath: 'README.md'
+        filePath: 'README.md',
+        workspaceRoot: workspace.rootPath
       }
     )
 
     const state = appReducer(loadingState, {
       filePath: 'README.md',
       message: 'Unable to read README.md',
-      type: 'file/load-failed'
+      type: 'file/load-failed',
+      workspaceRoot: workspace.rootPath
     })
 
     expect(state.isLoadingFile).toBe(false)
@@ -104,12 +119,14 @@ describe('appReducer', () => {
       { ...createInitialAppState(), workspace },
       {
         type: 'file/load-started',
-        filePath: 'README.md'
+        filePath: 'README.md',
+        workspaceRoot: workspace.rootPath
       }
     )
     const introLoadingState = appReducer(readmeLoadingState, {
       type: 'file/load-started',
-      filePath: 'docs/intro.md'
+      filePath: 'docs/intro.md',
+      workspaceRoot: workspace.rootPath
     })
 
     const state = appReducer(introLoadingState, {
@@ -117,7 +134,8 @@ describe('appReducer', () => {
         contents: '# Old README',
         path: 'README.md'
       },
-      type: 'file/loaded'
+      type: 'file/loaded',
+      workspaceRoot: workspace.rootPath
     })
 
     expect(state.selectedFilePath).toBe('docs/intro.md')
@@ -131,21 +149,102 @@ describe('appReducer', () => {
       { ...createInitialAppState(), workspace },
       {
         type: 'file/load-started',
-        filePath: 'README.md'
+        filePath: 'README.md',
+        workspaceRoot: workspace.rootPath
       }
     )
     const introLoadingState = appReducer(readmeLoadingState, {
       type: 'file/load-started',
-      filePath: 'docs/intro.md'
+      filePath: 'docs/intro.md',
+      workspaceRoot: workspace.rootPath
     })
 
     const state = appReducer(introLoadingState, {
       filePath: 'README.md',
       message: 'Unable to read README.md',
-      type: 'file/load-failed'
+      type: 'file/load-failed',
+      workspaceRoot: workspace.rootPath
     })
 
     expect(state.selectedFilePath).toBe('docs/intro.md')
+    expect(state.isLoadingFile).toBe(true)
+    expect(state.loadedFile).toBeNull()
+    expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('ignores stale file contents for the same relative path after changing workspaces', () => {
+    const workspaceALoadingState = appReducer(
+      appReducer(createInitialAppState(), {
+        type: 'workspace/opened',
+        workspace: workspaceA
+      }),
+      {
+        filePath: 'README.md',
+        type: 'file/load-started',
+        workspaceRoot: workspaceA.rootPath
+      }
+    )
+    const workspaceBLoadingState = appReducer(
+      appReducer(workspaceALoadingState, {
+        type: 'workspace/opened',
+        workspace: workspaceB
+      }),
+      {
+        filePath: 'README.md',
+        type: 'file/load-started',
+        workspaceRoot: workspaceB.rootPath
+      }
+    )
+
+    const state = appReducer(workspaceBLoadingState, {
+      file: {
+        contents: '# Workspace A',
+        path: 'README.md'
+      },
+      type: 'file/loaded',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state.workspace).toEqual(workspaceB)
+    expect(state.selectedFilePath).toBe('README.md')
+    expect(state.isLoadingFile).toBe(true)
+    expect(state.loadedFile).toBeNull()
+    expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('ignores stale file load failures for the same relative path after changing workspaces', () => {
+    const workspaceALoadingState = appReducer(
+      appReducer(createInitialAppState(), {
+        type: 'workspace/opened',
+        workspace: workspaceA
+      }),
+      {
+        filePath: 'README.md',
+        type: 'file/load-started',
+        workspaceRoot: workspaceA.rootPath
+      }
+    )
+    const workspaceBLoadingState = appReducer(
+      appReducer(workspaceALoadingState, {
+        type: 'workspace/opened',
+        workspace: workspaceB
+      }),
+      {
+        filePath: 'README.md',
+        type: 'file/load-started',
+        workspaceRoot: workspaceB.rootPath
+      }
+    )
+
+    const state = appReducer(workspaceBLoadingState, {
+      filePath: 'README.md',
+      message: 'Unable to read README.md',
+      type: 'file/load-failed',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state.workspace).toEqual(workspaceB)
+    expect(state.selectedFilePath).toBe('README.md')
     expect(state.isLoadingFile).toBe(true)
     expect(state.loadedFile).toBeNull()
     expect(state.fileErrorMessage).toBeNull()
