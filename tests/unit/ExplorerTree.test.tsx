@@ -60,9 +60,15 @@ describe('ExplorerTree', () => {
     await user.click(screen.getByRole('button', { name: /expand docs/i }))
     await user.click(screen.getByRole('button', { name: /expand nested/i }))
 
-    expect(screen.getByRole('button', { name: 'README.md' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'intro.md' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'deep.md' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /intro\.md Markdown file/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /deep\.md Markdown file/i })
+    ).toBeInTheDocument()
   })
 
   it('toggles a directory from the visible row button with expanded state', async () => {
@@ -78,19 +84,23 @@ describe('ExplorerTree', () => {
       />
     )
 
-    const docsRow = screen.getByRole('button', { name: /^docs$/ })
+    const docsRow = screen.getByRole('button', { name: /docs folder/i })
 
     expect(docsRow).toHaveAttribute('aria-expanded', 'false')
 
     await user.click(docsRow)
 
     expect(docsRow).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: 'intro.md' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /intro\.md Markdown file/i })
+    ).toBeInTheDocument()
 
     await user.click(docsRow)
 
     expect(docsRow).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('button', { name: 'intro.md' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /intro\.md Markdown file/i })
+    ).not.toBeInTheDocument()
   })
 
   it('calls onSelectFile when a Markdown file is selected', async () => {
@@ -107,7 +117,9 @@ describe('ExplorerTree', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: 'README.md' }))
+    await user.click(
+      screen.getByRole('button', { name: /README\.md Markdown file/i })
+    )
 
     expect(onSelectFile).toHaveBeenCalledWith('README.md')
   })
@@ -146,8 +158,10 @@ describe('ExplorerTree', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: /^docs$/ }))
-    expect(screen.getByRole('button', { name: 'intro.md' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /docs folder/i }))
+    expect(
+      screen.getByRole('button', { name: /intro\.md Markdown file/i })
+    ).toBeInTheDocument()
 
     rerender(
       <ExplorerPane
@@ -162,10 +176,117 @@ describe('ExplorerTree', () => {
       />
     )
 
-    expect(screen.queryByRole('button', { name: 'intro.md' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^docs$/ })).toHaveAttribute(
+    expect(
+      screen.queryByRole('button', { name: /intro\.md Markdown file/i })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /docs folder/i })).toHaveAttribute(
       'aria-expanded',
       'false'
     )
+  })
+
+  it('exposes accessible names for workspace and selected-entry controls', () => {
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: /open folder/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /new markdown file/i })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new folder/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /rename selected README\.md/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /delete selected README\.md/i })
+    ).toBeInTheDocument()
+  })
+
+  it('labels explorer rows with entry type and active state', () => {
+    render(
+      <ExplorerTree
+        nodes={tree}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        selectedEntryPath="README.md"
+        selectedFilePath="README.md"
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /docs folder/i })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    expect(
+      screen.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('keeps empty explorer state visible by text', () => {
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: null
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    expect(
+      screen.getByText(/open a folder to browse markdown files/i)
+    ).toBeVisible()
   })
 })

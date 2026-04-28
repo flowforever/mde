@@ -120,11 +120,22 @@ export const MarkdownBlockEditor = forwardRef<
   return (
     <div className="markdown-editor-shell" data-testid="markdown-block-editor">
       <div className="markdown-editor-titlebar">
-        <span className="markdown-editor-path">
-          {path}
-          {isDirty ? ' *' : ''}
-        </span>
+        <div className="markdown-editor-file-state">
+          <span className="markdown-editor-path">{path}</span>
+          {isDirty ? (
+            <span
+              aria-live="polite"
+              className="markdown-editor-dirty-state"
+              role="status"
+            >
+              Unsaved changes
+            </span>
+          ) : null}
+        </div>
         <button
+          aria-label={
+            isDirty ? `Save ${path} with unsaved changes` : `Save ${path}`
+          }
           className="markdown-editor-save-button"
           disabled={isSaving}
           onClick={() => {

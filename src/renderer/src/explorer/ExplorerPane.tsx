@@ -142,10 +142,11 @@ export const ExplorerPane = ({
           ) : null}
           {state.selectedEntryPath ? (
             <div
-              className="explorer-selection-actions"
               aria-label="Selected entry actions"
+              className="explorer-selection-actions"
             >
               <button
+                aria-label={`Rename selected ${selectedEntryName}`}
                 onClick={() => {
                   beginAction('rename', selectedEntryName)
                 }}
@@ -154,6 +155,7 @@ export const ExplorerPane = ({
                 Rename
               </button>
               <button
+                aria-label={`Delete selected ${selectedEntryName}`}
                 onClick={() => {
                   setIsConfirmingDelete(true)
                   clearPendingAction()

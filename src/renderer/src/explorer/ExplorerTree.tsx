@@ -13,6 +13,11 @@ interface ExplorerTreeRootProps extends ExplorerTreeProps {
   readonly nodes: readonly TreeNode[]
 }
 
+const getRowAccessibleName = (node: TreeNode): string =>
+  node.type === 'directory'
+    ? `${node.name} folder`
+    : `${node.name} Markdown file`
+
 const ExplorerTreeNode = ({
   depth,
   node,
@@ -45,7 +50,8 @@ const ExplorerTreeNode = ({
           </button>
           <button
             aria-expanded={isExpanded}
-            aria-current={isSelected ? 'true' : undefined}
+            aria-current={isSelected ? 'page' : undefined}
+            aria-label={getRowAccessibleName(node)}
             className={
               isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
             }
@@ -82,7 +88,8 @@ const ExplorerTreeNode = ({
       <div className="explorer-tree-row" style={rowStyle}>
         <span className="explorer-file-spacer" aria-hidden="true" />
         <button
-          aria-current={isSelected ? 'true' : undefined}
+          aria-current={isSelected ? 'page' : undefined}
+          aria-label={getRowAccessibleName(node)}
           className={
             isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
           }
@@ -106,7 +113,7 @@ export const ExplorerTree = ({
   selectedEntryPath,
   selectedFilePath
 }: ExplorerTreeRootProps): React.JSX.Element => (
-  <ul className="explorer-tree">
+  <ul className="explorer-tree explorer-tree-root">
     {nodes.map((node) => (
       <ExplorerTreeNode
         depth={0}

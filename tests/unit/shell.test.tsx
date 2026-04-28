@@ -15,6 +15,16 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: /open folder/i })).toBeInTheDocument()
   })
 
+  it('keeps initial empty states visible by text', () => {
+    render(<App />)
+
+    expect(
+      screen.getByText(/open a folder to browse markdown files/i)
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { name: /select a folder to begin/i }))
+      .toBeVisible()
+  })
+
   it('surfaces a useful error when the preload editor API is missing', async () => {
     const user = userEvent.setup()
 

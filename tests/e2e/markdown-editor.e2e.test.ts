@@ -43,14 +43,18 @@ test('opens a workspace and expands the docs folder', async () => {
   try {
     await window.getByRole('button', { name: /open folder/i }).click()
 
-    await expect(window.getByRole('button', { name: 'README.md' })).toBeVisible()
     await expect(
-      window.getByRole('button', { exact: true, name: 'docs' })
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /docs folder/i })
     ).toBeVisible()
 
     await window.getByRole('button', { name: /expand docs/i }).click()
 
-    await expect(window.getByRole('button', { name: 'intro.md' })).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /intro\.md Markdown file/i })
+    ).toBeVisible()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -65,7 +69,7 @@ test('loads README markdown into the block editor surface', async () => {
 
   try {
     await window.getByRole('button', { name: /open folder/i }).click()
-    await window.getByRole('button', { name: 'README.md' }).click()
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
 
     const editor = window.getByTestId('markdown-block-editor')
 
@@ -86,8 +90,28 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
   })
 
   try {
+    await window.setViewportSize({ width: 1280, height: 720 })
     await window.getByRole('button', { name: /open folder/i }).click()
-    await window.getByRole('button', { name: 'README.md' }).click()
+    const readmeRow = window.getByRole('button', {
+      name: /README\.md Markdown file/i
+    })
+
+    await readmeRow.click()
+
+    await expect(readmeRow).toHaveAttribute('aria-current', 'page')
+    await expect(readmeRow).toHaveClass(/is-active/)
+    await expect(window.locator('.app-shell')).toBeVisible()
+    await expect(window.getByLabel('Explorer')).toBeVisible()
+    await expect(window.getByLabel('Editor')).toBeVisible()
+    await expect(window.getByRole('button', { name: /save README\.md/i }))
+      .toBeVisible()
+    expect(
+      await window.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth
+      )
+    ).toBe(true)
 
     const editableDocument = window
       .getByTestId('blocknote-view')
@@ -99,27 +123,33 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
     await window.keyboard.press('End')
     await window.keyboard.press('Enter')
     await window.keyboard.insertText('Saved from button')
-    await window.getByRole('button', { name: /^save$/i }).click()
+    await expect(window.getByText(/unsaved changes/i)).toBeVisible()
+    await window.getByRole('button', { name: /save README\.md/i }).click()
 
     await expect
       .poll(async () => readFile(readmePath, 'utf8'))
       .toContain('Saved from button')
+    await expect(window.getByText(/unsaved changes/i)).toBeHidden()
 
     await editableDocument.click()
     await window.keyboard.press('End')
     await window.keyboard.press('Enter')
     await window.keyboard.insertText('Saved from shortcut')
+    await expect(window.getByText(/unsaved changes/i)).toBeVisible()
     await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
 
     await expect
       .poll(async () => readFile(readmePath, 'utf8'))
       .toContain('Saved from shortcut')
+    await expect(window.getByText(/unsaved changes/i)).toBeHidden()
 
     await window.getByRole('button', { name: /new markdown file/i }).click()
     await window.getByLabel(/markdown file path/i).fill('notes.md')
     await window.getByRole('button', { name: /^create$/i }).click()
 
-    await expect(window.getByRole('button', { name: 'notes.md' })).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /notes\.md Markdown file/i })
+    ).toBeVisible()
     await expect(readFile(join(workspacePath, 'notes.md'), 'utf8')).resolves.toBe('')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
