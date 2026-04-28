@@ -11,12 +11,14 @@ interface LaunchedElectronApp {
 }
 
 export const launchElectronApp = async (): Promise<LaunchedElectronApp> => {
-  await execFileAsync('npm', ['run', 'build'])
-
   const app = await electron.launch({
     args: ['out/main/index.js']
   })
   const window = await app.firstWindow()
 
   return { app, window }
+}
+
+export const buildElectronApp = async (): Promise<void> => {
+  await execFileAsync('npm', ['run', 'build'])
 }

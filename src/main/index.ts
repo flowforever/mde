@@ -8,6 +8,9 @@ import type {
 
 type BrowserWindowConstructor = typeof BrowserWindow
 
+export const createPreloadPath = (mainDirectory: string): string =>
+  join(mainDirectory, '../preload/index.mjs')
+
 export const createWindowOptions = (
   preloadPath: string
 ): BrowserWindowConstructorOptions => ({
@@ -29,7 +32,7 @@ const createMainWindow = async (
   BrowserWindow: BrowserWindowConstructor
 ): Promise<void> => {
   const window = new BrowserWindow(
-    createWindowOptions(join(__dirname, '../preload/index.js'))
+    createWindowOptions(createPreloadPath(__dirname))
   )
 
   window.once('ready-to-show', () => {
