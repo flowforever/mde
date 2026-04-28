@@ -27,6 +27,9 @@ const replacePathPrefix = (
     ? newPath
     : `${newPath}/${targetPath.slice(oldPath.length + 1)}`
 
+const isCurrentWorkspace = (state: AppState, workspaceRoot: string): boolean =>
+  state.workspace?.rootPath === workspaceRoot
+
 export const appReducer = (state: AppState, action: AppAction): AppState => {
   switch (action.type) {
     case 'workspace/open-started':
@@ -63,7 +66,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         isOpeningWorkspace: false
       }
     case 'workspace/tree-refreshed':
-      if (!state.workspace) {
+      if (!state.workspace || !isCurrentWorkspace(state, action.workspaceRoot)) {
         return state
       }
 
@@ -76,6 +79,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         }
       }
     case 'workspace/operation-failed':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
       return {
         ...state,
         errorMessage: action.message
@@ -92,6 +99,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         selectedFilePath: action.filePath
       }
     case 'file/load-started':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
       return {
         ...state,
         draftMarkdown: null,
@@ -197,6 +208,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         isSavingFile: false
       }
     case 'file/entry-renamed': {
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
       const loadedFilePath = state.loadedFile?.path
       const renamedLoadedFilePath =
         loadedFilePath && isPathAtOrInside(action.oldPath, loadedFilePath)
@@ -234,6 +249,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       }
     }
     case 'file/entry-deleted': {
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
       const removedLoadedFile =
         state.loadedFile &&
         isPathAtOrInside(action.entryPath, state.loadedFile.path)

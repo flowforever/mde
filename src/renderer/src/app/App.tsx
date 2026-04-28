@@ -112,8 +112,10 @@ export const App = (): React.JSX.Element => {
     }
   }, [state.workspace?.rootPath])
 
-  const refreshWorkspaceTree = useCallback(async (): Promise<void> => {
-    if (!state.workspace) {
+  const refreshWorkspaceTree = useCallback(async (workspaceRoot?: string): Promise<void> => {
+    const scopedWorkspaceRoot = workspaceRoot ?? state.workspace?.rootPath
+
+    if (!scopedWorkspaceRoot) {
       return
     }
 
@@ -124,14 +126,19 @@ export const App = (): React.JSX.Element => {
 
       const tree = await window.editorApi.listDirectory('')
 
-      dispatch({ type: 'workspace/tree-refreshed', tree })
+      dispatch({
+        tree,
+        type: 'workspace/tree-refreshed',
+        workspaceRoot: scopedWorkspaceRoot
+      })
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to refresh workspace'),
-        type: 'workspace/operation-failed'
+        type: 'workspace/operation-failed',
+        workspaceRoot: scopedWorkspaceRoot
       })
     }
-  }, [state.workspace])
+  }, [state.workspace?.rootPath])
 
   const saveCurrentFile = useCallback(
     async (serializedMarkdown?: string): Promise<void> => {
@@ -196,7 +203,12 @@ export const App = (): React.JSX.Element => {
   }, [saveCurrentFile])
 
   const createMarkdownFile = async (promptedPath: string): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath
     const filePath = ensureMarkdownExtension(promptedPath)
+
+    if (!workspaceRoot) {
+      return
+    }
 
     try {
       if (!window.editorApi) {
@@ -204,36 +216,45 @@ export const App = (): React.JSX.Element => {
       }
 
       await window.editorApi.createMarkdownFile(filePath)
-      await refreshWorkspaceTree()
+      await refreshWorkspaceTree(workspaceRoot)
       await loadFile(filePath)
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to create Markdown file'),
-        type: 'workspace/operation-failed'
+        type: 'workspace/operation-failed',
+        workspaceRoot
       })
     }
   }
 
   const createFolder = async (folderPath: string): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath
+
+    if (!workspaceRoot) {
+      return
+    }
+
     try {
       if (!window.editorApi) {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
       await window.editorApi.createFolder(folderPath)
-      await refreshWorkspaceTree()
+      await refreshWorkspaceTree(workspaceRoot)
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to create folder'),
-        type: 'workspace/operation-failed'
+        type: 'workspace/operation-failed',
+        workspaceRoot
       })
     }
   }
 
   const renameSelectedEntry = async (promptedName: string): Promise<void> => {
     const selectedEntryPath = state.selectedEntryPath
+    const workspaceRoot = state.workspace?.rootPath
 
-    if (!selectedEntryPath || !state.workspace) {
+    if (!selectedEntryPath || !state.workspace || !workspaceRoot) {
       return
     }
 
@@ -262,21 +283,24 @@ export const App = (): React.JSX.Element => {
       dispatch({
         newPath: result.path,
         oldPath: selectedEntryPath,
-        type: 'file/entry-renamed'
+        type: 'file/entry-renamed',
+        workspaceRoot
       })
-      await refreshWorkspaceTree()
+      await refreshWorkspaceTree(workspaceRoot)
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to rename entry'),
-        type: 'workspace/operation-failed'
+        type: 'workspace/operation-failed',
+        workspaceRoot
       })
     }
   }
 
   const deleteSelectedEntry = async (): Promise<void> => {
     const selectedEntryPath = state.selectedEntryPath
+    const workspaceRoot = state.workspace?.rootPath
 
-    if (!selectedEntryPath) {
+    if (!selectedEntryPath || !workspaceRoot) {
       return
     }
 
@@ -286,12 +310,17 @@ export const App = (): React.JSX.Element => {
       }
 
       await window.editorApi.deleteEntry(selectedEntryPath)
-      dispatch({ entryPath: selectedEntryPath, type: 'file/entry-deleted' })
-      await refreshWorkspaceTree()
+      dispatch({
+        entryPath: selectedEntryPath,
+        type: 'file/entry-deleted',
+        workspaceRoot
+      })
+      await refreshWorkspaceTree(workspaceRoot)
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to delete entry'),
-        type: 'workspace/operation-failed'
+        type: 'workspace/operation-failed',
+        workspaceRoot
       })
     }
   }

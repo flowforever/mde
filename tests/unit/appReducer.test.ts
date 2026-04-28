@@ -25,6 +25,13 @@ describe('appReducer', () => {
     name: 'workspace-b',
     rootPath: '/workspace-b'
   }
+  const refreshedTree = Object.freeze([
+    {
+      name: 'A.md',
+      path: 'A.md',
+      type: 'file' as const
+    }
+  ])
 
   it('stores an opened workspace', () => {
     const state = appReducer(createInitialAppState(), {
@@ -248,6 +255,94 @@ describe('appReducer', () => {
     expect(state.isLoadingFile).toBe(true)
     expect(state.loadedFile).toBeNull()
     expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('ignores file load starts from a stale workspace', () => {
+    const workspaceBState = appReducer(createInitialAppState(), {
+      type: 'workspace/opened',
+      workspace: workspaceB
+    })
+
+    const state = appReducer(workspaceBState, {
+      filePath: 'README.md',
+      type: 'file/load-started',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state).toEqual(workspaceBState)
+  })
+
+  it('ignores stale tree refreshes after changing workspaces', () => {
+    const workspaceBState = appReducer(createInitialAppState(), {
+      type: 'workspace/opened',
+      workspace: workspaceB
+    })
+
+    const state = appReducer(workspaceBState, {
+      tree: refreshedTree,
+      type: 'workspace/tree-refreshed',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state).toEqual(workspaceBState)
+  })
+
+  it('ignores stale operation failures after changing workspaces', () => {
+    const workspaceBState = appReducer(createInitialAppState(), {
+      type: 'workspace/opened',
+      workspace: workspaceB
+    })
+
+    const state = appReducer(workspaceBState, {
+      message: 'Unable to create file in workspace A',
+      type: 'workspace/operation-failed',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state).toEqual(workspaceBState)
+  })
+
+  it('ignores stale renames after changing workspaces', () => {
+    const workspaceBState = {
+      ...createInitialAppState(),
+      loadedFile: {
+        contents: '# Workspace B',
+        path: 'README.md'
+      },
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: workspaceB
+    }
+
+    const state = appReducer(workspaceBState, {
+      newPath: 'A.md',
+      oldPath: 'README.md',
+      type: 'file/entry-renamed',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state).toEqual(workspaceBState)
+  })
+
+  it('ignores stale deletes after changing workspaces', () => {
+    const workspaceBState = {
+      ...createInitialAppState(),
+      loadedFile: {
+        contents: '# Workspace B',
+        path: 'README.md'
+      },
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: workspaceB
+    }
+
+    const state = appReducer(workspaceBState, {
+      entryPath: 'README.md',
+      type: 'file/entry-deleted',
+      workspaceRoot: workspaceA.rootPath
+    })
+
+    expect(state).toEqual(workspaceBState)
   })
 
   it('marks the current file dirty after editor changes', () => {

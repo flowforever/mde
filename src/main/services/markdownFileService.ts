@@ -8,7 +8,7 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises'
-import { dirname, extname } from 'node:path'
+import { dirname, extname, join, relative, sep } from 'node:path'
 
 import type { FileContents, RenamedEntry } from '../../shared/workspace'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
@@ -74,6 +74,55 @@ const assertPathDoesNotExist = async (targetPath: string): Promise<void> => {
   throw new Error('Path already exists')
 }
 
+const assertSupportedMarkdownFileStats = (
+  fileStats: Awaited<ReturnType<typeof stat>>
+): void => {
+  if (!fileStats.isFile()) {
+    throw new Error('Markdown path must be a file')
+  }
+
+  if (fileStats.nlink > 1) {
+    throw new Error('Hard-linked Markdown files are unsupported')
+  }
+}
+
+const assertNoSymlinkPathComponents = async (
+  workspacePath: string,
+  targetPath: string,
+  options: { readonly allowMissing: boolean }
+): Promise<string> => {
+  assertNonEmptyWorkspacePath(targetPath)
+
+  const realWorkspacePath = await realpath(workspacePath)
+  const absoluteTargetPath = resolveWorkspacePath(realWorkspacePath, targetPath)
+  const relativeTargetPath = relative(realWorkspacePath, absoluteTargetPath)
+  const pathSegments =
+    relativeTargetPath === ''
+      ? []
+      : relativeTargetPath.split(sep).filter((segment) => segment.length > 0)
+  let currentPath = realWorkspacePath
+
+  for (const segment of pathSegments) {
+    currentPath = join(currentPath, segment)
+
+    try {
+      const linkStats = await lstat(currentPath)
+
+      if (linkStats.isSymbolicLink()) {
+        throw new Error('Symlink paths are unsupported for file changes')
+      }
+    } catch (error) {
+      if (isErrorWithCode(error, 'ENOENT') && options.allowMissing) {
+        break
+      }
+
+      throw error
+    }
+  }
+
+  return absoluteTargetPath
+}
+
 const resolveExistingMarkdownFile = async (
   workspacePath: string,
   filePath: string
@@ -97,57 +146,44 @@ const resolveExistingMarkdownFile = async (
 
   const fileStats = await stat(realFilePath)
 
-  if (!fileStats.isFile()) {
-    throw new Error('Markdown path must be a file')
-  }
+  assertSupportedMarkdownFileStats(fileStats)
 
   return realFilePath
 }
 
-const ensureCreatableParent = async (
+const resolveMutableMarkdownFile = async (
+  workspacePath: string,
+  filePath: string
+): Promise<string> => {
+  assertMarkdownPath(filePath)
+
+  const absoluteFilePath = await assertNoSymlinkPathComponents(
+    workspacePath,
+    filePath,
+    { allowMissing: false }
+  )
+  const fileStats = await stat(absoluteFilePath)
+
+  assertSupportedMarkdownFileStats(fileStats)
+
+  return absoluteFilePath
+}
+
+const prepareMutableNewPath = async (
   workspacePath: string,
   targetPath: string
 ): Promise<string> => {
-  assertNonEmptyWorkspacePath(targetPath)
-
-  const absoluteTargetPath = resolveWorkspacePath(workspacePath, targetPath)
+  const absoluteTargetPath = await assertNoSymlinkPathComponents(
+    workspacePath,
+    targetPath,
+    { allowMissing: true }
+  )
   const absoluteParentPath = dirname(absoluteTargetPath)
-  const realWorkspacePath = await realpath(workspacePath)
-  let existingAncestorPath = absoluteParentPath
-
-  while (true) {
-    try {
-      const realAncestorPath = await realpath(existingAncestorPath)
-      const ancestorStats = await stat(realAncestorPath)
-
-      assertPathInsideWorkspace(realWorkspacePath, realAncestorPath)
-
-      if (!ancestorStats.isDirectory()) {
-        throw new Error('Parent path must be a directory')
-      }
-
-      break
-    } catch (error) {
-      if (isErrorWithCode(error, 'ENOENT')) {
-        const nextAncestorPath = dirname(existingAncestorPath)
-
-        if (nextAncestorPath === existingAncestorPath) {
-          throw error
-        }
-
-        existingAncestorPath = nextAncestorPath
-        continue
-      }
-
-      throw error
-    }
-  }
 
   await mkdir(absoluteParentPath, { recursive: true })
-
-  const realParentPath = await realpath(absoluteParentPath)
-
-  assertPathInsideWorkspace(realWorkspacePath, realParentPath)
+  await assertNoSymlinkPathComponents(workspacePath, targetPath, {
+    allowMissing: true
+  })
 
   return absoluteTargetPath
 }
@@ -162,9 +198,9 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
     })
   },
   async writeMarkdownFile(workspacePath, filePath, contents) {
-    const realFilePath = await resolveExistingMarkdownFile(workspacePath, filePath)
+    const absoluteFilePath = await resolveMutableMarkdownFile(workspacePath, filePath)
 
-    await writeFile(realFilePath, contents, 'utf8')
+    await writeFile(absoluteFilePath, contents, 'utf8')
 
     return Object.freeze({
       contents,
@@ -174,7 +210,7 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
   async createMarkdownFile(workspacePath, filePath, contents = '') {
     assertMarkdownPath(filePath)
 
-    const absoluteFilePath = await ensureCreatableParent(workspacePath, filePath)
+    const absoluteFilePath = await prepareMutableNewPath(workspacePath, filePath)
 
     await assertPathDoesNotExist(absoluteFilePath)
     await writeFile(absoluteFilePath, contents, {
@@ -188,33 +224,30 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
     })
   },
   async createFolder(workspacePath, folderPath) {
-    const absoluteFolderPath = await ensureCreatableParent(workspacePath, folderPath)
+    const absoluteFolderPath = await prepareMutableNewPath(workspacePath, folderPath)
 
     await assertPathDoesNotExist(absoluteFolderPath)
     await mkdir(absoluteFolderPath, { recursive: true })
-
-    const realWorkspacePath = await realpath(workspacePath)
-    const realFolderPath = await realpath(absoluteFolderPath)
-
-    assertPathInsideWorkspace(realWorkspacePath, realFolderPath)
+    await assertNoSymlinkPathComponents(workspacePath, folderPath, {
+      allowMissing: false
+    })
   },
   async renameEntry(workspacePath, oldPath, newPath) {
     assertNonEmptyWorkspacePath(oldPath)
     assertNonEmptyWorkspacePath(newPath)
 
-    const absoluteOldPath = resolveWorkspacePath(workspacePath, oldPath)
-    const realWorkspacePath = await realpath(workspacePath)
-    const realOldPath = await realpath(absoluteOldPath)
-
-    assertPathInsideWorkspace(realWorkspacePath, realOldPath)
-
-    const oldStats = await stat(realOldPath)
+    const absoluteOldPath = await assertNoSymlinkPathComponents(
+      workspacePath,
+      oldPath,
+      { allowMissing: false }
+    )
+    const oldStats = await stat(absoluteOldPath)
 
     if (oldStats.isFile() && !isMarkdownPath(newPath)) {
       throw new Error('Only Markdown files can be renamed')
     }
 
-    const absoluteNewPath = await ensureCreatableParent(workspacePath, newPath)
+    const absoluteNewPath = await prepareMutableNewPath(workspacePath, newPath)
 
     await assertPathDoesNotExist(absoluteNewPath)
     await rename(absoluteOldPath, absoluteNewPath)
@@ -226,11 +259,11 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
   async deleteEntry(workspacePath, entryPath) {
     assertNonEmptyWorkspacePath(entryPath)
 
-    const absoluteEntryPath = resolveWorkspacePath(workspacePath, entryPath)
-    const realWorkspacePath = await realpath(workspacePath)
-    const realEntryPath = await realpath(absoluteEntryPath)
-
-    assertPathInsideWorkspace(realWorkspacePath, realEntryPath)
+    const absoluteEntryPath = await assertNoSymlinkPathComponents(
+      workspacePath,
+      entryPath,
+      { allowMissing: false }
+    )
 
     await rm(absoluteEntryPath, {
       force: false,

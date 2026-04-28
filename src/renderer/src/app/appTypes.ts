@@ -21,8 +21,16 @@ export type AppAction =
   | { readonly type: 'workspace/opened'; readonly workspace: Workspace }
   | { readonly type: 'workspace/open-cancelled' }
   | { readonly type: 'workspace/open-failed'; readonly message: string }
-  | { readonly type: 'workspace/tree-refreshed'; readonly tree: readonly TreeNode[] }
-  | { readonly type: 'workspace/operation-failed'; readonly message: string }
+  | {
+      readonly type: 'workspace/tree-refreshed'
+      readonly tree: readonly TreeNode[]
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly type: 'workspace/operation-failed'
+      readonly message: string
+      readonly workspaceRoot: string
+    }
   | { readonly type: 'explorer/entry-selected'; readonly entryPath: string }
   | { readonly type: 'file/selected'; readonly filePath: string }
   | {
@@ -63,5 +71,10 @@ export type AppAction =
       readonly type: 'file/entry-renamed'
       readonly oldPath: string
       readonly newPath: string
+      readonly workspaceRoot: string
     }
-  | { readonly type: 'file/entry-deleted'; readonly entryPath: string }
+  | {
+      readonly type: 'file/entry-deleted'
+      readonly entryPath: string
+      readonly workspaceRoot: string
+    }

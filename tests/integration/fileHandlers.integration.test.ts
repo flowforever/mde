@@ -1,4 +1,12 @@
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import {
+  link,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -139,6 +147,45 @@ describe('fileHandlers integration', () => {
       contents: '# Original',
       path: 'README.md'
     })
+  })
+
+  it('rejects Markdown hard links before reading through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideFilePath = join(outsidePath, 'outside.md')
+
+    await writeFile(join(workspacePath, 'README.md'), '# Workspace')
+    await writeFile(outsideFilePath, '# Outside')
+    await link(outsideFilePath, join(workspacePath, 'inside.md'))
+
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+
+    await expect(
+      handlers.get(FILE_CHANNELS.readMarkdownFile)?.({}, 'inside.md')
+    ).rejects.toThrow(/hard-linked/i)
+  })
+
+  it('rejects Markdown hard links before writing through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideFilePath = join(outsidePath, 'outside.md')
+
+    await writeFile(join(workspacePath, 'README.md'), '# Workspace')
+    await writeFile(outsideFilePath, '# Outside')
+    await link(outsideFilePath, join(workspacePath, 'inside.md'))
+
+    const { handlers } = registerHandlers(workspacePath)
+
+    await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.writeMarkdownFile)
+        ?.({}, 'inside.md', '# Changed')
+    ).rejects.toThrow(/hard-linked/i)
+    await expect(readFile(outsideFilePath, 'utf8')).resolves.toBe('# Outside')
   })
 
   it('saves edited Markdown through the file IPC handler', async () => {

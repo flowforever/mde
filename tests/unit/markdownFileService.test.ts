@@ -1,6 +1,7 @@
 import {
   mkdtemp,
   mkdir,
+  link,
   readFile,
   stat,
   symlink,
@@ -76,6 +77,37 @@ describe('markdownFileService', () => {
     ).rejects.toThrow(/markdown/i)
   })
 
+  it('rejects Markdown hard links before reading', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideFilePath = join(outsidePath, 'outside.md')
+
+    await writeFile(outsideFilePath, '# Outside')
+    await link(outsideFilePath, join(rootPath, 'inside.md'))
+
+    await expect(
+      createMarkdownFileService().readMarkdownFile(rootPath, 'inside.md')
+    ).rejects.toThrow(/hard-linked/i)
+  })
+
+  it('rejects Markdown hard links before writing and leaves the linked file unchanged', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideFilePath = join(outsidePath, 'outside.md')
+
+    await writeFile(outsideFilePath, '# Outside')
+    await link(outsideFilePath, join(rootPath, 'inside.md'))
+
+    await expect(
+      createMarkdownFileService().writeMarkdownFile(
+        rootPath,
+        'inside.md',
+        '# Changed'
+      )
+    ).rejects.toThrow(/hard-linked/i)
+    await expect(readFile(outsideFilePath, 'utf8')).resolves.toBe('# Outside')
+  })
+
   it('writes Markdown files inside the workspace', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
     await mkdir(join(rootPath, 'docs'))
@@ -89,6 +121,25 @@ describe('markdownFileService', () => {
 
     await expect(readFile(join(rootPath, 'docs', 'intro.md'), 'utf8')).resolves.toBe(
       '# Changed\n\nSaved from editor.\n'
+    )
+  })
+
+  it('rejects writes through symlinked parent paths', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'realdir'))
+    await writeFile(join(rootPath, 'realdir', 'file.md'), '# Original')
+    await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
+
+    await expect(
+      createMarkdownFileService().writeMarkdownFile(
+        rootPath,
+        'linkdir/file.md',
+        '# Changed'
+      )
+    ).rejects.toThrow(/symlink/i)
+    await expect(readFile(join(rootPath, 'realdir', 'file.md'), 'utf8')).resolves.toBe(
+      '# Original'
     )
   })
 
@@ -109,6 +160,20 @@ describe('markdownFileService', () => {
     )
   })
 
+  it('rejects Markdown file creation through symlinked parent paths', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'realdir'))
+    await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
+
+    await expect(
+      createMarkdownFileService().createMarkdownFile(rootPath, 'linkdir/new.md')
+    ).rejects.toThrow(/symlink/i)
+    await expect(stat(join(rootPath, 'realdir', 'new.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
   it('creates folders inside the workspace', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
 
@@ -117,6 +182,20 @@ describe('markdownFileService', () => {
     const createdFolderStats = await stat(join(rootPath, 'notes', 'daily'))
 
     expect(createdFolderStats.isDirectory()).toBe(true)
+  })
+
+  it('rejects folder creation through symlinked parent paths', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'realdir'))
+    await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
+
+    await expect(
+      createMarkdownFileService().createFolder(rootPath, 'linkdir/new-folder')
+    ).rejects.toThrow(/symlink/i)
+    await expect(stat(join(rootPath, 'realdir', 'new-folder'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
   })
 
   it('renames files inside the workspace', async () => {
@@ -140,6 +219,28 @@ describe('markdownFileService', () => {
     })
   })
 
+  it('rejects renames through symlinked parent paths', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'realdir'))
+    await writeFile(join(rootPath, 'realdir', 'file.md'), '# Original')
+    await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
+
+    await expect(
+      createMarkdownFileService().renameEntry(
+        rootPath,
+        'linkdir/file.md',
+        'linkdir/renamed.md'
+      )
+    ).rejects.toThrow(/symlink/i)
+    await expect(readFile(join(rootPath, 'realdir', 'file.md'), 'utf8')).resolves.toBe(
+      '# Original'
+    )
+    await expect(stat(join(rootPath, 'realdir', 'renamed.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
   it('deletes entries inside the workspace', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
     await writeFile(join(rootPath, 'old.md'), '# Old')
@@ -149,5 +250,20 @@ describe('markdownFileService', () => {
     await expect(stat(join(rootPath, 'old.md'))).rejects.toMatchObject({
       code: 'ENOENT'
     })
+  })
+
+  it('rejects deletes through symlinked parent paths', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+
+    await mkdir(join(rootPath, 'realdir'))
+    await writeFile(join(rootPath, 'realdir', 'file.md'), '# Original')
+    await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
+
+    await expect(
+      createMarkdownFileService().deleteEntry(rootPath, 'linkdir/file.md')
+    ).rejects.toThrow(/symlink/i)
+    await expect(readFile(join(rootPath, 'realdir', 'file.md'), 'utf8')).resolves.toBe(
+      '# Original'
+    )
   })
 })
