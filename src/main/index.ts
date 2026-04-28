@@ -7,6 +7,12 @@ import type {
   WebContents,
 } from 'electron'
 
+import {
+  getTestWorkspacePath,
+  registerWorkspaceHandlers
+} from './ipc/registerWorkspaceHandlers'
+import { createWorkspaceService } from './services/workspaceService'
+
 type BrowserWindowConstructor = typeof BrowserWindow
 interface StartupDiagnostics {
   errors: string[]
@@ -107,12 +113,20 @@ const createMainWindow = async (
 }
 
 const bootstrap = async (): Promise<void> => {
-  const { app, BrowserWindow } = (await import('electron')) as {
+  const { app, BrowserWindow, dialog, ipcMain } = (await import('electron')) as {
     app: App
     BrowserWindow: BrowserWindowConstructor
+    dialog: Electron.Dialog
+    ipcMain: Electron.IpcMain
   }
 
   await app.whenReady()
+  registerWorkspaceHandlers({
+    dialog,
+    ipcMain,
+    testWorkspacePath: getTestWorkspacePath(),
+    workspaceService: createWorkspaceService()
+  })
   await createMainWindow(BrowserWindow)
 
   app.on('activate', () => {

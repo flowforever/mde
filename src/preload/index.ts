@@ -2,11 +2,15 @@ import type * as Electron from 'electron'
 
 declare const require: (moduleName: 'electron') => Pick<
   typeof Electron,
-  'contextBridge'
+  'contextBridge' | 'ipcRenderer'
 >
 
-const { contextBridge } = require('electron')
+import { createEditorApi } from './editorApi'
+
+const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('markdownEditorShell', {
   preloadLoaded: true
 })
+
+contextBridge.exposeInMainWorld('editorApi', createEditorApi(ipcRenderer))

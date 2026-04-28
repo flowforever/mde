@@ -17,13 +17,19 @@ interface LaunchedElectronApp {
   window: Page
 }
 
-export const launchElectronApp = async (): Promise<LaunchedElectronApp> => {
+interface LaunchElectronAppOptions {
+  readonly args?: readonly string[]
+}
+
+export const launchElectronApp = async (
+  options: LaunchElectronAppOptions = {}
+): Promise<LaunchedElectronApp> => {
   const startupDiagnostics: StartupDiagnostics = {
     errors: [],
     output: []
   }
   const app = await electron.launch({
-    args: ['out/main/index.js'],
+    args: ['out/main/index.js', ...options.args ?? []],
     env: {
       ...process.env,
       MDV_CAPTURE_STARTUP_DIAGNOSTICS: '1'

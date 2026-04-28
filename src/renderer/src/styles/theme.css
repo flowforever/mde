@@ -31,7 +31,7 @@ button {
 .explorer-pane {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   padding: 20px;
   color: #d8dee9;
   background: #1f2428;
@@ -59,6 +59,98 @@ button {
 
 .open-folder-button:hover {
   background: #387daf;
+}
+
+.open-folder-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.explorer-empty,
+.explorer-error {
+  margin: 0;
+  color: #9aa7b2;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.explorer-error {
+  color: #ffb4a8;
+}
+
+.explorer-workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.explorer-workspace-name {
+  overflow: hidden;
+  color: #f4f6f8;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.explorer-tree-row {
+  --depth: 0;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 28px;
+  padding-left: calc(var(--depth) * 16px);
+  align-items: center;
+}
+
+.explorer-disclosure-button,
+.explorer-row-button {
+  min-height: 26px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.explorer-disclosure-button {
+  width: 22px;
+  color: #8e9aa5;
+  font-size: 12px;
+}
+
+.explorer-file-spacer {
+  width: 22px;
+}
+
+.explorer-row-button {
+  overflow: hidden;
+  padding: 0 7px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-tree-row:hover .explorer-row-button,
+.explorer-disclosure-button:hover {
+  background: #2b3137;
+}
+
+.explorer-row-button.is-active {
+  color: #ffffff;
+  background: #37414a;
+  outline: 1px solid #4f6475;
 }
 
 .editor-pane {
