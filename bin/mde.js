@@ -11,8 +11,11 @@ const createLaunchPathArgs = (args, cwd) =>
   args.filter((arg) => arg !== '--dry-run').map((arg) => resolve(cwd, arg))
 
 const getMacAppPath = () => {
+  if (process.env.MDE_APP_PATH) {
+    return process.env.MDE_APP_PATH
+  }
+
   const candidates = [
-    process.env.MDE_APP_PATH,
     '/Applications/MDE.app',
     `${process.env.HOME ?? ''}/Applications/MDE.app`,
     resolve(projectRoot, 'release/mac-arm64/MDE.app'),
