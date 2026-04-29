@@ -830,7 +830,7 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
       button: 'right'
     })
     await expect(window.getByRole('menu', { name: /drafts actions/i })).toBeVisible()
-    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await window.locator('.explorer-header').click()
     await expect(window.getByRole('menu', { name: /drafts actions/i })).toHaveCount(0)
     await window.getByRole('button', { name: /drafts folder/i }).click({
       button: 'right'
@@ -964,9 +964,7 @@ test('remembers and switches recent workspaces from the workspace menu', async (
       { firstWorkspacePath, secondWorkspacePath }
     )
 
-    await expect(
-      window.getByRole('dialog', { name: /workspace manager/i })
-    ).toBeVisible()
+    await ensureWorkspaceDialogOpen(window)
     await window
       .getByRole('button', { name: /switch to workspace Second Workspace/i })
       .click()
