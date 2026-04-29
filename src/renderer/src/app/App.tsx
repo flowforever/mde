@@ -70,6 +70,7 @@ const ensureMarkdownExtension = (filePath: string): string =>
 const EXPLORER_WIDTH_DEFAULT = 288
 const EXPLORER_WIDTH_MIN = 220
 const EXPLORER_WIDTH_MAX = 440
+const AUTO_SAVE_IDLE_DELAY_MS = 5000
 
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
@@ -414,6 +415,35 @@ export const App = (): React.JSX.Element => {
   )
 
   useEffect(() => {
+    const loadedFilePath = state.loadedFile?.path
+    const workspaceRoot = state.workspace?.rootPath
+
+    if (
+      !state.isDirty ||
+      state.isSavingFile ||
+      !loadedFilePath ||
+      !workspaceRoot
+    ) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveCurrentFile(state.draftMarkdown ?? undefined)
+    }, AUTO_SAVE_IDLE_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [
+    saveCurrentFile,
+    state.draftMarkdown,
+    state.isDirty,
+    state.isSavingFile,
+    state.loadedFile?.path,
+    state.workspace?.rootPath
+  ])
+
+  useEffect(() => {
     const saveOnShortcut = (event: KeyboardEvent): void => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') {
         return
@@ -673,9 +703,7 @@ export const App = (): React.JSX.Element => {
                 workspaceRoot
               })
             }}
-            onSaveRequest={(contents) => {
-              void saveCurrentFile(contents)
-            }}
+            onSaveRequest={saveCurrentFile}
             path={state.loadedFile.path}
             ref={editorRef}
           />

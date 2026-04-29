@@ -80,7 +80,20 @@ describe('Release automation config', () => {
     expect(workflow).toContain('v*')
     expect(workflow).toContain('contents: write')
     expect(workflow).toContain('npm ci')
+    expect(workflow).toContain('gh release create')
+    expect(workflow).toContain('--generate-notes')
     expect(workflow).toContain('npm run release:github')
+  })
+
+  it('configures generated release notes with user-facing categories', async () => {
+    const releaseNotesConfig = await readFile('.github/release.yml', 'utf8')
+
+    expect(releaseNotesConfig).toContain('changelog:')
+    expect(releaseNotesConfig).toContain('Breaking Changes')
+    expect(releaseNotesConfig).toContain('Features')
+    expect(releaseNotesConfig).toContain('Bug Fixes')
+    expect(releaseNotesConfig).toContain('Maintenance')
+    expect(releaseNotesConfig).toContain('"*"')
   })
 })
 

@@ -38,6 +38,16 @@ jobs:
       - name: Run end-to-end tests
         run: npm run test:e2e
 
+      - name: Create release notes
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; keeping existing release notes."
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and publish release
         run: npm run release:github
         env:

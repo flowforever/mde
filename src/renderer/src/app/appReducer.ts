@@ -178,7 +178,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         fileErrorMessage: null,
         isSavingFile: true
       }
-    case 'file/save-succeeded':
+    case 'file/save-succeeded': {
       if (
         state.loadedFile?.path !== action.filePath ||
         state.workspace?.rootPath !== action.workspaceRoot
@@ -186,17 +186,20 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         return state
       }
 
+      const draftMarkdown = state.draftMarkdown ?? action.contents
+
       return {
         ...state,
-        draftMarkdown: action.contents,
+        draftMarkdown,
         fileErrorMessage: null,
-        isDirty: false,
+        isDirty: draftMarkdown !== action.contents,
         isSavingFile: false,
         loadedFile: {
           contents: action.contents,
           path: action.filePath
         }
       }
+    }
     case 'file/save-failed':
       if (
         state.loadedFile?.path !== action.filePath ||

@@ -1,6 +1,41 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+interface MockMarkdownBlockEditorProps {
+  readonly errorMessage: string | null
+  readonly isDirty: boolean
+  readonly isSaving: boolean
+  readonly markdown: string
+  readonly onMarkdownChange: (contents: string) => void
+  readonly path: string
+}
+
+const mockEditorState = vi.hoisted(() => ({
+  changeIndex: 0
+}))
+
+vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
+  const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
+    <section aria-label="Mock editor">
+      <span>{props.path}</span>
+      {props.isDirty ? <span>Unsaved changes</span> : null}
+      {props.isSaving ? <span>Saving...</span> : null}
+      {props.errorMessage ? <p role="alert">{props.errorMessage}</p> : null}
+      <button
+        onClick={() => {
+          mockEditorState.changeIndex += 1
+          props.onMarkdownChange(`# Changed ${mockEditorState.changeIndex}`)
+        }}
+        type="button"
+      >
+        Change mock markdown
+      </button>
+    </section>
+  )
+
+  return { MarkdownBlockEditor: MockMarkdownBlockEditor }
+})
 
 import { App } from '../../src/renderer/src/app/App'
 import type { EditorApi } from '../../src/shared/workspace'
@@ -8,6 +43,8 @@ import type { EditorApi } from '../../src/shared/workspace'
 describe('App shell', () => {
   afterEach(() => {
     cleanup()
+    vi.useRealTimers()
+    mockEditorState.changeIndex = 0
     localStorage.clear()
     document.title = 'MDE'
     Reflect.deleteProperty(window, 'editorApi')
@@ -358,6 +395,71 @@ describe('App shell', () => {
       await screen.findByRole('button', { name: /manage workspaces/i })
     ).toHaveTextContent('API.md')
     expect(localStorage.getItem('mde.recentWorkspaces')).toContain('"type":"file"')
+  })
+
+  it('auto-saves the latest dirty editor contents after five idle seconds', async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+
+    render(<App />)
+
+    const changeButton = await screen.findByRole('button', {
+      name: /change mock markdown/i
+    })
+
+    vi.useFakeTimers()
+    fireEvent.click(changeButton)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
+
+    fireEvent.click(changeButton)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4999)
+    })
+
+    expect(editorApi.writeMarkdownFile).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+
+    expect(editorApi.writeMarkdownFile).toHaveBeenCalledWith(
+      'README.md',
+      '# Changed 2',
+      '/workspace'
+    )
   })
 
   it('resizes the explorer sidebar from the drag separator', () => {

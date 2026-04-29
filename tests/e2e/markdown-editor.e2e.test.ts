@@ -538,7 +538,7 @@ test('scrolls to the last block after editing a long document', async () => {
   }
 })
 
-test('edits and saves markdown by button and keyboard, then creates a new file', async () => {
+test('edits and auto-saves markdown, then creates a new file', async () => {
   const workspacePath = await createFixtureWorkspace()
   const readmePath = join(workspacePath, 'README.md')
   const { app, startupDiagnostics, window } = await launchElectronApp({
@@ -575,8 +575,9 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
       window.getByRole('complementary', { name: /^Explorer$/i })
     ).toBeVisible()
     await expect(window.getByRole('region', { name: /^Editor$/i })).toBeVisible()
-    await expect(window.getByRole('button', { name: /save README\.md/i }))
-      .toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /save README\.md/i })
+    ).toHaveCount(0)
     expect(
       await window.evaluate(
         () =>
@@ -594,26 +595,26 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
     await editableDocument.click()
     await window.keyboard.press('End')
     await window.keyboard.press('Enter')
-    await window.keyboard.insertText('Saved from button')
+    await window.keyboard.insertText('Autosaved after idle')
     await expect(window.getByText(/unsaved changes/i)).toBeVisible()
-    await window.getByRole('button', { name: /save README\.md/i }).click()
 
     await expect
-      .poll(async () => readFile(readmePath, 'utf8'))
-      .toContain('Saved from button')
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toContain('Autosaved after idle')
     await expect(window.getByText(/unsaved changes/i)).toBeHidden()
 
     await editableDocument.click()
     await window.keyboard.press('End')
     await window.keyboard.press('Enter')
-    await window.keyboard.insertText('Saved from shortcut')
+    await window.keyboard.insertText('Autosaved on blur')
     await expect(window.getByText(/unsaved changes/i)).toBeVisible()
-    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+    await window.getByRole('button', { name: /manage workspaces/i }).click()
 
     await expect
-      .poll(async () => readFile(readmePath, 'utf8'))
-      .toContain('Saved from shortcut')
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 3000 })
+      .toContain('Autosaved on blur')
     await expect(window.getByText(/unsaved changes/i)).toBeHidden()
+    await window.getByRole('button', { name: /close workspace popup/i }).click()
 
     await window.getByRole('button', { name: /new markdown file/i }).click()
     await window.getByLabel(/markdown file path/i).fill('notes.md')

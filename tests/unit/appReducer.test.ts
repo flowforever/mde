@@ -450,6 +450,52 @@ describe('appReducer', () => {
     })
   })
 
+  it('keeps newer dirty draft when an older save finishes', () => {
+    const dirtyState = appReducer(
+      {
+        ...createInitialAppState(),
+        loadedFile: {
+          contents: '# Original',
+          path: 'README.md'
+        },
+        selectedFilePath: 'README.md',
+        workspace
+      },
+      {
+        contents: '# First edit',
+        filePath: 'README.md',
+        type: 'file/content-changed',
+        workspaceRoot: workspace.rootPath
+      }
+    )
+    const savingState = appReducer(dirtyState, {
+      filePath: 'README.md',
+      type: 'file/save-started',
+      workspaceRoot: workspace.rootPath
+    })
+    const newerDirtyState = appReducer(savingState, {
+      contents: '# Second edit',
+      filePath: 'README.md',
+      type: 'file/content-changed',
+      workspaceRoot: workspace.rootPath
+    })
+
+    const state = appReducer(newerDirtyState, {
+      contents: '# First edit',
+      filePath: 'README.md',
+      type: 'file/save-succeeded',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(state.isDirty).toBe(true)
+    expect(state.isSavingFile).toBe(false)
+    expect(state.draftMarkdown).toBe('# Second edit')
+    expect(state.loadedFile).toEqual({
+      contents: '# First edit',
+      path: 'README.md'
+    })
+  })
+
   it('preserves dirty state after a failed save', () => {
     const dirtyState = appReducer(
       {

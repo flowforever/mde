@@ -1,4 +1,5 @@
 import {
+  type FocusEvent as ReactFocusEvent,
   forwardRef,
   useCallback,
   useEffect,
@@ -48,6 +49,7 @@ export const MarkdownBlockEditor = forwardRef<
 ): React.JSX.Element {
   const editor = useCreateBlockNote()
   const isHydratingRef = useRef(false)
+  const hasLocalChangesRef = useRef(false)
   const [parseErrorMessage, setParseErrorMessage] = useState<string | null>(null)
   const [serializationErrorMessage, setSerializationErrorMessage] = useState<
     string | null
@@ -104,25 +106,67 @@ export const MarkdownBlockEditor = forwardRef<
     }
   }, [editor, markdown])
 
-  const saveMarkdown = async (): Promise<void> => {
+  useEffect(() => {
+    hasLocalChangesRef.current = false
+  }, [markdown, path])
+
+  const saveMarkdown = useCallback(async (): Promise<void> => {
+    if (isSaving || (!isDirty && !hasLocalChangesRef.current)) {
+      return
+    }
+
     try {
       const contents = await serializeMarkdown()
 
+      if (!isDirty && contents === markdown) {
+        hasLocalChangesRef.current = false
+        return
+      }
+
       setSerializationErrorMessage(null)
       await onSaveRequest(contents)
+      hasLocalChangesRef.current = false
     } catch (error) {
       setSerializationErrorMessage(
         getErrorMessage(error, 'Unable to serialize Markdown')
       )
     }
-  }
+  }, [isDirty, isSaving, markdown, onSaveRequest, serializeMarkdown])
+
+  const saveMarkdownOnBlur = useCallback(
+    (event: ReactFocusEvent<HTMLDivElement>): void => {
+      const nextFocusedElement = event.relatedTarget
+
+      if (
+        nextFocusedElement instanceof Node &&
+        event.currentTarget.contains(nextFocusedElement)
+      ) {
+        return
+      }
+
+      void saveMarkdown()
+    },
+    [saveMarkdown]
+  )
 
   return (
-    <div className="markdown-editor-shell" data-testid="markdown-block-editor">
+    <div
+      className="markdown-editor-shell"
+      data-testid="markdown-block-editor"
+      onBlur={saveMarkdownOnBlur}
+    >
       <div className="markdown-editor-titlebar">
         <div className="markdown-editor-file-state">
           <span className="markdown-editor-path">{path}</span>
-          {isDirty ? (
+          {isSaving ? (
+            <span
+              aria-live="polite"
+              className="markdown-editor-save-state"
+              role="status"
+            >
+              Saving...
+            </span>
+          ) : isDirty ? (
             <span
               aria-live="polite"
               className="markdown-editor-dirty-state"
@@ -132,19 +176,6 @@ export const MarkdownBlockEditor = forwardRef<
             </span>
           ) : null}
         </div>
-        <button
-          aria-label={
-            isDirty ? `Save ${path} with unsaved changes` : `Save ${path}`
-          }
-          className="markdown-editor-save-button"
-          disabled={isSaving}
-          onClick={() => {
-            void saveMarkdown()
-          }}
-          type="button"
-        >
-          {isSaving ? 'Saving...' : 'Save'}
-        </button>
       </div>
       {parseErrorMessage ? (
         <p className="markdown-editor-error" role="alert">
@@ -171,6 +202,7 @@ export const MarkdownBlockEditor = forwardRef<
             return
           }
 
+          hasLocalChangesRef.current = true
           void exportBlocksToMarkdown(changedEditor, changedEditor.document)
             .then((contents) => {
               setSerializationErrorMessage(null)

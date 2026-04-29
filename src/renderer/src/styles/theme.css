@@ -661,24 +661,11 @@ body.is-resizing-explorer {
   font-weight: 650;
 }
 
-.markdown-editor-save-button {
+.markdown-editor-save-state {
   flex: 0 0 auto;
-  min-height: 30px;
-  padding: 0 14px;
-  color: #ffffff;
-  background: #2e6f8f;
-  border: 1px solid #2d6380;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.markdown-editor-save-button:hover {
-  background: #397e9d;
-}
-
-.markdown-editor-save-button:disabled {
-  cursor: wait;
-  opacity: 0.7;
+  color: #2e6f8f;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .markdown-editor-surface {

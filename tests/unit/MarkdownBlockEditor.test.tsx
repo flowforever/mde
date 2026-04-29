@@ -29,8 +29,8 @@ vi.mock('@blocknote/mantine', () => ({
     readonly editor: unknown
     readonly onChange: (editor: unknown) => void
   }) => (
-    <div className={className} data-testid={testId}>
-      <div contentEditable suppressContentEditableWarning />
+    <div className={className} data-testid={testId} tabIndex={0}>
+      <div contentEditable suppressContentEditableWarning tabIndex={0} />
       <button
         onClick={() => {
           onChange(editor)
@@ -48,7 +48,7 @@ describe('MarkdownBlockEditor accessibility', () => {
     cleanup()
   })
 
-  it('gives the save control an accessible file-specific name', () => {
+  it('does not render a manual save control', () => {
     render(
       <MarkdownBlockEditor
         errorMessage={null}
@@ -62,8 +62,8 @@ describe('MarkdownBlockEditor accessibility', () => {
     )
 
     expect(
-      screen.getByRole('button', { name: /save README\.md/i })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /save README\.md/i })
+    ).not.toBeInTheDocument()
   })
 
   it('shows visible dirty state text for unsaved changes', () => {
@@ -82,25 +82,27 @@ describe('MarkdownBlockEditor accessibility', () => {
     expect(screen.getByText(/unsaved changes/i)).toBeVisible()
   })
 
-  it('serializes markdown when the save control is used', async () => {
+  it('serializes markdown when the dirty editor loses focus', async () => {
     const user = userEvent.setup()
     const onSaveRequest = vi.fn()
 
     render(
-      <MarkdownBlockEditor
-        errorMessage={null}
-        isDirty
-        isSaving={false}
-        markdown="# Fixture Workspace"
-        onMarkdownChange={vi.fn()}
-        onSaveRequest={onSaveRequest}
-        path="README.md"
-      />
+      <>
+        <MarkdownBlockEditor
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Fixture Workspace"
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+        />
+        <button type="button">Outside editor</button>
+      </>
     )
 
-    await user.click(
-      screen.getByRole('button', { name: /save README\.md with unsaved changes/i })
-    )
+    await user.click(screen.getByTestId('blocknote-view'))
+    await user.click(screen.getByRole('button', { name: /outside editor/i }))
 
     expect(onSaveRequest).toHaveBeenCalledWith('')
   })
