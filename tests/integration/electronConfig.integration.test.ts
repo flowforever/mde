@@ -44,6 +44,7 @@ describe('Release automation config', () => {
   it('publishes electron-builder artifacts to the GitHub releases feed', async () => {
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       build?: {
+        artifactName?: string
         publish?: {
           owner?: string
           provider?: string
@@ -65,6 +66,11 @@ describe('Release automation config', () => {
       ])
     )
     expect(packageJson.scripts?.['release:github']).toContain('--publish always')
+    expect(packageJson.scripts?.['release:github']).toContain('--x64')
+    expect(packageJson.scripts?.['release:github']).toContain('--arm64')
+    expect(packageJson.scripts?.['dist:mac']).toContain('--x64')
+    expect(packageJson.scripts?.['dist:mac']).toContain('--arm64')
+    expect(packageJson.build?.artifactName).toContain('${arch}')
   })
 
   it('builds and publishes release artifacts when a version tag is pushed', async () => {

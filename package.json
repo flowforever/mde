@@ -1,6 +1,6 @@
 {
   "name": "mde",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
   "productName": "MDE",
   "private": true,
@@ -15,8 +15,8 @@
     "build": "electron-vite build",
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip",
-    "release:github": "npm run build && electron-builder --mac dmg zip --publish always",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64",
+    "release:github": "npm run build && electron-builder --mac dmg zip --x64 --arm64 --publish always",
     "register:cli": "npm link",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
@@ -69,6 +69,7 @@
     "directories": {
       "output": "release"
     },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "publish": [
       {
         "provider": "github",
