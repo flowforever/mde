@@ -20,7 +20,7 @@ When pushing a production-ready feature or bug fix to the release branch, publis
 - Update both `package.json` and `package-lock.json` so the app version matches the release.
 - Prepare complete release notes before pushing the release tag. The notes must explain what changed in the version, grouped by user-facing features, bug fixes, breaking changes, maintenance, and verification when applicable.
 - Do not ship a release with an empty or placeholder description. Generated notes are acceptable only if they clearly describe the actual version changes; otherwise edit the GitHub release after the workflow creates it.
-- Create a new annotated or lightweight git tag using `vX.Y.Z`.
+- Create a new annotated git tag using `vX.Y.Z`; put the complete release notes in the tag message so GitHub Actions can publish them with the release.
 - Never reuse, overwrite, or force-push an existing release tag. If the intended tag already exists locally or on GitHub, bump to the next valid version.
 - Push the branch and the new tag together, for example `git push origin master vX.Y.Z`, so the GitHub release workflow can build and publish the release.
 - After pushing, verify the GitHub Actions release run started and check the release status and release notes with `gh run list` and `gh release view`.

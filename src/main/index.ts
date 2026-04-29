@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import type {
   App,
@@ -18,11 +18,12 @@ import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
 import {
+  APP_PRODUCT_NAME,
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
-import { configureAutoUpdates } from './autoUpdate'
+import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
 
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
@@ -45,6 +46,28 @@ type StartupDiagnosticsGlobal = typeof globalThis & {
 }
 
 const startupDiagnosticPattern = /preload|security|unable to load preload/i
+const DEV_PRODUCT_NAME = `${APP_PRODUCT_NAME} Dev`
+
+interface RuntimeIdentityApp {
+  readonly isPackaged: boolean
+  getPath(name: 'userData'): string
+  setName(name: string): void
+  setPath(name: 'userData', path: string): void
+}
+
+const getDevelopmentUserDataPath = (currentUserDataPath: string): string =>
+  currentUserDataPath.endsWith(DEV_PRODUCT_NAME)
+    ? currentUserDataPath
+    : join(dirname(currentUserDataPath), DEV_PRODUCT_NAME)
+
+export const configureRuntimeIdentity = (app: RuntimeIdentityApp): void => {
+  if (app.isPackaged) {
+    return
+  }
+
+  app.setName(DEV_PRODUCT_NAME)
+  app.setPath('userData', getDevelopmentUserDataPath(app.getPath('userData')))
+}
 
 const getStartupDiagnostics = (): StartupDiagnostics | undefined => {
   if (process.env[CAPTURE_STARTUP_DIAGNOSTICS_ENV] !== '1') {
@@ -144,7 +167,8 @@ const bootstrap = async (): Promise<void> => {
     dialog: Electron.Dialog
     ipcMain: Electron.IpcMain
   }
-  const { autoUpdater } = await import('electron-updater')
+  const electronUpdaterModule = await import('electron-updater')
+  configureRuntimeIdentity(app)
   const initialLaunchPath = getLaunchPathFromArgv()
   const hasSingleInstanceLock =
     process.env[DISABLE_SINGLE_INSTANCE_ENV] === '1' ||
@@ -185,7 +209,10 @@ const bootstrap = async (): Promise<void> => {
   })
 
   await app.whenReady()
-  configureAutoUpdates({ app, autoUpdater })
+  configureAutoUpdates({
+    app,
+    autoUpdater: resolveAutoUpdater(electronUpdaterModule)
+  })
   const workspaceSession = registerWorkspaceHandlers({
     dialog,
     initialLaunchPath,

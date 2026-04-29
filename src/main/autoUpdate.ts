@@ -20,6 +20,33 @@ interface AutoUpdateLogger {
   readonly info: (...args: readonly unknown[]) => void
 }
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const isAutoUpdateClient = (value: unknown): value is AutoUpdateClient =>
+  isObjectRecord(value) &&
+  typeof value.checkForUpdatesAndNotify === 'function' &&
+  typeof value.on === 'function'
+
+export const resolveAutoUpdater = (
+  electronUpdaterModule: unknown
+): AutoUpdateClient | undefined => {
+  if (!isObjectRecord(electronUpdaterModule)) {
+    return undefined
+  }
+
+  if (isAutoUpdateClient(electronUpdaterModule.autoUpdater)) {
+    return electronUpdaterModule.autoUpdater
+  }
+
+  const defaultExport = electronUpdaterModule.default
+
+  return isObjectRecord(defaultExport) &&
+    isAutoUpdateClient(defaultExport.autoUpdater)
+    ? defaultExport.autoUpdater
+    : undefined
+}
+
 export const shouldCheckForUpdates = ({
   env = process.env,
   isPackaged
@@ -48,11 +75,16 @@ export const configureAutoUpdates = ({
   logger = console
 }: {
   readonly app: AutoUpdateApp
-  readonly autoUpdater: AutoUpdateClient
+  readonly autoUpdater: AutoUpdateClient | undefined
   readonly env?: AutoUpdateEnvironment
   readonly logger?: AutoUpdateLogger
 }): boolean => {
   if (!shouldCheckForUpdates({ env, isPackaged: app.isPackaged })) {
+    return false
+  }
+
+  if (!autoUpdater) {
+    logger.error('MDE auto updater is unavailable')
     return false
   }
 

@@ -1,12 +1,13 @@
 import { basename, normalize, sep } from 'node:path'
 import { readFile } from 'node:fs/promises'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY,
+  configureRuntimeIdentity,
   createPreloadPath,
   createWindowOptions
 } from '../../src/main/index'
@@ -37,6 +38,37 @@ describe('Electron window config', () => {
     expect(pathSegments).toContain('out')
     expect(pathSegments).toContain('preload')
     expect(pathSegments).not.toContain('main')
+  })
+
+  it('separates development identity from the packaged MDE app', () => {
+    const app = {
+      getPath: vi.fn(() => '/Users/test/Library/Application Support/MDE'),
+      isPackaged: false,
+      setName: vi.fn(),
+      setPath: vi.fn()
+    }
+
+    configureRuntimeIdentity(app)
+
+    expect(app.setName).toHaveBeenCalledWith('MDE Dev')
+    expect(app.setPath).toHaveBeenCalledWith(
+      'userData',
+      '/Users/test/Library/Application Support/MDE Dev'
+    )
+  })
+
+  it('keeps packaged release identity unchanged', () => {
+    const app = {
+      getPath: vi.fn(() => '/Users/test/Library/Application Support/MDE'),
+      isPackaged: true,
+      setName: vi.fn(),
+      setPath: vi.fn()
+    }
+
+    configureRuntimeIdentity(app)
+
+    expect(app.setName).not.toHaveBeenCalled()
+    expect(app.setPath).not.toHaveBeenCalled()
   })
 })
 
@@ -81,7 +113,7 @@ describe('Release automation config', () => {
     expect(workflow).toContain('contents: write')
     expect(workflow).toContain('npm ci')
     expect(workflow).toContain('gh release create')
-    expect(workflow).toContain('--generate-notes')
+    expect(workflow).toContain('--notes-from-tag')
     expect(workflow).toContain('npm run release:github')
   })
 
