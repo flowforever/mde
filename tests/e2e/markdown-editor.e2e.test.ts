@@ -19,19 +19,31 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
     name: /workspace manager/i
   })
   const workspaceDialogBackdrop = window.locator('.workspace-dialog-backdrop')
+  const workspaceTrigger = window
+    .getByRole('button', { name: /^open workspace$/i })
+    .or(window.getByRole('button', { name: /manage workspaces/i }))
+  const waitForWorkspaceDialog = async (): Promise<boolean> => {
+    await workspaceDialogBackdrop
+      .waitFor({ state: 'visible', timeout: 1500 })
+      .catch(() => undefined)
 
-  await workspaceDialogBackdrop
-    .waitFor({ state: 'visible', timeout: 1500 })
-    .catch(() => undefined)
+    return workspaceDialogBackdrop.isVisible().catch(() => false)
+  }
 
-  if (await workspaceDialogBackdrop.isVisible().catch(() => false)) {
+  if (await waitForWorkspaceDialog()) {
     return
   }
 
-  await window
-    .getByRole('button', { name: /^open workspace$/i })
-    .or(window.getByRole('button', { name: /manage workspaces/i }))
-    .click()
+  try {
+    await workspaceTrigger.click({ timeout: 1500 })
+  } catch (error) {
+    if (await waitForWorkspaceDialog()) {
+      return
+    }
+
+    throw error
+  }
+
   await expect(workspaceDialogBackdrop).toBeVisible()
   await expect(workspaceDialog).toBeVisible()
 }
