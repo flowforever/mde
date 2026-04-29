@@ -9,6 +9,12 @@ const mockBlockNoteState = vi.hoisted(() => ({
     | { uploadFile?: (file: File, blockId?: string) => Promise<string> }
     | undefined
 }))
+const mockMermaid = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn().mockResolvedValue({
+    svg: '<svg role="img"><text>Rendered flowchart</text></svg>'
+  })
+}))
 
 vi.mock('@blocknote/react', () => ({
   useCreateBlockNote: (
@@ -31,14 +37,16 @@ vi.mock('@blocknote/mantine', () => ({
     className,
     'data-testid': testId,
     editor,
-    onChange
+    onChange,
+    theme
   }: {
     readonly className?: string
     readonly 'data-testid'?: string
     readonly editor: unknown
     readonly onChange: (editor: unknown) => void
+    readonly theme: 'dark' | 'light'
   }) => (
-    <div className={className} data-testid={testId} tabIndex={0}>
+    <div className={className} data-testid={testId} data-theme={theme} tabIndex={0}>
       <div contentEditable suppressContentEditableWarning tabIndex={0} />
       <button
         onClick={() => {
@@ -53,23 +61,21 @@ vi.mock('@blocknote/mantine', () => ({
 }))
 
 vi.mock('mermaid', () => ({
-  default: {
-    initialize: vi.fn(),
-    render: vi.fn().mockResolvedValue({
-      svg: '<svg role="img"><text>Rendered flowchart</text></svg>'
-    })
-  }
+  default: mockMermaid
 }))
 
 describe('MarkdownBlockEditor accessibility', () => {
   afterEach(() => {
     cleanup()
     mockBlockNoteState.lastOptions = undefined
+    mockMermaid.initialize.mockClear()
+    mockMermaid.render.mockClear()
   })
 
   it('does not render a manual save control', () => {
     render(
       <MarkdownBlockEditor
+        colorScheme="light"
         draftMarkdown="# Fixture Workspace"
         errorMessage={null}
         isDirty={false}
@@ -91,6 +97,7 @@ describe('MarkdownBlockEditor accessibility', () => {
   it('shows visible dirty state text for unsaved changes', () => {
     render(
       <MarkdownBlockEditor
+        colorScheme="light"
         draftMarkdown="# Fixture Workspace"
         errorMessage={null}
         isDirty
@@ -114,6 +121,7 @@ describe('MarkdownBlockEditor accessibility', () => {
     render(
       <>
         <MarkdownBlockEditor
+          colorScheme="light"
           draftMarkdown="# Fixture Workspace"
           errorMessage={null}
           isDirty
@@ -141,6 +149,7 @@ describe('MarkdownBlockEditor accessibility', () => {
     const { rerender } = render(
       <>
         <MarkdownBlockEditor
+          colorScheme="light"
           draftMarkdown="# Fixture Workspace"
           errorMessage={null}
           isDirty
@@ -161,6 +170,7 @@ describe('MarkdownBlockEditor accessibility', () => {
     rerender(
       <>
         <MarkdownBlockEditor
+          colorScheme="light"
           draftMarkdown=""
           errorMessage={null}
           isDirty
@@ -187,6 +197,7 @@ describe('MarkdownBlockEditor accessibility', () => {
 
     render(
       <MarkdownBlockEditor
+        colorScheme="light"
         draftMarkdown="# Fixture Workspace"
         errorMessage={null}
         isDirty={false}
@@ -212,6 +223,7 @@ describe('MarkdownBlockEditor accessibility', () => {
 
     render(
       <MarkdownBlockEditor
+        colorScheme="light"
         draftMarkdown="# Fixture Workspace"
         errorMessage={null}
         isDirty={false}
@@ -234,6 +246,41 @@ describe('MarkdownBlockEditor accessibility', () => {
     expect(result).toBe('file:///workspace/.mde/assets/image.png')
   })
 
+  it('passes dark color scheme to BlockNote and Mermaid rendering', async () => {
+    const markdown = [
+      '```mermaid',
+      'flowchart TD',
+      '  A --> B',
+      '```'
+    ].join('\n')
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="dark"
+        draftMarkdown={markdown}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={markdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    expect(screen.getByTestId('blocknote-view')).toHaveAttribute(
+      'data-theme',
+      'dark'
+    )
+    await waitFor(() => {
+      expect(mockMermaid.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({ theme: 'dark' })
+      )
+    })
+  })
+
   it('renders Mermaid flowchart previews and edits the fenced source', async () => {
     const onMarkdownChange = vi.fn()
     const markdown = [
@@ -247,6 +294,7 @@ describe('MarkdownBlockEditor accessibility', () => {
 
     render(
       <MarkdownBlockEditor
+        colorScheme="light"
         draftMarkdown={markdown}
         errorMessage={null}
         isDirty={false}

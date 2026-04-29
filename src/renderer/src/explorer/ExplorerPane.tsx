@@ -7,12 +7,15 @@ import type {
 import {
   ChevronDown,
   ChevronRight,
+  Check,
   Eye,
   EyeOff,
   FileText,
   FilePlus,
   FolderOpen,
   FolderPlus,
+  Monitor,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -28,6 +31,13 @@ import {
   writeHiddenExplorerEntries
 } from './hiddenExplorerEntries'
 import type { AppState } from '../app/appTypes'
+import {
+  APP_THEMES,
+  type AppTheme,
+  type AppThemeFamily,
+  type AppThemeId,
+  type ThemePreference
+} from '../theme/appThemes'
 import type { RecentWorkspace } from '../workspaces/recentWorkspaces'
 import type { TreeNode } from '../../../shared/fileTree'
 
@@ -41,14 +51,18 @@ interface ExplorerPaneProps {
   readonly onOpenRecentFile?: (filePath: string) => void
   readonly onOpenWorkspace: () => void
   readonly onRenameEntry: (entryName: string) => void
+  readonly onSelectTheme?: (themeId: AppThemeId) => void
   readonly onSelectEntry: (entryPath: string | null) => void
   readonly onSelectFile: (filePath: string) => void
   readonly onSwitchWorkspace?: (workspace: RecentWorkspace) => void
   readonly onToggleCollapsed?: () => void
+  readonly onToggleSystemTheme?: (shouldFollowSystem: boolean) => void
   readonly recentFilePaths?: readonly string[]
   readonly recentWorkspaces?: readonly RecentWorkspace[]
+  readonly resolvedTheme?: AppTheme
   readonly shouldAutoOpenWorkspaceDialog?: boolean
   readonly state: AppState
+  readonly themePreference?: ThemePreference
 }
 
 type PendingExplorerAction = 'create-file' | 'create-folder' | 'rename' | null
@@ -208,6 +222,9 @@ const filterHiddenNodes = (
     ]
   }, [])
 
+const getThemesByFamily = (family: AppThemeFamily): readonly AppTheme[] =>
+  APP_THEMES.filter((theme) => theme.family === family)
+
 export const ExplorerPane = ({
   isCollapsed = false,
   onCreateFile,
@@ -218,14 +235,22 @@ export const ExplorerPane = ({
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
   onRenameEntry,
+  onSelectTheme = () => undefined,
   onSelectEntry,
   onSelectFile,
   onSwitchWorkspace = () => undefined,
   onToggleCollapsed = () => undefined,
+  onToggleSystemTheme = () => undefined,
   recentFilePaths = [],
   recentWorkspaces = [],
+  resolvedTheme = APP_THEMES[0],
   shouldAutoOpenWorkspaceDialog = false,
-  state
+  state,
+  themePreference = {
+    lastDarkThemeId: 'carbon',
+    lastLightThemeId: 'manuscript',
+    mode: 'system'
+  }
 }: ExplorerPaneProps): React.JSX.Element => {
   const [pendingAction, setPendingAction] = useState<PendingExplorerAction>(null)
   const [actionTargetDirectoryPath, setActionTargetDirectoryPath] = useState<
@@ -255,6 +280,7 @@ export const ExplorerPane = ({
   ] = useState<string | null>(null)
   const [isWorkspaceDialogManuallyOpen, setIsWorkspaceDialogManuallyOpen] =
     useState(false)
+  const [isThemeDialogOpen, setIsThemeDialogOpen] = useState(false)
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState('')
   const workspaceContentRef = useRef<HTMLDivElement | null>(null)
   const workspaceRoot = state.workspace?.rootPath ?? null
@@ -365,6 +391,10 @@ export const ExplorerPane = ({
     setWorkspaceSearchQuery('')
   }
 
+  const closeThemeDialog = (): void => {
+    setIsThemeDialogOpen(false)
+  }
+
   const toggleWorkspaceDialog = (): void => {
     if (isWorkspaceDialogOpen) {
       closeWorkspaceDialog()
@@ -372,6 +402,10 @@ export const ExplorerPane = ({
     }
 
     setIsWorkspaceDialogManuallyOpen(true)
+  }
+
+  const openThemeDialog = (): void => {
+    setIsThemeDialogOpen(true)
   }
 
   useEffect(() => {
@@ -496,6 +530,10 @@ export const ExplorerPane = ({
     shouldAutoOpenWorkspaceDialog && !hasDismissedAutoWorkspaceDialog
   const isWorkspaceDialogOpen =
     isWorkspaceDialogManuallyOpen || shouldShowAutoWorkspaceDialog
+  const isFollowingSystemTheme = themePreference.mode === 'system'
+  const themeDialogFamilies: readonly AppThemeFamily[] = isFollowingSystemTheme
+    ? [resolvedTheme.family]
+    : ['dark', 'light']
   const workspaceTriggerLabel = state.isOpeningWorkspace
     ? 'Opening...'
     : state.workspace?.name ?? 'Open workspace'
@@ -574,6 +612,160 @@ export const ExplorerPane = ({
       isCollapsed: !currentState.isCollapsed
     }))
   }
+  const renderThemeDialog = (): React.JSX.Element | null =>
+    isThemeDialogOpen ? (
+      <div className="workspace-dialog-backdrop" onClick={closeThemeDialog}>
+        <div
+          aria-label="Themes"
+          aria-modal="true"
+          className="workspace-dialog theme-dialog"
+          onClick={(event) => {
+            event.stopPropagation()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              closeThemeDialog()
+            }
+          }}
+          role="dialog"
+        >
+          <div className="workspace-dialog-header">
+            <div className="workspace-dialog-heading">
+              <div className="workspace-dialog-mark" aria-hidden="true">
+                Aa
+              </div>
+              <div className="workspace-dialog-title-group">
+                <h2 className="workspace-dialog-title">Themes</h2>
+                <p className="workspace-dialog-subtitle">
+                  {isFollowingSystemTheme
+                    ? `Choose the ${resolvedTheme.family} theme used by system appearance.`
+                    : 'Choose editor appearance.'}
+                </p>
+              </div>
+            </div>
+            <button
+              aria-label="Close themes"
+              className="explorer-icon-button workspace-dialog-close"
+              onClick={closeThemeDialog}
+              title="Close themes"
+              type="button"
+            >
+              <X aria-hidden="true" focusable="false" size={16} />
+            </button>
+          </div>
+          <div
+            className={[
+              'theme-dialog-content',
+              isFollowingSystemTheme ? 'is-single-family' : ''
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {themeDialogFamilies.map((family) => (
+              <section
+                aria-label={`${family} themes`}
+                className="theme-family-section"
+                key={family}
+                role="radiogroup"
+              >
+                <h3>{family === 'dark' ? 'Dark' : 'Light'}</h3>
+                {getThemesByFamily(family).map((theme) => {
+                  const isSelected = resolvedTheme.id === theme.id
+
+                  return (
+                    <button
+                      aria-checked={isSelected}
+                      aria-label={`${theme.label}: ${theme.description}`}
+                      className={[
+                        'theme-option-button',
+                        isSelected ? 'is-selected' : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      key={theme.id}
+                      onClick={() => {
+                        onSelectTheme(theme.id)
+                      }}
+                      role="radio"
+                      type="button"
+                    >
+                      <span className="theme-option-check" aria-hidden="true">
+                        {isSelected ? (
+                          <Check aria-hidden="true" focusable="false" size={13} />
+                        ) : null}
+                      </span>
+                      <span className="theme-option-copy">
+                        <span>{theme.label}</span>
+                        <span>{theme.description}</span>
+                      </span>
+                      <span className="theme-option-swatches" aria-hidden="true">
+                        {theme.swatches.map((swatch) => (
+                          <span
+                            key={swatch}
+                            style={{ backgroundColor: swatch }}
+                          />
+                        ))}
+                      </span>
+                      <span className="theme-option-preview" aria-hidden="true">
+                        <span />
+                        <span />
+                      </span>
+                    </button>
+                  )
+                })}
+              </section>
+            ))}
+          </div>
+        </div>
+      </div>
+    ) : null
+  const themeControls = (
+    <div className="explorer-theme-footer" aria-label="Theme controls">
+      <button
+        aria-checked={isFollowingSystemTheme}
+        aria-label="Follow system appearance"
+        className="theme-system-switch"
+        onClick={() => {
+          onToggleSystemTheme(!isFollowingSystemTheme)
+        }}
+        role="switch"
+        title="Follow system appearance"
+        type="button"
+      >
+        <Monitor aria-hidden="true" focusable="false" size={14} />
+        <span aria-hidden="true" />
+      </button>
+      <button
+        aria-label="Choose theme"
+        className="theme-selector-button"
+        onClick={openThemeDialog}
+        title={
+          isFollowingSystemTheme
+            ? `Choose system ${resolvedTheme.family} theme`
+            : 'Choose theme'
+        }
+        type="button"
+      >
+        <span className="theme-selector-icon" aria-hidden="true">
+          <Palette aria-hidden="true" focusable="false" size={15} />
+        </span>
+        <span className="theme-selector-copy">
+          <span>
+            {isFollowingSystemTheme
+              ? `System: ${resolvedTheme.label}`
+              : resolvedTheme.label}
+          </span>
+          <span>{resolvedTheme.family === 'dark' ? 'Dark' : 'Light'}</span>
+        </span>
+        <span className="theme-selector-swatches" aria-hidden="true">
+          {resolvedTheme.swatches.map((swatch) => (
+            <span key={swatch} style={{ backgroundColor: swatch }} />
+          ))}
+        </span>
+        <ChevronDown aria-hidden="true" focusable="false" size={14} />
+      </button>
+    </div>
+  )
 
   if (isCollapsed) {
     return (
@@ -587,6 +779,20 @@ export const ExplorerPane = ({
         >
           <PanelLeftOpen aria-hidden="true" focusable="false" size={17} />
         </button>
+        <button
+          aria-label="Choose theme"
+          className="explorer-icon-button explorer-collapsed-theme-button"
+          onClick={openThemeDialog}
+          title={
+            isFollowingSystemTheme
+              ? `Choose system ${resolvedTheme.family} theme`
+              : 'Choose theme'
+          }
+          type="button"
+        >
+          <Palette aria-hidden="true" focusable="false" size={16} />
+        </button>
+        {renderThemeDialog()}
       </aside>
     )
   }
@@ -1039,6 +1245,8 @@ export const ExplorerPane = ({
       ) : (
         <p className="explorer-empty">Open a folder to browse Markdown files.</p>
       )}
+      {themeControls}
+      {renderThemeDialog()}
     </aside>
   )
 }

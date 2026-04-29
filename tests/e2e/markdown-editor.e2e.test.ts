@@ -64,6 +64,7 @@ test('shows the initial centered workspace popup', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp()
 
   try {
+    const appShell = window.locator('.app-shell')
     const workspaceButton = window.getByRole('button', {
       name: /^open workspace$/i
     })
@@ -76,6 +77,14 @@ test('shows the initial centered workspace popup', async () => {
     })
 
     await expect(workspaceButton).toBeVisible()
+    await expect(appShell).toHaveAttribute('data-theme', 'manuscript')
+    await expect(appShell).toHaveAttribute('data-theme-family', 'light')
+    await expect(appShell).toHaveAttribute('data-panel-family', 'light')
+    await expect(
+      window.getByRole('switch', { name: /follow system appearance/i })
+    ).toBeChecked()
+    await expect(window.getByRole('button', { name: /choose theme/i }))
+      .toBeEnabled()
     await expect(workspaceDialog).toBeVisible()
     await expect(
       window.getByRole('heading', { name: /^Open workspace$/ })
@@ -117,6 +126,174 @@ test('shows the initial centered workspace popup', async () => {
         })
       )
       .toBe(true)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('selects and persists a manual theme from the explorer footer', async () => {
+  const { app, startupDiagnostics, window } = await launchElectronApp()
+
+  try {
+    const appShell = window.locator('.app-shell')
+
+    await expect(appShell).toHaveAttribute('data-theme', 'manuscript')
+    await window.getByRole('button', { name: /close workspace popup/i }).click()
+
+    await window
+      .getByRole('switch', { name: /follow system appearance/i })
+      .click()
+    await expect(
+      window.getByRole('switch', { name: /follow system appearance/i })
+    ).not.toBeChecked()
+
+    const themeFooterControlsTopOffset = await window
+      .locator('.explorer-theme-footer')
+      .evaluate((footer) => {
+        const controls = Array.from(footer.children)
+          .filter((child) =>
+            child.matches(
+              '[role="switch"], button[aria-label="Choose theme"]'
+            )
+          )
+          .map((child) => child.getBoundingClientRect().top)
+
+        if (controls.length !== 2) {
+          return Number.POSITIVE_INFINITY
+        }
+
+        return Math.abs(controls[0] - controls[1])
+      })
+
+    expect(themeFooterControlsTopOffset).toBeLessThan(2)
+
+    await window.getByRole('button', { name: /choose theme/i }).click()
+    await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
+
+    const themeFamilyWidthDelta = await window
+      .locator('.theme-family-section')
+      .evaluateAll((sections) => {
+        const widths = sections.map((section) =>
+          section.getBoundingClientRect().width
+        )
+
+        if (widths.length !== 2) {
+          return Number.POSITIVE_INFINITY
+        }
+
+        return Math.abs(widths[0] - widths[1])
+      })
+
+    expect(themeFamilyWidthDelta).toBeLessThan(2)
+    await window.getByRole('radio', { name: /blue hour/i }).click()
+
+    await expect(appShell).toHaveAttribute('data-theme', 'blue-hour')
+    await expect(appShell).toHaveAttribute('data-theme-family', 'dark')
+    expect(
+      await window.evaluate(() =>
+        globalThis.localStorage.getItem('mde.themePreference')
+      )
+    ).toContain('"lastDarkThemeId":"blue-hour"')
+
+    await window.evaluate(() => {
+      globalThis.location.reload()
+    })
+
+    await expect(window.locator('.app-shell')).toHaveAttribute(
+      'data-theme',
+      'blue-hour'
+    )
+    await expect(
+      window.getByRole('switch', { name: /follow system appearance/i })
+    ).not.toBeChecked()
+    await expect(window.getByRole('button', { name: /choose theme/i }))
+      .toBeEnabled()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('selects the current system theme family without leaving follow-system mode', async () => {
+  const { app, startupDiagnostics, window } = await launchElectronApp()
+
+  try {
+    const appShell = window.locator('.app-shell')
+
+    await window.getByRole('button', { name: /close workspace popup/i }).click()
+    await expect(
+      window.getByRole('switch', { name: /follow system appearance/i })
+    ).toBeChecked()
+
+    await window.getByRole('button', { name: /choose theme/i }).click()
+    await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
+    await expect(window.getByRole('radiogroup', { name: /light themes/i }))
+      .toBeVisible()
+    await expect(window.getByRole('radiogroup', { name: /dark themes/i }))
+      .toHaveCount(0)
+
+    await window.getByRole('radio', { name: /binder/i }).click()
+
+    await expect(appShell).toHaveAttribute('data-theme', 'binder')
+    await expect(appShell).toHaveAttribute('data-theme-family', 'light')
+    await expect(
+      window.getByRole('switch', { name: /follow system appearance/i })
+    ).toBeChecked()
+    expect(
+      await window.evaluate(() =>
+        globalThis.localStorage.getItem('mde.themePreference')
+      )
+    ).toBe(
+      JSON.stringify({
+        lastDarkThemeId: 'carbon',
+        lastLightThemeId: 'binder',
+        mode: 'system'
+      })
+    )
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('follows system appearance using the remembered light and dark themes', async () => {
+  const { app, startupDiagnostics, window } = await launchElectronApp()
+
+  try {
+    await window.emulateMedia({ colorScheme: 'dark' })
+    await window.evaluate(() => {
+      globalThis.localStorage.setItem(
+        'mde.themePreference',
+        JSON.stringify({
+          lastDarkThemeId: 'moss',
+          lastLightThemeId: 'porcelain',
+          mode: 'system'
+        })
+      )
+      globalThis.location.reload()
+    })
+
+    const appShell = window.locator('.app-shell')
+
+    await expect(appShell).toHaveAttribute('data-theme', 'moss')
+
+    await window.emulateMedia({ colorScheme: 'light' })
+    await expect(appShell).toHaveAttribute('data-theme', 'porcelain')
+
+    await window.emulateMedia({ colorScheme: 'dark' })
+    await expect(appShell).toHaveAttribute('data-theme', 'moss')
+    expect(
+      await window.evaluate(() =>
+        globalThis.localStorage.getItem('mde.themePreference')
+      )
+    ).toBe(
+      JSON.stringify({
+        lastDarkThemeId: 'moss',
+        lastLightThemeId: 'porcelain',
+        mode: 'system'
+      })
+    )
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

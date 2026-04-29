@@ -6,6 +6,7 @@ import {
 } from './flowchartMarkdown'
 
 interface MermaidFlowchartPanelProps {
+  readonly colorScheme: 'dark' | 'light'
   readonly markdown: string
   readonly onMarkdownChange: (contents: string) => void
 }
@@ -19,7 +20,7 @@ interface MermaidApi {
   readonly initialize: (options: {
     readonly securityLevel: 'strict'
     readonly startOnLoad: boolean
-    readonly theme: 'neutral'
+    readonly theme: 'dark' | 'neutral'
   }) => void
   readonly render: (
     id: string,
@@ -39,6 +40,7 @@ const loadMermaid = async (): Promise<MermaidApi> => {
 }
 
 export const MermaidFlowchartPanel = ({
+  colorScheme,
   markdown,
   onMarkdownChange
 }: MermaidFlowchartPanelProps): React.JSX.Element | null => {
@@ -63,7 +65,7 @@ export const MermaidFlowchartPanel = ({
         mermaid.initialize({
           securityLevel: 'strict',
           startOnLoad: false,
-          theme: 'neutral'
+          theme: colorScheme === 'dark' ? 'dark' : 'neutral'
         })
 
         const results = await Promise.all(
@@ -107,7 +109,7 @@ export const MermaidFlowchartPanel = ({
     return () => {
       isCurrent = false
     }
-  }, [blocks, idPrefix])
+  }, [blocks, colorScheme, idPrefix])
 
   if (blocks.length === 0) {
     return null

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 interface MockMarkdownBlockEditorProps {
+  readonly colorScheme: 'dark' | 'light'
   readonly errorMessage: string | null
   readonly isDirty: boolean
   readonly isSaving: boolean
@@ -19,6 +20,7 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
   const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
     <section aria-label="Mock editor">
       <span>{props.path}</span>
+      <span data-testid="mock-editor-color-scheme">{props.colorScheme}</span>
       {props.isDirty ? <span>Unsaved changes</span> : null}
       {props.isSaving ? <span>Saving...</span> : null}
       {props.errorMessage ? <p role="alert">{props.errorMessage}</p> : null}
@@ -38,8 +40,57 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
 })
 
 import { App } from '../../src/renderer/src/app/App'
+import { APP_THEME_STORAGE_KEY } from '../../src/renderer/src/theme/appThemes'
 import type { UpdateApi } from '../../src/shared/update'
 import type { EditorApi } from '../../src/shared/workspace'
+
+const mockSystemThemePreference = (initialMatches: boolean) => {
+  const listeners = new Set<(event: MediaQueryListEvent) => void>()
+  const mediaQueryList = {
+    addEventListener: vi.fn((_type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener === 'function') {
+        listeners.add(listener as (event: MediaQueryListEvent) => void)
+      }
+    }),
+    addListener: vi.fn((listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener)
+    }),
+    dispatchEvent: vi.fn(),
+    matches: initialMatches,
+    media: '(prefers-color-scheme: dark)',
+    onchange: null,
+    removeEventListener: vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject) => {
+        if (typeof listener === 'function') {
+          listeners.delete(listener as (event: MediaQueryListEvent) => void)
+        }
+      }
+    ),
+    removeListener: vi.fn((listener: (event: MediaQueryListEvent) => void) => {
+        listeners.delete(listener)
+    })
+  } as unknown as MediaQueryList
+
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn().mockReturnValue(mediaQueryList)
+  })
+
+  return {
+    setMatches: (matches: boolean) => {
+      Object.defineProperty(mediaQueryList, 'matches', {
+        configurable: true,
+        value: matches
+      })
+      listeners.forEach((listener) => {
+        listener({
+          matches,
+          media: '(prefers-color-scheme: dark)'
+        } as MediaQueryListEvent)
+      })
+    }
+  }
+}
 
 describe('App shell', () => {
   afterEach(() => {
@@ -55,6 +106,15 @@ describe('App shell', () => {
   it('opens a centered workspace popup on initial empty launch', () => {
     render(<App />)
 
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'manuscript')
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme-family', 'light')
+    expect(screen.getByRole('main')).toHaveAttribute('data-panel-family', 'light')
+    expect(
+      screen.getByRole('switch', { name: /follow system appearance/i })
+    ).toBeChecked()
+    expect(
+      screen.getByRole('button', { name: /choose theme/i })
+    ).toBeEnabled()
     expect(
       screen.getByRole('dialog', { name: /workspace manager/i })
     ).toBeInTheDocument()
@@ -641,6 +701,160 @@ describe('App shell', () => {
         name: /use centered editor view/i
       })
     ).toBeVisible()
+  })
+
+  it('opens a manual theme selector and persists the selected theme', async () => {
+    const user = userEvent.setup()
+
+    localStorage.setItem(
+      APP_THEME_STORAGE_KEY,
+      JSON.stringify({
+        lastDarkThemeId: 'cedar',
+        lastLightThemeId: 'porcelain',
+        mode: 'dark'
+      })
+    )
+
+    render(<App />)
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'cedar')
+    expect(
+      screen.getByRole('switch', { name: /follow system appearance/i })
+    ).not.toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: /choose theme/i }))
+
+    expect(screen.getByRole('dialog', { name: /themes/i })).toBeVisible()
+    expect(screen.getByRole('radio', { name: /cedar/i })).toBeChecked()
+
+    await user.click(screen.getByRole('radio', { name: /sage paper/i }))
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'sage-paper')
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme-family', 'light')
+    expect(screen.getByRole('main')).toHaveAttribute('data-panel-family', 'light')
+    expect(localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
+      JSON.stringify({
+        lastDarkThemeId: 'cedar',
+        lastLightThemeId: 'sage-paper',
+        mode: 'light'
+      })
+    )
+  })
+
+  it('updates follow-system themes when the OS appearance changes', () => {
+    const systemTheme = mockSystemThemePreference(false)
+
+    localStorage.setItem(
+      APP_THEME_STORAGE_KEY,
+      JSON.stringify({
+        lastDarkThemeId: 'moss',
+        lastLightThemeId: 'porcelain',
+        mode: 'system'
+      })
+    )
+
+    render(<App />)
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'porcelain')
+
+    act(() => {
+      systemTheme.setMatches(true)
+    })
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'moss')
+    expect(localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
+      JSON.stringify({
+        lastDarkThemeId: 'moss',
+        lastLightThemeId: 'porcelain',
+        mode: 'system'
+      })
+    )
+  })
+
+  it('selects only the current system family while keeping follow-system enabled', async () => {
+    const user = userEvent.setup()
+    mockSystemThemePreference(false)
+    localStorage.setItem(
+      APP_THEME_STORAGE_KEY,
+      JSON.stringify({
+        lastDarkThemeId: 'moss',
+        lastLightThemeId: 'porcelain',
+        mode: 'system'
+      })
+    )
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /choose theme/i }))
+
+    expect(screen.getByRole('dialog', { name: /themes/i })).toBeVisible()
+    expect(screen.queryByRole('radiogroup', { name: /dark themes/i }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: /light themes/i }))
+      .toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /binder/i }))
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'binder')
+    expect(
+      screen.getByRole('switch', { name: /follow system appearance/i })
+    ).toBeChecked()
+    expect(localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
+      JSON.stringify({
+        lastDarkThemeId: 'moss',
+        lastLightThemeId: 'binder',
+        mode: 'system'
+      })
+    )
+  })
+
+  it('passes the resolved color scheme to the Markdown editor', async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      APP_THEME_STORAGE_KEY,
+      JSON.stringify({
+        lastDarkThemeId: 'blue-hour',
+        lastLightThemeId: 'manuscript',
+        mode: 'dark'
+      })
+    )
+
+    render(<App />)
+
+    expect(await screen.findByTestId('mock-editor-color-scheme')).toHaveTextContent(
+      'dark'
+    )
   })
 
   it('auto-saves the latest dirty editor contents after five idle seconds', async () => {

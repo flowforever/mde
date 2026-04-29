@@ -28,6 +28,17 @@ import {
 import { ExplorerPane } from '../explorer/ExplorerPane'
 import { UpdateDialog, type UpdateDialogStatus } from './UpdateDialog'
 import {
+  disableSystemThemePreference,
+  enableSystemThemePreference,
+  readThemePreference,
+  resolveThemePreference,
+  selectAppTheme,
+  writeThemePreference,
+  type AppThemeFamily,
+  type AppThemeId,
+  type ThemePreference
+} from '../theme/appThemes'
+import {
   forgetRecentWorkspace,
   readActiveWorkspace,
   readRecentWorkspaces,
@@ -104,6 +115,7 @@ const EXPLORER_WIDTH_DEFAULT = 288
 const EXPLORER_WIDTH_MIN = 220
 const EXPLORER_WIDTH_MAX = 440
 const AUTO_SAVE_IDLE_DELAY_MS = 5000
+const SYSTEM_DARK_COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)'
 
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
@@ -135,11 +147,24 @@ const createRecentWorkspace = (workspace: Workspace): RecentWorkspace =>
         type: 'workspace'
       }
 
+const readSystemThemeFamily = (): AppThemeFamily => {
+  try {
+    return window.matchMedia?.(SYSTEM_DARK_COLOR_SCHEME_QUERY).matches
+      ? 'dark'
+      : 'light'
+  } catch {
+    return 'light'
+  }
+}
+
 export const App = (): React.JSX.Element => {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialAppState)
   const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT)
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false)
   const [editorViewMode, setEditorViewMode] = useState(readEditorViewMode)
+  const [themePreference, setThemePreference] = useState(readThemePreference)
+  const [systemThemeFamily, setSystemThemeFamily] =
+    useState<AppThemeFamily>(readSystemThemeFamily)
   const [isResizingExplorer, setIsResizingExplorer] = useState(false)
   const [hasResolvedInitialLaunchPath, setHasResolvedInitialLaunchPath] =
     useState(() => !window.editorApi)
@@ -183,6 +208,18 @@ export const App = (): React.JSX.Element => {
       writeWorkspaceFileHistory(nextHistory)
 
       return nextHistory
+    })
+  }, [])
+
+  const updateThemePreference = useCallback((
+    createNextPreference: (preference: ThemePreference) => ThemePreference
+  ): void => {
+    setThemePreference((currentPreference) => {
+      const nextPreference = createNextPreference(currentPreference)
+
+      writeThemePreference(globalThis.localStorage, nextPreference)
+
+      return nextPreference
     })
   }, [])
 
@@ -269,6 +306,31 @@ export const App = (): React.JSX.Element => {
   useEffect(() => {
     document.title = getWindowTitle(state.workspace)
   }, [state.workspace])
+
+  useEffect(() => {
+    let mediaQueryList: MediaQueryList
+
+    try {
+      mediaQueryList = window.matchMedia(SYSTEM_DARK_COLOR_SCHEME_QUERY)
+    } catch {
+      return
+    }
+
+    const updateSystemThemeFamily = (
+      eventOrQueryList: MediaQueryList | MediaQueryListEvent
+    ): void => {
+      setSystemThemeFamily(eventOrQueryList.matches ? 'dark' : 'light')
+    }
+
+    updateSystemThemeFamily(mediaQueryList)
+    mediaQueryList.addEventListener?.('change', updateSystemThemeFamily)
+    mediaQueryList.addListener?.(updateSystemThemeFamily)
+
+    return () => {
+      mediaQueryList.removeEventListener?.('change', updateSystemThemeFamily)
+      mediaQueryList.removeListener?.(updateSystemThemeFamily)
+    }
+  }, [])
 
   useEffect(() => {
     const updateApi = window.updateApi
@@ -864,6 +926,7 @@ export const App = (): React.JSX.Element => {
     '--explorer-width': `${explorerWidth}px`
   }
   const isEditorFullWidth = editorViewMode === 'full-width'
+  const resolvedTheme = resolveThemePreference(themePreference, systemThemeFamily)
   const editorViewToggleLabel = isEditorFullWidth
     ? 'Use centered editor view'
     : 'Use full-width editor view'
@@ -880,6 +943,10 @@ export const App = (): React.JSX.Element => {
       ]
         .filter(Boolean)
         .join(' ')}
+      data-panel-family={resolvedTheme.panelFamily}
+      data-theme={resolvedTheme.id}
+      data-theme-family={resolvedTheme.family}
+      data-theme-mode={themePreference.mode}
       ref={appShellRef}
       style={appShellStyle}
     >
@@ -919,14 +986,31 @@ export const App = (): React.JSX.Element => {
         onToggleCollapsed={() => {
           setIsExplorerCollapsed((currentValue) => !currentValue)
         }}
+        onSelectTheme={(themeId: AppThemeId) => {
+          updateThemePreference((currentPreference) =>
+            selectAppTheme(currentPreference, themeId)
+          )
+        }}
+        onToggleSystemTheme={(shouldFollowSystem) => {
+          updateThemePreference((currentPreference) =>
+            shouldFollowSystem
+              ? enableSystemThemePreference(currentPreference)
+              : disableSystemThemePreference(
+                  currentPreference,
+                  resolvedTheme.family
+                )
+          )
+        }}
         recentFilePaths={recentFilePaths}
         recentWorkspaces={recentWorkspaces}
+        resolvedTheme={resolvedTheme}
         shouldAutoOpenWorkspaceDialog={
           hasResolvedInitialLaunchPath &&
           !state.workspace &&
           !state.isOpeningWorkspace
         }
         state={state}
+        themePreference={themePreference}
       />
       {!isExplorerCollapsed ? (
         <div
@@ -988,6 +1072,7 @@ export const App = (): React.JSX.Element => {
           <MarkdownBlockEditor
             key={`${state.workspace?.rootPath ?? ''}:${state.loadedFile.path}`}
             draftMarkdown={state.draftMarkdown ?? state.loadedFile.contents}
+            colorScheme={resolvedTheme.family}
             errorMessage={state.fileErrorMessage}
             isDirty={state.isDirty}
             isSaving={state.isSavingFile}

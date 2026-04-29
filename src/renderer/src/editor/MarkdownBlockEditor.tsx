@@ -24,6 +24,7 @@ import {
 } from './markdownTransforms'
 
 interface MarkdownBlockEditorProps {
+  readonly colorScheme: 'dark' | 'light'
   readonly draftMarkdown: string
   readonly errorMessage: string | null
   readonly isDirty: boolean
@@ -48,6 +49,7 @@ export const MarkdownBlockEditor = forwardRef<
   MarkdownBlockEditorProps
 >(function MarkdownBlockEditor(
   {
+    colorScheme,
     errorMessage,
     draftMarkdown,
     isDirty,
@@ -231,6 +233,7 @@ export const MarkdownBlockEditor = forwardRef<
         </p>
       ) : null}
       <MermaidFlowchartPanel
+        colorScheme={colorScheme}
         markdown={draftMarkdown}
         onMarkdownChange={onMarkdownChange}
       />
@@ -263,7 +266,7 @@ export const MarkdownBlockEditor = forwardRef<
               )
             })
         }}
-        theme="light"
+        theme={colorScheme}
       />
     </div>
   )
