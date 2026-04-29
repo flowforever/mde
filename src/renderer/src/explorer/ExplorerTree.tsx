@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
 
 import type { TreeNode } from '../../../shared/fileTree'
 import type { ExplorerTreeProps } from './explorerTypes'
@@ -21,6 +21,7 @@ const getRowAccessibleName = (node: TreeNode): string =>
 const ExplorerTreeNode = ({
   depth,
   node,
+  onOpenEntryMenu,
   onSelectEntry,
   onSelectFile,
   selectedEntryPath,
@@ -33,6 +34,18 @@ const ExplorerTreeNode = ({
   const rowStyle = { '--depth': depth } as CSSProperties
   const toggleExpanded = (): void => {
     setIsExpanded((currentValue) => !currentValue)
+  }
+  const openContextMenu = (event: MouseEvent): void => {
+    if (!onOpenEntryMenu) {
+      return
+    }
+
+    event.preventDefault()
+    onOpenEntryMenu({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      entry: node
+    })
   }
 
   if (node.type === 'directory') {
@@ -55,6 +68,7 @@ const ExplorerTreeNode = ({
             className={
               isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
             }
+            onContextMenu={openContextMenu}
             onClick={() => {
               onSelectEntry(node.path)
               toggleExpanded()
@@ -71,6 +85,7 @@ const ExplorerTreeNode = ({
                 depth={depth + 1}
                 key={childNode.path}
                 node={childNode}
+                onOpenEntryMenu={onOpenEntryMenu}
                 onSelectEntry={onSelectEntry}
                 onSelectFile={onSelectFile}
                 selectedEntryPath={selectedEntryPath}
@@ -93,6 +108,7 @@ const ExplorerTreeNode = ({
           className={
             isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
           }
+          onContextMenu={openContextMenu}
           onClick={() => {
             onSelectEntry(node.path)
             onSelectFile(node.path)
@@ -108,6 +124,7 @@ const ExplorerTreeNode = ({
 
 export const ExplorerTree = ({
   nodes,
+  onOpenEntryMenu,
   onSelectEntry,
   onSelectFile,
   selectedEntryPath,
@@ -119,6 +136,7 @@ export const ExplorerTree = ({
         depth={0}
         key={node.path}
         node={node}
+        onOpenEntryMenu={onOpenEntryMenu}
         onSelectEntry={onSelectEntry}
         onSelectFile={onSelectFile}
         selectedEntryPath={selectedEntryPath}

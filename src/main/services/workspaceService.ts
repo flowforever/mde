@@ -1,5 +1,5 @@
 import { readdir, realpath, stat } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, dirname, extname } from 'node:path'
 
 import type { TreeNode } from '../../shared/fileTree'
 import type { Workspace } from '../../shared/workspace'
@@ -15,6 +15,8 @@ const ignoredEntryNames = new Set([
 ])
 
 export interface WorkspaceService {
+  readonly openPath: (resourcePath: string) => Promise<Workspace>
+  readonly openMarkdownFile: (filePath: string) => Promise<Workspace>
   readonly openWorkspace: (workspacePath: string) => Promise<Workspace>
   readonly listDirectory: (
     workspacePath: string,
@@ -23,6 +25,12 @@ export interface WorkspaceService {
 }
 
 const isMarkdownFile = (name: string): boolean => name.toLowerCase().endsWith('.md')
+
+const assertMarkdownFilePath = (filePath: string): void => {
+  if (extname(filePath).toLowerCase() !== '.md') {
+    throw new Error('Only Markdown files can be opened')
+  }
+}
 
 const compareNodes = (left: TreeNode, right: TreeNode): number => {
   if (left.type !== right.type) {
@@ -91,6 +99,50 @@ export const createWorkspaceService = (): WorkspaceService => {
   }
 
   return {
+    async openPath(resourcePath) {
+      const resourceStats = await stat(resourcePath)
+
+      if (resourceStats.isDirectory()) {
+        return this.openWorkspace(resourcePath)
+      }
+
+      if (resourceStats.isFile()) {
+        return this.openMarkdownFile(resourcePath)
+      }
+
+      throw new Error('Launch path must be a workspace folder or Markdown file')
+    },
+    async openMarkdownFile(filePath) {
+      assertMarkdownFilePath(filePath)
+
+      const canonicalFilePath = await realpath(filePath)
+
+      assertMarkdownFilePath(canonicalFilePath)
+
+      const fileStats = await stat(canonicalFilePath)
+
+      if (!fileStats.isFile()) {
+        throw new Error('Markdown path must be a file')
+      }
+
+      const rootPath = await realpath(dirname(canonicalFilePath))
+      const openedFilePath = basename(canonicalFilePath)
+
+      return Object.freeze({
+        filePath: canonicalFilePath,
+        name: openedFilePath,
+        openedFilePath,
+        rootPath,
+        tree: freezeNodes([
+          {
+            name: openedFilePath,
+            path: openedFilePath,
+            type: 'file'
+          }
+        ]),
+        type: 'file'
+      })
+    },
     async openWorkspace(workspacePath) {
       const safeWorkspacePath = assertPathInsideWorkspace(workspacePath, workspacePath)
       const canonicalWorkspacePath = await realpath(safeWorkspacePath)
@@ -103,7 +155,8 @@ export const createWorkspaceService = (): WorkspaceService => {
       return Object.freeze({
         name: basename(canonicalWorkspacePath),
         rootPath: canonicalWorkspacePath,
-        tree: await readTree(canonicalWorkspacePath, '')
+        tree: await readTree(canonicalWorkspacePath, ''),
+        type: 'workspace'
       })
     },
     listDirectory(workspacePath, directoryPath) {

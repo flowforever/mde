@@ -8,9 +8,12 @@ import type {
 } from 'electron'
 
 import {
+  getTestFilePath,
   getTestWorkspacePath,
   registerWorkspaceHandlers
 } from './ipc/registerWorkspaceHandlers'
+import { getLaunchPathFromArgv } from './launchArgs'
+import { WORKSPACE_CHANNELS } from './ipc/channels'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
@@ -95,7 +98,7 @@ export const createWindowOptions = (
 
 const createMainWindow = async (
   BrowserWindow: BrowserWindowConstructor
-): Promise<void> => {
+): Promise<BrowserWindow> => {
   const window = new BrowserWindow(
     createWindowOptions(createPreloadPath(__dirname))
   )
@@ -108,10 +111,12 @@ const createMainWindow = async (
 
   if (process.env.ELECTRON_RENDERER_URL) {
     await window.loadURL(process.env.ELECTRON_RENDERER_URL)
-    return
+    return window
   }
 
   await window.loadFile(join(__dirname, '../renderer/index.html'))
+
+  return window
 }
 
 const bootstrap = async (): Promise<void> => {
@@ -121,11 +126,51 @@ const bootstrap = async (): Promise<void> => {
     dialog: Electron.Dialog
     ipcMain: Electron.IpcMain
   }
+  const initialLaunchPath = getLaunchPathFromArgv()
+  const hasSingleInstanceLock =
+    process.env.MDV_DISABLE_SINGLE_INSTANCE === '1' ||
+    app.requestSingleInstanceLock()
+
+  if (!hasSingleInstanceLock) {
+    app.quit()
+    return
+  }
+
+  let mainWindow: BrowserWindow | null = null
+  const setMainWindow = (window: BrowserWindow): void => {
+    mainWindow = window
+
+    window.once('closed', () => {
+      if (mainWindow === window) {
+        mainWindow = null
+      }
+    })
+  }
+
+  app.on('second-instance', (_event, commandLine, workingDirectory) => {
+    const launchPath = getLaunchPathFromArgv(commandLine, workingDirectory)
+
+    if (!mainWindow) {
+      return
+    }
+
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+
+    mainWindow.focus()
+
+    if (launchPath) {
+      mainWindow.webContents.send(WORKSPACE_CHANNELS.launchPath, launchPath)
+    }
+  })
 
   await app.whenReady()
   const workspaceSession = registerWorkspaceHandlers({
     dialog,
+    initialLaunchPath,
     ipcMain,
+    testFilePath: getTestFilePath(),
     testWorkspacePath: getTestWorkspacePath(),
     workspaceService: createWorkspaceService()
   })
@@ -134,11 +179,11 @@ const bootstrap = async (): Promise<void> => {
     ipcMain,
     markdownFileService: createMarkdownFileService()
   })
-  await createMainWindow(BrowserWindow)
+  setMainWindow(await createMainWindow(BrowserWindow))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow(BrowserWindow)
+      void createMainWindow(BrowserWindow).then(setMainWindow)
     }
   })
 

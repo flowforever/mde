@@ -32,7 +32,8 @@ export const launchElectronApp = async (
     args: ['out/main/index.js', ...options.args ?? []],
     env: {
       ...process.env,
-      MDV_CAPTURE_STARTUP_DIAGNOSTICS: '1'
+      MDV_CAPTURE_STARTUP_DIAGNOSTICS: '1',
+      MDV_DISABLE_SINGLE_INSTANCE: '1'
     }
   })
 

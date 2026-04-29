@@ -1,9 +1,12 @@
 import type { TreeNode } from './fileTree'
 
 export interface Workspace {
+  readonly filePath?: string
   readonly name: string
+  readonly openedFilePath?: string
   readonly rootPath: string
   readonly tree: readonly TreeNode[]
+  readonly type?: 'file' | 'workspace'
 }
 
 export interface FileContents {
@@ -16,7 +19,13 @@ export interface RenamedEntry {
 }
 
 export interface EditorApi {
+  readonly consumeLaunchPath: () => Promise<string | null>
+  readonly onLaunchPath: (callback: (resourcePath: string) => void) => () => void
+  readonly openFile: () => Promise<Workspace | null>
+  readonly openFileByPath: (filePath: string) => Promise<Workspace>
+  readonly openPath: (resourcePath: string) => Promise<Workspace>
   readonly openWorkspace: () => Promise<Workspace | null>
+  readonly openWorkspaceByPath: (workspaceRoot: string) => Promise<Workspace>
   readonly listDirectory: (directoryPath: string) => Promise<readonly TreeNode[]>
   readonly readMarkdownFile: (
     filePath: string,

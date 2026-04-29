@@ -2,8 +2,8 @@ export const Shell = (): React.JSX.Element => (
   <main className="app-shell">
     <aside className="explorer-pane" aria-label="Explorer">
       <div className="explorer-header">Explorer</div>
-      <button className="open-folder-button" type="button">
-        Open Folder
+      <button className="workspace-manager-button workspace-item-button" type="button">
+        <span>Open workspace</span>
       </button>
     </aside>
     <section className="editor-pane" aria-label="Editor">

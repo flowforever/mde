@@ -1,12 +1,28 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState
+} from 'react'
 
-import type { EditorApi } from '../../../shared/workspace'
+import type { EditorApi, Workspace } from '../../../shared/workspace'
 import { appReducer, createInitialAppState } from './appReducer'
 import {
   MarkdownBlockEditor,
   type MarkdownBlockEditorHandle
 } from '../editor/MarkdownBlockEditor'
 import { ExplorerPane } from '../explorer/ExplorerPane'
+import {
+  forgetRecentWorkspace,
+  readRecentWorkspaces,
+  rememberWorkspace,
+  type RecentWorkspace,
+  writeRecentWorkspaces
+} from '../workspaces/recentWorkspaces'
 import type { TreeNode } from '../../../shared/fileTree'
 
 declare global {
@@ -51,33 +67,38 @@ const joinWorkspacePath = (parentPath: string, entryName: string): string =>
 const ensureMarkdownExtension = (filePath: string): string =>
   filePath.toLowerCase().endsWith('.md') ? filePath : `${filePath}.md`
 
+const EXPLORER_WIDTH_DEFAULT = 288
+const EXPLORER_WIDTH_MIN = 220
+const EXPLORER_WIDTH_MAX = 440
+
+const clampExplorerWidth = (width: number): number =>
+  Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
+
 export const App = (): React.JSX.Element => {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialAppState)
+  const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT)
+  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false)
+  const [isResizingExplorer, setIsResizingExplorer] = useState(false)
+  const [recentWorkspaces, setRecentWorkspaces] = useState(
+    readRecentWorkspaces
+  )
+  const appShellRef = useRef<HTMLElement | null>(null)
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null)
 
-  const openWorkspace = async (): Promise<void> => {
-    dispatch({ type: 'workspace/open-started' })
+  const rememberOpenedWorkspace = useCallback((workspace: Workspace): void => {
+    setRecentWorkspaces((currentWorkspaces) => {
+      const nextWorkspaces = rememberWorkspace(currentWorkspaces, workspace)
 
-    try {
-      if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
-      }
+      writeRecentWorkspaces(globalThis.localStorage, nextWorkspaces)
 
-      const workspace = await window.editorApi.openWorkspace()
+      return nextWorkspaces
+    })
+  }, [])
 
-      if (!workspace) {
-        dispatch({ type: 'workspace/open-cancelled' })
-        return
-      }
-
-      dispatch({ type: 'workspace/opened', workspace })
-    } catch (error) {
-      dispatch({
-        type: 'workspace/open-failed',
-        message: getErrorMessage(error, 'Unable to open workspace')
-      })
-    }
-  }
+  const completeWorkspaceOpen = useCallback((workspace: Workspace): void => {
+    dispatch({ type: 'workspace/opened', workspace })
+    rememberOpenedWorkspace(workspace)
+  }, [rememberOpenedWorkspace])
 
   const loadFile = useCallback(async (
     filePath: string,
@@ -114,6 +135,177 @@ export const App = (): React.JSX.Element => {
       })
     }
   }, [state.workspace?.rootPath])
+
+  const loadOpenedWorkspaceFile = useCallback(async (
+    workspace: Workspace
+  ): Promise<void> => {
+    if (workspace.type !== 'file' || !workspace.openedFilePath) {
+      return
+    }
+
+    await loadFile(workspace.openedFilePath, workspace.rootPath)
+  }, [loadFile])
+
+  const updateExplorerWidthFromPointer = useCallback((clientX: number): void => {
+    const shellLeft = appShellRef.current?.getBoundingClientRect().left ?? 0
+
+    setExplorerWidth(clampExplorerWidth(clientX - shellLeft))
+  }, [])
+
+  useEffect(() => {
+    if (!isResizingExplorer) {
+      return
+    }
+
+    const updateWidth = (event: PointerEvent): void => {
+      updateExplorerWidthFromPointer(event.clientX)
+    }
+    const stopResizing = (): void => {
+      setIsResizingExplorer(false)
+    }
+
+    document.body.classList.add('is-resizing-explorer')
+    window.addEventListener('pointermove', updateWidth)
+    window.addEventListener('pointerup', stopResizing)
+    window.addEventListener('pointercancel', stopResizing)
+
+    return () => {
+      document.body.classList.remove('is-resizing-explorer')
+      window.removeEventListener('pointermove', updateWidth)
+      window.removeEventListener('pointerup', stopResizing)
+      window.removeEventListener('pointercancel', stopResizing)
+    }
+  }, [isResizingExplorer, updateExplorerWidthFromPointer])
+
+  const openWorkspace = async (): Promise<void> => {
+    dispatch({ type: 'workspace/open-started' })
+
+    try {
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const workspace = await window.editorApi.openWorkspace()
+
+      if (!workspace) {
+        dispatch({ type: 'workspace/open-cancelled' })
+        return
+      }
+
+      completeWorkspaceOpen(workspace)
+      await loadOpenedWorkspaceFile(workspace)
+    } catch (error) {
+      dispatch({
+        type: 'workspace/open-failed',
+        message: getErrorMessage(error, 'Unable to open workspace')
+      })
+    }
+  }
+
+  const openFile = async (): Promise<void> => {
+    dispatch({ type: 'workspace/open-started' })
+
+    try {
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const workspace = await window.editorApi.openFile()
+
+      if (!workspace) {
+        dispatch({ type: 'workspace/open-cancelled' })
+        return
+      }
+
+      completeWorkspaceOpen(workspace)
+      await loadOpenedWorkspaceFile(workspace)
+    } catch (error) {
+      dispatch({
+        type: 'workspace/open-failed',
+        message: getErrorMessage(error, 'Unable to open file')
+      })
+    }
+  }
+
+  const switchWorkspace = async (
+    workspace: RecentWorkspace
+  ): Promise<void> => {
+    dispatch({ type: 'workspace/open-started' })
+
+    try {
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const openedWorkspace =
+        workspace.type === 'file'
+          ? await window.editorApi.openFileByPath(workspace.filePath)
+          : await window.editorApi.openWorkspaceByPath(workspace.rootPath)
+
+      completeWorkspaceOpen(openedWorkspace)
+      await loadOpenedWorkspaceFile(openedWorkspace)
+    } catch (error) {
+      dispatch({
+        type: 'workspace/open-failed',
+        message: getErrorMessage(error, 'Unable to switch workspace')
+      })
+    }
+  }
+
+  const openPath = useCallback(async (resourcePath: string): Promise<void> => {
+    dispatch({ type: 'workspace/open-started' })
+
+    try {
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const workspace = await window.editorApi.openPath(resourcePath)
+
+      completeWorkspaceOpen(workspace)
+      await loadOpenedWorkspaceFile(workspace)
+    } catch (error) {
+      dispatch({
+        message: getErrorMessage(error, 'Unable to open launch path'),
+        type: 'workspace/open-failed'
+      })
+    }
+  }, [completeWorkspaceOpen, loadOpenedWorkspaceFile])
+
+  useEffect(() => {
+    const editorApi = window.editorApi
+
+    if (!editorApi) {
+      return
+    }
+
+    let isCancelled = false
+
+    void editorApi.consumeLaunchPath().then((resourcePath) => {
+      if (!isCancelled && resourcePath) {
+        void openPath(resourcePath)
+      }
+    })
+
+    const unsubscribe = editorApi.onLaunchPath((resourcePath) => {
+      void openPath(resourcePath)
+    })
+
+    return () => {
+      isCancelled = true
+      unsubscribe()
+    }
+  }, [openPath])
+
+  const forgetWorkspace = (workspace: RecentWorkspace): void => {
+    setRecentWorkspaces((currentWorkspaces) => {
+      const nextWorkspaces = forgetRecentWorkspace(currentWorkspaces, workspace)
+
+      writeRecentWorkspaces(globalThis.localStorage, nextWorkspaces)
+
+      return nextWorkspaces
+    })
+  }
 
   const refreshWorkspaceTree = useCallback(async (workspaceRoot?: string): Promise<void> => {
     const scopedWorkspaceRoot = workspaceRoot ?? state.workspace?.rootPath
@@ -333,9 +525,51 @@ export const App = (): React.JSX.Element => {
     }
   }
 
+  const beginExplorerResize = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ): void => {
+    event.preventDefault()
+    updateExplorerWidthFromPointer(event.clientX)
+    setIsResizingExplorer(true)
+  }
+
+  const resizeExplorerFromKeyboard = (
+    event: ReactKeyboardEvent<HTMLDivElement>
+  ): void => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      setExplorerWidth((currentWidth) => clampExplorerWidth(currentWidth - 16))
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      setExplorerWidth((currentWidth) => clampExplorerWidth(currentWidth + 16))
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      setExplorerWidth(EXPLORER_WIDTH_MIN)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      setExplorerWidth(EXPLORER_WIDTH_MAX)
+    }
+  }
+
+  const appShellStyle: CSSProperties & Record<'--explorer-width', string> = {
+    '--explorer-width': `${explorerWidth}px`
+  }
+
   return (
-    <main className="app-shell">
+    <main
+      className={[
+        'app-shell',
+        isExplorerCollapsed ? 'is-explorer-collapsed' : '',
+        isResizingExplorer ? 'is-resizing-explorer' : ''
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      ref={appShellRef}
+      style={appShellStyle}
+    >
       <ExplorerPane
+        isCollapsed={isExplorerCollapsed}
+        key={state.workspace?.rootPath ?? 'empty-workspace'}
         onCreateFile={(filePath) => {
           void createMarkdownFile(filePath)
         }}
@@ -344,6 +578,10 @@ export const App = (): React.JSX.Element => {
         }}
         onDeleteEntry={() => {
           void deleteSelectedEntry()
+        }}
+        onForgetWorkspace={forgetWorkspace}
+        onOpenFile={() => {
+          void openFile()
         }}
         onOpenWorkspace={() => {
           void openWorkspace()
@@ -357,8 +595,29 @@ export const App = (): React.JSX.Element => {
         onSelectFile={(filePath) => {
           void loadFile(filePath)
         }}
+        onSwitchWorkspace={(workspace) => {
+          void switchWorkspace(workspace)
+        }}
+        onToggleCollapsed={() => {
+          setIsExplorerCollapsed((currentValue) => !currentValue)
+        }}
+        recentWorkspaces={recentWorkspaces}
         state={state}
       />
+      {!isExplorerCollapsed ? (
+        <div
+          aria-label="Resize explorer sidebar"
+          aria-orientation="vertical"
+          aria-valuemax={EXPLORER_WIDTH_MAX}
+          aria-valuemin={EXPLORER_WIDTH_MIN}
+          aria-valuenow={explorerWidth}
+          className="explorer-resize-handle"
+          onKeyDown={resizeExplorerFromKeyboard}
+          onPointerDown={beginExplorerResize}
+          role="separator"
+          tabIndex={0}
+        />
+      ) : null}
       <section className="editor-pane" aria-label="Editor">
         {state.loadedFile ? (
           <MarkdownBlockEditor

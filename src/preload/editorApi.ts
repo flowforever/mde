@@ -4,18 +4,60 @@ import { FILE_CHANNELS, WORKSPACE_CHANNELS } from '../main/ipc/channels'
 import type { TreeNode } from '../shared/fileTree'
 import type { EditorApi, FileContents } from '../shared/workspace'
 
-type IpcRenderer = Pick<typeof Electron.ipcRenderer, 'invoke'>
+type IpcRenderer = Pick<
+  typeof Electron.ipcRenderer,
+  'invoke' | 'on' | 'removeListener'
+>
 
 export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
+  consumeLaunchPath: () =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.consumeLaunchPath) as Promise<
+      string | null
+    >,
   listDirectory: (directoryPath) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.listDirectory,
       directoryPath
     ) as Promise<readonly TreeNode[]>,
+  onLaunchPath: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      resourcePath: unknown
+    ): void => {
+      if (typeof resourcePath === 'string') {
+        callback(resourcePath)
+      }
+    }
+
+    ipcRenderer.on(WORKSPACE_CHANNELS.launchPath, listener)
+
+    return () => {
+      ipcRenderer.removeListener(WORKSPACE_CHANNELS.launchPath, listener)
+    }
+  },
+  openFile: () =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.openFile) as Promise<
+      Awaited<ReturnType<EditorApi['openFile']>>
+    >,
+  openFileByPath: (filePath) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openFileByPath,
+      filePath
+    ) as Promise<Awaited<ReturnType<EditorApi['openFileByPath']>>>,
+  openPath: (resourcePath) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openPath,
+      resourcePath
+    ) as Promise<Awaited<ReturnType<EditorApi['openPath']>>>,
   openWorkspace: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.openWorkspace) as Promise<
       Awaited<ReturnType<EditorApi['openWorkspace']>>
     >,
+  openWorkspaceByPath: (workspaceRoot) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openWorkspaceByPath,
+      workspaceRoot
+    ) as Promise<Awaited<ReturnType<EditorApi['openWorkspaceByPath']>>>,
   readMarkdownFile: (filePath, workspaceRoot) =>
     ipcRenderer.invoke(
       FILE_CHANNELS.readMarkdownFile,
