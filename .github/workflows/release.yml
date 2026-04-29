@@ -46,6 +46,7 @@ jobs:
              [ -z "$APPLE_API_ISSUER" ] ||
              [ -z "$APPLE_API_KEY_P8_BASE64" ]; then
             echo "Apple Developer ID signing is not configured; publishing unsigned macOS DMG and ZIP artifacts."
+            echo "MDE_HAS_APPLE_SIGNING=false" >> "$GITHUB_ENV"
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -53,6 +54,7 @@ jobs:
           key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
           printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$key_path"
           chmod 600 "$key_path"
+          echo "MDE_HAS_APPLE_SIGNING=true" >> "$GITHUB_ENV"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -72,13 +74,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish macOS release
-        run: npm run release:github:mac
+        run: |
+          if [ "$MDE_HAS_APPLE_SIGNING" = "true" ]; then
+            export APPLE_API_ISSUER="$SECRET_APPLE_API_ISSUER"
+            export APPLE_API_KEY_ID="$SECRET_APPLE_API_KEY_ID"
+            export CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
+            export CSC_LINK="$SECRET_CSC_LINK"
+          fi
+
+          npm run release:github:mac
         env:
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SECRET_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          SECRET_APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          SECRET_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          SECRET_CSC_LINK: ${{ secrets.CSC_LINK }}
 
       - name: Restore release notes
         run: |
