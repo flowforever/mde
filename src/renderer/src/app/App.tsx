@@ -8,6 +8,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { AlignHorizontalSpaceAround, StretchHorizontal } from 'lucide-react'
 
 import type { EditorApi, Workspace } from '../../../shared/workspace'
 import type {
@@ -20,6 +21,10 @@ import {
   MarkdownBlockEditor,
   type MarkdownBlockEditorHandle
 } from '../editor/MarkdownBlockEditor'
+import {
+  readEditorViewMode,
+  writeEditorViewMode
+} from '../editor/editorViewMode'
 import { ExplorerPane } from '../explorer/ExplorerPane'
 import { UpdateDialog, type UpdateDialogStatus } from './UpdateDialog'
 import {
@@ -98,6 +103,7 @@ export const App = (): React.JSX.Element => {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialAppState)
   const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT)
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false)
+  const [editorViewMode, setEditorViewMode] = useState(readEditorViewMode)
   const [isResizingExplorer, setIsResizingExplorer] = useState(false)
   const [hasResolvedInitialLaunchPath, setHasResolvedInitialLaunchPath] =
     useState(() => !window.editorApi)
@@ -754,6 +760,10 @@ export const App = (): React.JSX.Element => {
   const appShellStyle: CSSProperties & Record<'--explorer-width', string> = {
     '--explorer-width': `${explorerWidth}px`
   }
+  const isEditorFullWidth = editorViewMode === 'full-width'
+  const editorViewToggleLabel = isEditorFullWidth
+    ? 'Use centered editor view'
+    : 'Use full-width editor view'
 
   return (
     <main
@@ -822,7 +832,48 @@ export const App = (): React.JSX.Element => {
           tabIndex={0}
         />
       ) : null}
-      <section className="editor-pane" aria-label="Editor">
+      <section
+        className={[
+          'editor-pane',
+          isEditorFullWidth ? 'is-editor-full-width' : ''
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        aria-label="Editor"
+      >
+        <div className="editor-action-bar" aria-label="Editor actions">
+          <button
+            aria-label={editorViewToggleLabel}
+            aria-pressed={isEditorFullWidth}
+            className="editor-action-button"
+            onClick={() => {
+              setEditorViewMode((currentMode) => {
+                const nextMode =
+                  currentMode === 'full-width' ? 'centered' : 'full-width'
+
+                writeEditorViewMode(globalThis.localStorage, nextMode)
+
+                return nextMode
+              })
+            }}
+            title={editorViewToggleLabel}
+            type="button"
+          >
+            {isEditorFullWidth ? (
+              <AlignHorizontalSpaceAround
+                aria-hidden="true"
+                size={17}
+                strokeWidth={2}
+              />
+            ) : (
+              <StretchHorizontal
+                aria-hidden="true"
+                size={17}
+                strokeWidth={2}
+              />
+            )}
+          </button>
+        </div>
         {state.loadedFile ? (
           <MarkdownBlockEditor
             key={`${state.workspace?.rootPath ?? ''}:${state.loadedFile.path}`}

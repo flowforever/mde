@@ -718,12 +718,56 @@ body.is-resizing-explorer {
 
 .editor-pane {
   display: flex;
+  flex-direction: column;
   min-height: 0;
   min-width: 0;
-  padding: 42px 56px;
+  padding: 28px 56px 42px;
   background: #faf7f0;
   overflow: auto;
   scrollbar-gutter: stable;
+}
+
+.editor-action-bar {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 36px;
+  align-self: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0 0 6px auto;
+  padding: 0 0 4px;
+  background: transparent;
+}
+
+.editor-action-button {
+  display: inline-flex;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #6f675d;
+  background: #fffdf8;
+  border: 1px solid #ded4c6;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.editor-action-button:hover {
+  color: #211f1c;
+  background: #f2eadc;
+}
+
+.editor-action-button[aria-pressed="true"] {
+  color: #211f1c;
+  background: #e8dfd0;
+  border-color: #cbbda9;
 }
 
 .editor-empty-state {
@@ -762,6 +806,10 @@ body.is-resizing-explorer {
   min-height: calc(100vh - 96px);
   margin: 0 auto;
   color: #211f1c;
+}
+
+.editor-pane.is-editor-full-width .markdown-editor-shell {
+  width: 100%;
 }
 
 .markdown-editor-titlebar {

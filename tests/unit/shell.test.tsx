@@ -454,6 +454,110 @@ describe('App shell', () => {
     expect(screen.getByText(/drag MDE to Applications/i)).toBeVisible()
   })
 
+  it('toggles the editor between centered and full-width views', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+
+    render(<App />)
+
+    const editorPane = screen.getByRole('region', { name: /editor/i })
+    const fullWidthButton = await screen.findByRole('button', {
+      name: /use full-width editor view/i
+    })
+
+    expect(editorPane).not.toHaveClass('is-editor-full-width')
+
+    await user.click(fullWidthButton)
+
+    expect(editorPane).toHaveClass('is-editor-full-width')
+    expect(localStorage.getItem('mde.editorViewMode')).toBe('full-width')
+
+    await user.click(
+      screen.getByRole('button', { name: /use centered editor view/i })
+    )
+
+    expect(editorPane).not.toHaveClass('is-editor-full-width')
+    expect(localStorage.getItem('mde.editorViewMode')).toBe('centered')
+  })
+
+  it('restores the remembered full-width editor view on launch', async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem('mde.editorViewMode', 'full-width')
+
+    render(<App />)
+
+    expect(screen.getByRole('region', { name: /editor/i })).toHaveClass(
+      'is-editor-full-width'
+    )
+    expect(
+      await screen.findByRole('button', {
+        name: /use centered editor view/i
+      })
+    ).toBeVisible()
+  })
+
   it('auto-saves the latest dirty editor contents after five idle seconds', async () => {
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),

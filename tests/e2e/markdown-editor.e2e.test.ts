@@ -418,6 +418,58 @@ test('loads README markdown into the block editor surface', async () => {
   }
 })
 
+test('toggles the editor between centered and full-width layouts', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await window.setViewportSize({ width: 1600, height: 900 })
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+    const actionBar = window.locator('.editor-action-bar')
+    const fullWidthButton = window.getByRole('button', {
+      name: /use full-width editor view/i
+    })
+
+    await expect(editor).toBeVisible()
+    await expect(actionBar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    const actionBarWidth = await actionBar.evaluate(
+      (element) => element.getBoundingClientRect().width
+    )
+    const centeredWidth = await editor.evaluate(
+      (element) => element.getBoundingClientRect().width
+    )
+
+    expect(actionBarWidth).toBeLessThan(80)
+    expect(actionBarWidth).toBeLessThan(centeredWidth)
+    await fullWidthButton.click()
+    await expect(
+      window.getByRole('button', { name: /use centered editor view/i })
+    ).toBeVisible()
+    const fullWidth = await editor.evaluate(
+      (element) => element.getBoundingClientRect().width
+    )
+
+    expect(fullWidth).toBeGreaterThan(centeredWidth + 120)
+
+    await window
+      .getByRole('button', { name: /use centered editor view/i })
+      .click()
+    const recenteredWidth = await editor.evaluate(
+      (element) => element.getBoundingClientRect().width
+    )
+
+    expect(Math.abs(recenteredWidth - centeredWidth)).toBeLessThanOrEqual(1)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('renders Mermaid flowcharts and saves pasted images beside the Markdown file', async () => {
   const workspacePath = await createFixtureWorkspace()
   const diagramPath = join(workspacePath, 'docs', 'diagram.md')
