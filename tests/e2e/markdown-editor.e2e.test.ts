@@ -60,10 +60,19 @@ const openMarkdownFile = async (window: Page): Promise<void> => {
   await window.getByRole('button', { name: /open markdown file/i }).click()
 }
 
+const resetThemePreference = async (window: Page): Promise<void> => {
+  await window.evaluate(() => {
+    globalThis.localStorage.removeItem('mde.themePreference')
+    globalThis.location.reload()
+  })
+}
+
 test('shows the initial centered workspace popup', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp()
 
   try {
+    await resetThemePreference(window)
+
     const appShell = window.locator('.app-shell')
     const workspaceButton = window.getByRole('button', {
       name: /^open workspace$/i
@@ -136,6 +145,8 @@ test('selects and persists a manual theme from the explorer footer', async () =>
   const { app, startupDiagnostics, window } = await launchElectronApp()
 
   try {
+    await resetThemePreference(window)
+
     const appShell = window.locator('.app-shell')
 
     await expect(appShell).toHaveAttribute('data-theme', 'manuscript')
@@ -148,7 +159,7 @@ test('selects and persists a manual theme from the explorer footer', async () =>
       window.getByRole('switch', { name: /follow system appearance/i })
     ).not.toBeChecked()
 
-    const themeFooterControlsTopOffset = await window
+    const themeFooterControlsVerticalOverlap = await window
       .locator('.explorer-theme-footer')
       .evaluate((footer) => {
         const controls = Array.from(footer.children)
@@ -157,16 +168,19 @@ test('selects and persists a manual theme from the explorer footer', async () =>
               '[role="switch"], button[aria-label="Choose theme"]'
             )
           )
-          .map((child) => child.getBoundingClientRect().top)
+          .map((child) => child.getBoundingClientRect())
 
         if (controls.length !== 2) {
-          return Number.POSITIVE_INFINITY
+          return Number.NEGATIVE_INFINITY
         }
 
-        return Math.abs(controls[0] - controls[1])
+        return (
+          Math.min(controls[0].bottom, controls[1].bottom) -
+          Math.max(controls[0].top, controls[1].top)
+        )
       })
 
-    expect(themeFooterControlsTopOffset).toBeLessThan(2)
+    expect(themeFooterControlsVerticalOverlap).toBeGreaterThan(28)
 
     await window.getByRole('button', { name: /choose theme/i }).click()
     await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
@@ -219,6 +233,18 @@ test('selects the current system theme family without leaving follow-system mode
   const { app, startupDiagnostics, window } = await launchElectronApp()
 
   try {
+    await window.evaluate(() => {
+      globalThis.localStorage.setItem(
+        'mde.themePreference',
+        JSON.stringify({
+          lastDarkThemeId: 'carbon',
+          lastLightThemeId: 'manuscript',
+          mode: 'system'
+        })
+      )
+      globalThis.location.reload()
+    })
+
     const appShell = window.locator('.app-shell')
 
     await window.getByRole('button', { name: /close workspace popup/i }).click()
