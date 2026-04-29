@@ -10,12 +10,18 @@ import {
 } from 'react'
 
 import type { EditorApi, Workspace } from '../../../shared/workspace'
+import type {
+  AvailableUpdate,
+  UpdateApi,
+  UpdateDownloadProgress
+} from '../../../shared/update'
 import { appReducer, createInitialAppState } from './appReducer'
 import {
   MarkdownBlockEditor,
   type MarkdownBlockEditorHandle
 } from '../editor/MarkdownBlockEditor'
 import { ExplorerPane } from '../explorer/ExplorerPane'
+import { UpdateDialog, type UpdateDialogStatus } from './UpdateDialog'
 import {
   forgetRecentWorkspace,
   readRecentWorkspaces,
@@ -28,6 +34,7 @@ import type { TreeNode } from '../../../shared/fileTree'
 declare global {
   interface Window {
     readonly editorApi?: EditorApi
+    readonly updateApi?: UpdateApi
   }
 }
 
@@ -97,6 +104,16 @@ export const App = (): React.JSX.Element => {
   const [recentWorkspaces, setRecentWorkspaces] = useState(
     readRecentWorkspaces
   )
+  const [availableUpdate, setAvailableUpdate] =
+    useState<AvailableUpdate | null>(null)
+  const [updateStatus, setUpdateStatus] =
+    useState<UpdateDialogStatus | null>(null)
+  const [updateProgress, setUpdateProgress] =
+    useState<UpdateDownloadProgress | null>(null)
+  const [updateErrorMessage, setUpdateErrorMessage] = useState<string | null>(
+    null
+  )
+  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false)
   const appShellRef = useRef<HTMLElement | null>(null)
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null)
 
@@ -170,6 +187,68 @@ export const App = (): React.JSX.Element => {
   useEffect(() => {
     document.title = getWindowTitle(state.workspace)
   }, [state.workspace])
+
+  useEffect(() => {
+    const updateApi = window.updateApi
+
+    if (!updateApi) {
+      return
+    }
+
+    let isCancelled = false
+
+    const showUpdate = (
+      update: AvailableUpdate,
+      status?: UpdateDialogStatus
+    ): void => {
+      if (isCancelled) {
+        return
+      }
+
+      setAvailableUpdate(update)
+      setUpdateErrorMessage(null)
+      setUpdateProgress(null)
+      setIsUpdateDismissed(false)
+      setUpdateStatus(
+        status ??
+          (update.installMode === 'restart-to-install'
+            ? 'downloading'
+            : 'available')
+      )
+    }
+
+    const unsubscribeProgress = updateApi.onUpdateDownloadProgress(
+      (progress) => {
+        if (isCancelled) {
+          return
+        }
+
+        setUpdateProgress(progress)
+        setUpdateStatus('downloading')
+      }
+    )
+    const unsubscribeAvailable = updateApi.onUpdateAvailable((update) => {
+      showUpdate(update)
+    })
+    const unsubscribeReady = updateApi.onUpdateReady((update) => {
+      showUpdate(update, 'ready')
+    })
+
+    void updateApi.checkForUpdates().then((result) => {
+      if (result.updateAvailable && result.update) {
+        showUpdate(result.update)
+      }
+    }).catch((error: unknown) => {
+      console.warn('MDE update check failed', error)
+    })
+
+    return () => {
+      isCancelled = true
+      unsubscribeProgress()
+      unsubscribeAvailable()
+      unsubscribeReady()
+    }
+  }, [])
 
   useEffect(() => {
     if (!isResizingExplorer) {
@@ -638,6 +717,40 @@ export const App = (): React.JSX.Element => {
     }
   }
 
+  const installUpdate = async (): Promise<void> => {
+    const updateApi = window.updateApi
+
+    if (!updateApi || !availableUpdate) {
+      return
+    }
+
+    setUpdateErrorMessage(null)
+
+    try {
+      if (availableUpdate.installMode === 'open-dmg') {
+        setUpdateStatus('downloading')
+        await updateApi.downloadAndOpenUpdate()
+        setUpdateStatus('ready')
+        setUpdateProgress({
+          downloadedBytes: availableUpdate.assetSize ?? 0,
+          percent: 100,
+          totalBytes: availableUpdate.assetSize ?? null
+        })
+        return
+      }
+
+      await updateApi.installWindowsUpdate()
+    } catch (error) {
+      setUpdateStatus('failed')
+      setUpdateErrorMessage(getErrorMessage(error, 'Unable to install update'))
+    }
+  }
+
+  const dismissUpdate = (): void => {
+    setIsUpdateDismissed(true)
+    setUpdateStatus(null)
+  }
+
   const appShellStyle: CSSProperties & Record<'--explorer-width', string> = {
     '--explorer-width': `${explorerWidth}px`
   }
@@ -751,6 +864,18 @@ export const App = (): React.JSX.Element => {
           </div>
         )}
       </section>
+      {availableUpdate && updateStatus && !isUpdateDismissed ? (
+        <UpdateDialog
+          errorMessage={updateErrorMessage}
+          onDismiss={dismissUpdate}
+          onInstall={() => {
+            void installUpdate()
+          }}
+          progress={updateProgress}
+          status={updateStatus}
+          update={availableUpdate}
+        />
+      ) : null}
     </main>
   )
 }

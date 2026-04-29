@@ -1,6 +1,6 @@
 {
   "name": "mde",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
   "productName": "MDE",
   "private": true,
@@ -16,7 +16,10 @@
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64",
-    "release:github": "npm run build && electron-builder --mac dmg zip --x64 --arm64 --publish always",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "release:github": "npm run release:github:mac",
+    "release:github:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64 --publish always",
+    "release:github:win": "npm run build && electron-builder --win nsis --x64 --publish always",
     "register:cli": "npm link",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
@@ -94,7 +97,6 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "hardenedRuntime": true,
-      "notarize": true,
       "target": [
         "dmg",
         "zip"
@@ -103,11 +105,6 @@
     "win": {
       "target": [
         "nsis"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
       ]
     }
   }

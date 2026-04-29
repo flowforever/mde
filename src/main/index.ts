@@ -161,13 +161,17 @@ const createMainWindow = async (
 }
 
 const bootstrap = async (): Promise<void> => {
-  const { app, BrowserWindow, dialog, ipcMain } = (await import('electron')) as {
+  const { app, BrowserWindow, dialog, ipcMain, shell } = (await import(
+    'electron'
+  )) as {
     app: App
     BrowserWindow: BrowserWindowConstructor
     dialog: Electron.Dialog
     ipcMain: Electron.IpcMain
+    shell: Electron.Shell
   }
-  const electronUpdaterModule = await import('electron-updater')
+  const electronUpdaterModule =
+    process.platform === 'win32' ? await import('electron-updater') : undefined
   configureRuntimeIdentity(app)
   const initialLaunchPath = getLaunchPathFromArgv()
   const hasSingleInstanceLock =
@@ -211,7 +215,9 @@ const bootstrap = async (): Promise<void> => {
   await app.whenReady()
   configureAutoUpdates({
     app,
-    autoUpdater: resolveAutoUpdater(electronUpdaterModule)
+    autoUpdater: resolveAutoUpdater(electronUpdaterModule),
+    ipcMain,
+    shell
   })
   const workspaceSession = registerWorkspaceHandlers({
     dialog,

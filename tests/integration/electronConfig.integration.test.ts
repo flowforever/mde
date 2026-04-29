@@ -77,6 +77,7 @@ describe('Release automation config', () => {
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       build?: {
         artifactName?: string
+        linux?: unknown
         mac?: {
           entitlements?: string
           entitlementsInherit?: string
@@ -103,9 +104,19 @@ describe('Release automation config', () => {
         })
       ])
     )
-    expect(packageJson.scripts?.['release:github']).toContain('--publish always')
-    expect(packageJson.scripts?.['release:github']).toContain('--x64')
-    expect(packageJson.scripts?.['release:github']).toContain('--arm64')
+    expect(packageJson.scripts?.['release:github']).toBe(
+      'npm run release:github:mac'
+    )
+    expect(packageJson.scripts?.['release:github:mac']).toContain(
+      '--publish always'
+    )
+    expect(packageJson.scripts?.['release:github:mac']).toContain('--x64')
+    expect(packageJson.scripts?.['release:github:mac']).toContain('--arm64')
+    expect(packageJson.scripts?.['release:github:win']).toContain(
+      '--publish always'
+    )
+    expect(packageJson.scripts?.['release:github:win']).toContain('--win nsis')
+    expect(packageJson.scripts?.['dist:win']).toContain('--win nsis')
     expect(packageJson.scripts?.['dist:mac']).toContain('--x64')
     expect(packageJson.scripts?.['dist:mac']).toContain('--arm64')
     expect(packageJson.build?.artifactName).toContain('${arch}')
@@ -113,10 +124,11 @@ describe('Release automation config', () => {
       expect.objectContaining({
         entitlements: 'build/entitlements.mac.plist',
         entitlementsInherit: 'build/entitlements.mac.inherit.plist',
-        hardenedRuntime: true,
-        notarize: true
+        hardenedRuntime: true
       })
     )
+    expect(packageJson.build?.mac?.notarize).toBeUndefined()
+    expect(packageJson.build?.linux).toBeUndefined()
   })
 
   it('builds and publishes release artifacts when a version tag is pushed', async () => {
@@ -131,14 +143,19 @@ describe('Release automation config', () => {
     expect(workflow).toContain('Restore release notes')
     expect(workflow).toContain('git for-each-ref')
     expect(workflow).toContain('gh release edit')
-    expect(workflow).toContain('npm run release:github')
-    expect(workflow).toContain('Prepare macOS signing and notarization credentials')
+    expect(workflow).toContain('npm run release:github:mac')
+    expect(workflow).toContain('npm run release:github:win')
+    expect(workflow).toContain(
+      'Prepare optional macOS signing and notarization credentials'
+    )
+    expect(workflow).toContain('Build and publish Windows release')
     expect(workflow).toContain('CSC_LINK')
     expect(workflow).toContain('CSC_KEY_PASSWORD')
     expect(workflow).toContain('APPLE_API_KEY_P8_BASE64')
     expect(workflow).toContain('APPLE_API_KEY=$key_path')
     expect(workflow).toContain('APPLE_API_KEY_ID')
     expect(workflow).toContain('APPLE_API_ISSUER')
+    expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY=false')
   })
 
   it('configures generated release notes with user-facing categories', async () => {

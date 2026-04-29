@@ -126,6 +126,40 @@ test('shows the initial centered workspace popup', async () => {
   }
 })
 
+test('exposes update checks through the preload API in development builds', async () => {
+  const { app, startupDiagnostics, window } = await launchElectronApp()
+
+  try {
+    const updateResult = await window.evaluate(async () => {
+      const updateWindow = globalThis as unknown as Window & {
+        updateApi?: {
+          checkForUpdates: () => Promise<{
+            message?: string
+            updateAvailable: boolean
+          }>
+        }
+      }
+
+      if (!updateWindow.updateApi) {
+        throw new Error('Update API missing')
+      }
+
+      return updateWindow.updateApi.checkForUpdates()
+    })
+
+    expect(updateResult).toMatchObject({
+      message: 'Update checks are disabled.',
+      updateAvailable: false
+    })
+    await expect(
+      window.getByRole('dialog', { name: /mde update/i })
+    ).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('searches and removes many recent workspace items from the manager popup', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp()
 

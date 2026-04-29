@@ -38,6 +38,7 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
 })
 
 import { App } from '../../src/renderer/src/app/App'
+import type { UpdateApi } from '../../src/shared/update'
 import type { EditorApi } from '../../src/shared/workspace'
 
 describe('App shell', () => {
@@ -48,6 +49,7 @@ describe('App shell', () => {
     localStorage.clear()
     document.title = 'MDE'
     Reflect.deleteProperty(window, 'editorApi')
+    Reflect.deleteProperty(window, 'updateApi')
   })
 
   it('opens a centered workspace popup on initial empty launch', () => {
@@ -399,6 +401,57 @@ describe('App shell', () => {
       await screen.findByRole('button', { name: /manage workspaces/i })
     ).toHaveTextContent('API.md')
     expect(localStorage.getItem('mde.recentWorkspaces')).toContain('"type":"file"')
+  })
+
+  it('shows a macOS update dialog and opens the downloaded installer', async () => {
+    const user = userEvent.setup()
+    const updateApi = {
+      checkForUpdates: vi.fn().mockResolvedValue({
+        currentVersion: '1.1.1',
+        update: {
+          assetName: 'MDE-1.2.0-mac-arm64.dmg',
+          assetSize: 456,
+          currentVersion: '1.1.1',
+          installMode: 'open-dmg',
+          latestVersion: '1.2.0',
+          publishedAt: '2026-04-29T09:11:32.622Z',
+          releaseName: 'MDE 1.2.0',
+          releaseNotes: 'Editor update improvements.',
+          releaseUrl: 'https://github.com/flowforever/mde/releases/tag/v1.2.0'
+        },
+        updateAvailable: true
+      }),
+      downloadAndOpenUpdate: vi.fn().mockResolvedValue({
+        filePath: '/Users/test/Library/Application Support/MDE/updates/MDE-1.2.0-mac-arm64.dmg',
+        version: '1.2.0'
+      }),
+      installWindowsUpdate: vi.fn(),
+      onUpdateAvailable: vi.fn(() => vi.fn()),
+      onUpdateDownloadProgress: vi.fn(() => vi.fn()),
+      onUpdateReady: vi.fn(() => vi.fn())
+    } satisfies UpdateApi
+
+    Object.defineProperty(window, 'updateApi', {
+      configurable: true,
+      value: updateApi
+    })
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole('dialog', { name: /mde update/i })
+    ).toBeVisible()
+    expect(screen.getByText(/editor update improvements/i)).toBeVisible()
+
+    await user.click(
+      screen.getByRole('button', { name: /download and install/i })
+    )
+
+    await waitFor(() => {
+      expect(updateApi.downloadAndOpenUpdate).toHaveBeenCalledTimes(1)
+    })
+    expect(screen.getByText(/installer has opened/i)).toBeVisible()
+    expect(screen.getByText(/drag MDE to Applications/i)).toBeVisible()
   })
 
   it('auto-saves the latest dirty editor contents after five idle seconds', async () => {

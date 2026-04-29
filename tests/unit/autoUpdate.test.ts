@@ -1,12 +1,62 @@
+import { mkdtemp, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   configureAutoUpdates,
-  resolveAutoUpdater,
+  createGitHubManualUpdateService,
+  findCompatibleDmgAsset,
   shouldCheckForUpdates
 } from '../../src/main/autoUpdate'
+import { UPDATE_CHANNELS } from '../../src/main/ipc/channels'
 
-describe('auto update', () => {
+const releaseResponse = {
+  body: '## Bug Fixes\n\n- Improved editor updates.',
+  html_url: 'https://github.com/flowforever/mde/releases/tag/v1.2.0',
+  name: 'MDE 1.2.0',
+  prerelease: false,
+  tag_name: 'v1.2.0',
+  assets: [
+    {
+      browser_download_url:
+        'https://github.com/flowforever/mde/releases/download/v1.2.0/MDE-1.2.0-mac-x64.dmg',
+      name: 'MDE-1.2.0-mac-x64.dmg',
+      size: 123
+    },
+    {
+      browser_download_url:
+        'https://github.com/flowforever/mde/releases/download/v1.2.0/MDE-1.2.0-mac-arm64.dmg',
+      name: 'MDE-1.2.0-mac-arm64.dmg',
+      size: 456
+    }
+  ],
+  published_at: '2026-04-29T09:11:32.622Z'
+}
+
+const createApp = (userDataPath: string, version = '1.1.1') => ({
+  getPath: vi.fn(() => userDataPath),
+  getVersion: vi.fn(() => version),
+  isPackaged: true
+})
+
+const createIpcMain = () => {
+  const handlers = new Map<string, (event: unknown) => Promise<unknown>>()
+
+  return {
+    handlers,
+    ipcMain: {
+      handle: vi.fn(
+        (channel: string, handler: (event: unknown) => Promise<unknown>) => {
+          handlers.set(channel, handler)
+        }
+      )
+    }
+  }
+}
+
+describe('manual update', () => {
   it('checks for updates only in packaged apps', () => {
     expect(
       shouldCheckForUpdates({
@@ -33,81 +83,442 @@ describe('auto update', () => {
     ).toBe(false)
   })
 
-  it('resolves electron-updater from CommonJS default exports', () => {
+  it('selects the current architecture DMG from a trusted GitHub release', () => {
+    expect(findCompatibleDmgAsset(releaseResponse.assets, 'arm64')).toEqual({
+      name: 'MDE-1.2.0-mac-arm64.dmg',
+      size: 456,
+      url: 'https://github.com/flowforever/mde/releases/download/v1.2.0/MDE-1.2.0-mac-arm64.dmg'
+    })
+  })
+
+  it('rejects DMG assets outside the MDE GitHub release namespace', () => {
+    expect(() =>
+      findCompatibleDmgAsset(
+        [
+          {
+            browser_download_url:
+              'https://evil.example/MDE-1.2.0-mac-arm64.dmg',
+            name: 'MDE-1.2.0-mac-arm64.dmg',
+            size: 456
+          }
+        ],
+        'arm64'
+      )
+    ).toThrow(/trusted GitHub release/i)
+  })
+
+  it('rejects unsupported macOS architectures', () => {
+    expect(() => findCompatibleDmgAsset(releaseResponse.assets, 'ia32')).toThrow(
+      /does not publish macOS updates/i
+    )
+  })
+
+  it('returns no update when the GitHub release is not newer', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(releaseResponse), {
+        headers: { 'content-type': 'application/json' },
+        status: 200
+      })
+    )
+    const service = createGitHubManualUpdateService({
+      app: createApp(await mkdtemp(join(tmpdir(), 'mde-update-current-')), '1.2.0'),
+      fetch,
+      platform: 'darwin',
+      shell: { openPath: vi.fn() }
+    })
+
+    await expect(service.checkForUpdates()).resolves.toEqual({
+      currentVersion: '1.2.0',
+      message: 'MDE is up to date.',
+      updateAvailable: false
+    })
+  })
+
+  it('returns disabled and unsupported manual update results without fetching', async () => {
+    const fetch = vi.fn()
+    const disabledService = createGitHubManualUpdateService({
+      app: createApp(await mkdtemp(join(tmpdir(), 'mde-update-disabled-'))),
+      enabled: false,
+      fetch,
+      platform: 'darwin',
+      shell: { openPath: vi.fn() }
+    })
+    const unsupportedService = createGitHubManualUpdateService({
+      app: createApp(await mkdtemp(join(tmpdir(), 'mde-update-linux-'))),
+      fetch,
+      platform: 'linux',
+      shell: { openPath: vi.fn() }
+    })
+
+    await expect(disabledService.checkForUpdates()).resolves.toEqual({
+      currentVersion: '1.1.1',
+      message: 'Update checks are disabled.',
+      updateAvailable: false
+    })
+    await expect(disabledService.downloadAndOpenUpdate()).rejects.toThrow(
+      /disabled/i
+    )
+    await expect(unsupportedService.checkForUpdates()).resolves.toEqual({
+      currentVersion: '1.1.1',
+      message: 'Manual DMG updates are only available on macOS.',
+      updateAvailable: false
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('surfaces malformed GitHub release responses', async () => {
+    const service = createGitHubManualUpdateService({
+      app: createApp(await mkdtemp(join(tmpdir(), 'mde-update-invalid-'))),
+      fetch: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ tag_name: 'v1.2.0' }), {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        })
+      ),
+      platform: 'darwin',
+      shell: { openPath: vi.fn() }
+    })
+
+    await expect(service.checkForUpdates()).rejects.toThrow(/missing assets/i)
+  })
+
+  it('finds a newer release and stores it for installation', async () => {
+    const service = createGitHubManualUpdateService({
+      app: createApp(await mkdtemp(join(tmpdir(), 'mde-update-check-'))),
+      arch: 'x64',
+      fetch: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(releaseResponse), {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        })
+      ),
+      platform: 'darwin',
+      shell: {
+        openPath: vi.fn()
+      }
+    })
+
+    const result = await service.checkForUpdates()
+
+    expect(result.currentVersion).toBe('1.1.1')
+    expect(result.updateAvailable).toBe(true)
+    expect(result.update?.assetName).toBe('MDE-1.2.0-mac-x64.dmg')
+    expect(result.update?.latestVersion).toBe('1.2.0')
+  })
+
+  it('downloads the selected DMG, reports progress, and opens it', async () => {
+    const userDataPath = await mkdtemp(join(tmpdir(), 'mde-update-download-'))
+    const openPath = vi.fn().mockResolvedValue('')
+    const progress = vi.fn()
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(releaseResponse), {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3, 4]), {
+          headers: { 'content-length': '4' },
+          status: 200
+        })
+      )
+    const service = createGitHubManualUpdateService({
+      app: createApp(userDataPath),
+      arch: 'arm64',
+      fetch,
+      platform: 'darwin',
+      shell: { openPath }
+    })
+
+    await service.checkForUpdates()
+
+    await expect(service.downloadAndOpenUpdate(progress)).resolves.toEqual({
+      filePath: join(userDataPath, 'updates', 'MDE-1.2.0-mac-arm64.dmg'),
+      version: '1.2.0'
+    })
+    await expect(
+      readFile(join(userDataPath, 'updates', 'MDE-1.2.0-mac-arm64.dmg'))
+    ).resolves.toEqual(Buffer.from([1, 2, 3, 4]))
+    expect(progress).toHaveBeenLastCalledWith({
+      downloadedBytes: 4,
+      percent: 100,
+      totalBytes: 4
+    })
+    expect(openPath).toHaveBeenCalledWith(
+      join(userDataPath, 'updates', 'MDE-1.2.0-mac-arm64.dmg')
+    )
+  })
+
+  it('cleans up and reports download failures', async () => {
+    const userDataPath = await mkdtemp(join(tmpdir(), 'mde-update-failure-'))
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(releaseResponse), {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response('not found', {
+          status: 404
+        })
+      )
+    const service = createGitHubManualUpdateService({
+      app: createApp(userDataPath),
+      arch: 'arm64',
+      fetch,
+      platform: 'darwin',
+      shell: { openPath: vi.fn() }
+    })
+
+    await service.checkForUpdates()
+
+    await expect(service.downloadAndOpenUpdate()).rejects.toThrow(
+      /download failed/i
+    )
+  })
+
+  it('reports when macOS cannot open the downloaded DMG', async () => {
+    const userDataPath = await mkdtemp(join(tmpdir(), 'mde-update-open-error-'))
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(releaseResponse), {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1]), {
+          headers: { 'content-length': '1' },
+          status: 200
+        })
+      )
+    const service = createGitHubManualUpdateService({
+      app: createApp(userDataPath),
+      arch: 'arm64',
+      fetch,
+      platform: 'darwin',
+      shell: { openPath: vi.fn().mockResolvedValue('denied') }
+    })
+
+    await service.checkForUpdates()
+
+    await expect(service.downloadAndOpenUpdate()).rejects.toThrow(
+      /unable to open downloaded installer/i
+    )
+  })
+})
+
+describe('Windows auto update', () => {
+  it('checks, downloads, and installs through electron-updater IPC', async () => {
+    const listeners = new Map<string, (...args: readonly unknown[]) => void>()
+    const sender = { send: vi.fn() }
+    const { handlers, ipcMain } = createIpcMain()
     const autoUpdater = {
       autoDownload: false,
-      checkForUpdatesAndNotify: vi.fn(),
-      on: vi.fn()
+      checkForUpdates: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn((eventName: string, listener: (...args: readonly unknown[]) => void) => {
+        listeners.set(eventName, listener)
+      }),
+      quitAndInstall: vi.fn()
     }
 
     expect(
-      resolveAutoUpdater({
-        default: {
-          autoUpdater
-        }
+      configureAutoUpdates({
+        app: {
+          getPath: vi.fn(),
+          getVersion: vi.fn(() => '1.1.1'),
+          isPackaged: true,
+          whenReady: vi.fn().mockResolvedValue(undefined)
+        },
+        autoUpdater,
+        env: {},
+        ipcMain,
+        platform: 'win32',
+        shell: { openPath: vi.fn() }
       })
-    ).toBe(autoUpdater)
+    ).toBe(true)
+
+    expect(autoUpdater.autoDownload).toBe(true)
+    await expect(
+      handlers.get(UPDATE_CHANNELS.checkForUpdates)?.({ sender })
+    ).resolves.toEqual({
+      currentVersion: '1.1.1',
+      message: 'Checking for Windows updates.',
+      updateAvailable: false
+    })
+    expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    listeners.get('download-progress')?.({
+      percent: 50,
+      total: 100,
+      transferred: 50
+    })
+    expect(sender.send).toHaveBeenCalledWith(UPDATE_CHANNELS.downloadProgress, {
+      downloadedBytes: 50,
+      percent: 50,
+      totalBytes: 100
+    })
+
+    listeners.get('download-progress')?.({
+      total: 50,
+      transferred: 25
+    })
+    expect(sender.send).toHaveBeenCalledWith(UPDATE_CHANNELS.downloadProgress, {
+      downloadedBytes: 25,
+      percent: 50,
+      totalBytes: 50
+    })
+
+    listeners.get('update-available')?.({
+      releaseDate: '2026-04-29T09:11:32.622Z',
+      releaseName: 'MDE 1.2.0',
+      releaseNotes: [
+        {
+          note: 'Windows update notes',
+          version: '1.2.0'
+        }
+      ],
+      version: '1.2.0'
+    })
+    expect(sender.send).toHaveBeenCalledWith(
+      UPDATE_CHANNELS.updateAvailable,
+      expect.objectContaining({
+        installMode: 'restart-to-install',
+        latestVersion: '1.2.0',
+        releaseNotes: '1.2.0\nWindows update notes'
+      })
+    )
+
+    listeners.get('update-downloaded')?.({
+      releaseDate: '2026-04-29T09:11:32.622Z',
+      releaseName: 'MDE 1.2.0',
+      releaseNotes: 'Windows update',
+      version: '1.2.0'
+    })
+    expect(sender.send).toHaveBeenCalledWith(
+      UPDATE_CHANNELS.updateReady,
+      expect.objectContaining({
+        installMode: 'restart-to-install',
+        latestVersion: '1.2.0'
+      })
+    )
+
+    await handlers.get(UPDATE_CHANNELS.installWindows)?.({ sender })
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true)
   })
 
-  it('resolves electron-updater from named exports', () => {
-    const autoUpdater = {
-      autoDownload: false,
-      checkForUpdatesAndNotify: vi.fn(),
-      on: vi.fn()
-    }
-
-    expect(resolveAutoUpdater({ autoUpdater })).toBe(autoUpdater)
-  })
-
-  it('skips auto update setup when electron-updater is unavailable', () => {
+  it('registers disabled and unavailable Windows updater handlers', async () => {
+    const disabledIpc = createIpcMain()
+    const unavailableIpc = createIpcMain()
     const logger = {
       error: vi.fn(),
       info: vi.fn()
     }
 
-    const isConfigured = configureAutoUpdates({
-      app: {
-        isPackaged: true,
-        whenReady: vi.fn().mockResolvedValue(undefined)
-      },
-      autoUpdater: undefined,
-      env: {},
-      logger
+    expect(
+      configureAutoUpdates({
+        app: {
+          getPath: vi.fn(),
+          getVersion: vi.fn(() => '1.1.1'),
+          isPackaged: true
+        },
+        env: { MDE_DISABLE_AUTO_UPDATE: '1' },
+        ipcMain: disabledIpc.ipcMain,
+        platform: 'win32',
+        shell: { openPath: vi.fn() }
+      })
+    ).toBe(false)
+    await expect(
+      disabledIpc.handlers.get(UPDATE_CHANNELS.checkForUpdates)?.({
+        sender: { send: vi.fn() }
+      })
+    ).resolves.toEqual({
+      currentVersion: '1.1.1',
+      message: 'Update checks are disabled.',
+      updateAvailable: false
     })
+    expect(() =>
+      disabledIpc.handlers.get(UPDATE_CHANNELS.installWindows)?.({
+        sender: { send: vi.fn() }
+      })
+    ).toThrow(/unavailable/i)
 
-    expect(isConfigured).toBe(false)
-    expect(logger.error).toHaveBeenCalledWith('MDE auto updater is unavailable')
+    expect(
+      configureAutoUpdates({
+        app: {
+          getPath: vi.fn(),
+          getVersion: vi.fn(() => '1.1.1'),
+          isPackaged: true
+        },
+        env: {},
+        ipcMain: unavailableIpc.ipcMain,
+        logger,
+        platform: 'win32',
+        shell: { openPath: vi.fn() }
+      })
+    ).toBe(false)
+    expect(logger.error).toHaveBeenCalledWith(
+      'MDE Windows auto updater is unavailable'
+    )
+    await expect(
+      unavailableIpc.handlers.get(UPDATE_CHANNELS.checkForUpdates)?.({
+        sender: { send: vi.fn() }
+      })
+    ).resolves.toEqual({
+      currentVersion: '1.1.1',
+      message: 'Windows auto updater is unavailable.',
+      updateAvailable: false
+    })
   })
 
-  it('configures electron-updater to check GitHub releases', async () => {
-    const checkForUpdatesAndNotify = vi.fn().mockResolvedValue(undefined)
-    const on = vi.fn()
-    const app = {
-      isPackaged: true,
-      whenReady: vi.fn().mockResolvedValue(undefined)
-    }
-    const autoUpdater = {
-      autoDownload: false,
-      checkForUpdatesAndNotify,
-      on
+  it('registers macOS and unsupported platform fallback update handlers', async () => {
+    const macIpc = createIpcMain()
+    const linuxIpc = createIpcMain()
+    const logger = {
+      error: vi.fn(),
+      info: vi.fn()
     }
 
-    const isConfigured = configureAutoUpdates({
-      app,
-      autoUpdater,
-      env: {},
-      logger: {
-        error: vi.fn(),
-        info: vi.fn()
-      }
+    expect(
+      configureAutoUpdates({
+        app: createApp(await mkdtemp(join(tmpdir(), 'mde-config-mac-'))),
+        env: {},
+        ipcMain: macIpc.ipcMain,
+        logger,
+        platform: 'darwin'
+      })
+    ).toBe(false)
+    expect(logger.error).toHaveBeenCalledWith(
+      'MDE macOS update shell integration is unavailable'
+    )
+    expect(
+      macIpc.handlers.get(UPDATE_CHANNELS.checkForUpdates)?.({
+        sender: { send: vi.fn() }
+      })
+    ).toEqual({
+      currentVersion: '1.1.1',
+      message: 'Automatic updates are available on macOS and Windows only.',
+      updateAvailable: false
     })
 
-    await app.whenReady.mock.results[0].value
-    await Promise.resolve()
-
-    expect(isConfigured).toBe(true)
-    expect(autoUpdater.autoDownload).toBe(true)
-    expect(on).toHaveBeenCalledWith('error', expect.any(Function))
-    expect(checkForUpdatesAndNotify).toHaveBeenCalledTimes(1)
+    expect(
+      configureAutoUpdates({
+        app: createApp(await mkdtemp(join(tmpdir(), 'mde-config-linux-'))),
+        env: {},
+        ipcMain: linuxIpc.ipcMain,
+        platform: 'linux',
+        shell: { openPath: vi.fn() }
+      })
+    ).toBe(false)
+    expect(() =>
+      linuxIpc.handlers.get(UPDATE_CHANNELS.downloadAndOpen)?.({
+        sender: { send: vi.fn() }
+      })
+    ).toThrow(/macOS and Windows only/i)
   })
 })

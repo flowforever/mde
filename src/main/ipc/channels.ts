@@ -18,3 +18,12 @@ export const FILE_CHANNELS = Object.freeze({
   saveImageAsset: 'file:save-image-asset',
   writeMarkdownFile: 'file:write-markdown'
 })
+
+export const UPDATE_CHANNELS = Object.freeze({
+  checkForUpdates: 'update:check-for-updates',
+  downloadAndOpen: 'update:download-and-open',
+  downloadProgress: 'update:download-progress',
+  installWindows: 'update:install-windows',
+  updateAvailable: 'update:available',
+  updateReady: 'update:ready'
+})

@@ -26,19 +26,20 @@ If the user asks for an exact version, validate that it does not reuse an existi
 1. Inspect `git status`, current branch, recent commits, `package.json`, and existing local/remote tags.
 2. Compute the next version from the latest release tag unless the user supplied an exact version.
 3. Update `package.json` and `package-lock.json` to the same version.
-4. Confirm the GitHub repository has the macOS signing and notarization secrets required by `.github/workflows/release.yml`:
+4. Check whether the GitHub repository has optional macOS signing and notarization secrets configured:
    - `CSC_LINK`
    - `CSC_KEY_PASSWORD`
    - `APPLE_API_KEY_P8_BASE64`
    - `APPLE_API_KEY_ID`
    - `APPLE_API_ISSUER`
+   These are not required for the no-paid-account release path. When they are absent, macOS releases are unsigned DMG/ZIP artifacts and MDE opens the downloaded DMG so the user can drag `MDE.app` into Applications. Windows releases use the NSIS updater artifact from GitHub Releases.
 5. Create `.github/release-notes/vX.Y.Z.md` with complete notes:
    - Features
    - Bug Fixes
    - Breaking Changes
    - Maintenance
    - Verification
-   - Artifacts
+   - Artifacts for macOS and Windows
 6. Run verification for the changed surface:
    - Always run `npm run lint`, `npm run typecheck`, `npm run test:unit`, and `npm run test:integration`.
    - Run `npm run test:e2e` for feature or bug-fix runtime changes unless it already passed for the same code state and the user explicitly says not to repeat local E2E.
