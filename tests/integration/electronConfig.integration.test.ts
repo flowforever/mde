@@ -154,6 +154,7 @@ describe('Renderer security policy', () => {
     expect(html).toContain("default-src 'self'")
     expect(html).toContain("script-src 'self'")
     expect(html).toContain("style-src 'self' 'unsafe-inline'")
+    expect(html).toContain("img-src 'self' data: file:")
     expect(html).toContain("object-src 'none'")
   })
 })

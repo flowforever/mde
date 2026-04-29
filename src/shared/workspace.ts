@@ -18,6 +18,18 @@ export interface RenamedEntry {
   readonly path: string
 }
 
+export interface ImageAssetInput {
+  readonly contents: ArrayBuffer | Uint8Array
+  readonly fileName: string
+  readonly markdownFilePath: string
+  readonly mimeType: string
+}
+
+export interface ImageAsset {
+  readonly fileUrl: string
+  readonly markdownPath: string
+}
+
 export interface EditorApi {
   readonly consumeLaunchPath: () => Promise<string | null>
   readonly onLaunchPath: (callback: (resourcePath: string) => void) => () => void
@@ -36,6 +48,13 @@ export interface EditorApi {
     contents: string,
     workspaceRoot: string
   ) => Promise<FileContents>
+  readonly saveImageAsset: (
+    markdownFilePath: string,
+    fileName: string,
+    mimeType: string,
+    contents: ArrayBuffer,
+    workspaceRoot: string
+  ) => Promise<ImageAsset>
   readonly createMarkdownFile: (
     filePath: string,
     workspaceRoot: string

@@ -668,6 +668,80 @@ body.is-resizing-explorer {
   font-weight: 650;
 }
 
+.mermaid-flowchart-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0 4px;
+}
+
+.mermaid-flowchart-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #e5ded2;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.mermaid-flowchart-preview-shell {
+  min-width: 0;
+  overflow: auto;
+}
+
+.mermaid-flowchart-preview {
+  min-height: 180px;
+  min-width: 360px;
+  display: grid;
+  place-items: center;
+}
+
+.mermaid-flowchart-svg {
+  width: 100%;
+  min-width: 0;
+}
+
+.mermaid-flowchart-svg svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-flowchart-error {
+  margin: 0;
+  color: #a33a2f;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mermaid-flowchart-source-label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  color: #6f675d;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mermaid-flowchart-source {
+  min-height: 180px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #ded4c6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fbfaf7;
+  color: #211f1c;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+.mermaid-flowchart-source:focus {
+  border-color: #9c7f55;
+  outline: 3px solid rgba(156, 127, 85, 0.16);
+}
+
 .markdown-editor-surface {
   flex: 1;
   min-height: 0;
@@ -704,6 +778,10 @@ body.is-resizing-explorer {
 
   .editor-pane {
     padding: 28px 22px;
+  }
+
+  .mermaid-flowchart-card {
+    grid-template-columns: 1fr;
   }
 
   .workspace-primary-actions,

@@ -34,6 +34,14 @@ const assertStringInput = (value: unknown, name: string): string => {
   return value
 }
 
+const assertArrayBufferInput = (value: unknown, name: string): ArrayBuffer => {
+  if (!(value instanceof ArrayBuffer)) {
+    throw new Error(`${name} must be binary data`)
+  }
+
+  return value
+}
+
 export const registerFileHandlers = ({
   getActiveWorkspaceRoot,
   ipcMain,
@@ -61,6 +69,33 @@ export const registerFileHandlers = ({
         ),
         assertStringInput(filePath, 'File path'),
         assertStringInput(contents, 'File contents')
+      )
+  )
+
+  ipcMain.handle(
+    FILE_CHANNELS.saveImageAsset,
+    async (
+      _event,
+      markdownFilePath,
+      fileName,
+      mimeType,
+      contents,
+      workspaceRoot
+    ) =>
+      markdownFileService.saveImageAsset(
+        getRequiredWorkspaceRoot(
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        {
+          contents: assertArrayBufferInput(contents, 'Image contents'),
+          fileName: assertStringInput(fileName, 'File name'),
+          markdownFilePath: assertStringInput(
+            markdownFilePath,
+            'Markdown file path'
+          ),
+          mimeType: assertStringInput(mimeType, 'MIME type')
+        }
       )
   )
 

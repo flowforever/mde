@@ -387,8 +387,8 @@ export const App = (): React.JSX.Element => {
 
         const contents =
           serializedMarkdown ??
-          (await editorRef.current?.getMarkdown()) ??
           state.draftMarkdown ??
+          (await editorRef.current?.getMarkdown()) ??
           loadedFile.contents
 
         await window.editorApi.writeMarkdownFile(
@@ -412,6 +412,34 @@ export const App = (): React.JSX.Element => {
       }
     },
     [state.draftMarkdown, state.loadedFile, state.workspace?.rootPath]
+  )
+
+  const uploadImageAsset = useCallback(
+    async (file: File): Promise<string> => {
+      const loadedFilePath = state.loadedFile?.path
+      const workspaceRoot = state.workspace?.rootPath
+
+      if (!loadedFilePath || !workspaceRoot) {
+        throw new Error('Open a Markdown file before pasting images')
+      }
+
+      if (!window.editorApi) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      const result = await window.editorApi.saveImageAsset(
+        loadedFilePath,
+        file.name,
+        file.type,
+        await file.arrayBuffer(),
+        workspaceRoot
+      )
+
+      await refreshWorkspaceTree(workspaceRoot)
+
+      return result.fileUrl
+    },
+    [refreshWorkspaceTree, state.loadedFile?.path, state.workspace?.rootPath]
   )
 
   useEffect(() => {
@@ -685,10 +713,12 @@ export const App = (): React.JSX.Element => {
         {state.loadedFile ? (
           <MarkdownBlockEditor
             key={`${state.workspace?.rootPath ?? ''}:${state.loadedFile.path}`}
+            draftMarkdown={state.draftMarkdown ?? state.loadedFile.contents}
             errorMessage={state.fileErrorMessage}
             isDirty={state.isDirty}
             isSaving={state.isSavingFile}
             markdown={state.loadedFile.contents}
+            onImageUpload={uploadImageAsset}
             onMarkdownChange={(contents) => {
               const workspaceRoot = state.workspace?.rootPath
 
@@ -706,6 +736,7 @@ export const App = (): React.JSX.Element => {
             onSaveRequest={saveCurrentFile}
             path={state.loadedFile.path}
             ref={editorRef}
+            workspaceRoot={state.workspace?.rootPath ?? ''}
           />
         ) : (
           <div className="editor-empty-state">

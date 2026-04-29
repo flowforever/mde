@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
@@ -378,6 +378,89 @@ test('loads README markdown into the block editor surface', async () => {
     await expect(editor).toBeVisible()
     await expect(editor).toContainText('Fixture Workspace')
     await expect(editor).toContainText('Root markdown file.')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('renders Mermaid flowcharts and saves pasted images beside the Markdown file', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const diagramPath = join(workspacePath, 'docs', 'diagram.md')
+
+  await writeFile(
+    diagramPath,
+    [
+      '## End-to-End Flow',
+      '',
+      '```mermaid',
+      'flowchart TD',
+      '  S[Start] --> D[Done]',
+      '```'
+    ].join('\n')
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /expand docs/i }).click()
+    await window
+      .getByRole('button', { name: /diagram\.md Markdown file/i })
+      .click()
+
+    const preview = window.getByTestId('mermaid-flowchart-preview-0')
+
+    await expect(preview.locator('svg')).toBeVisible({ timeout: 15_000 })
+
+    await window
+      .getByLabel(/mermaid source 1/i)
+      .fill('flowchart LR\n  S[Start] --> R[Review]\n  R --> D[Done]')
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+    await expect
+      .poll(async () => readFile(diagramPath, 'utf8'), { timeout: 5000 })
+      .toContain('R[Review]')
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+    const pngBytes = [
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+      1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68,
+      65, 84, 120, 156, 99, 248, 255, 255, 63, 0, 5, 254, 2, 254, 167, 53,
+      129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+    ]
+
+    await editableDocument.click()
+    await editableDocument.evaluate((element, bytes) => {
+      const file = new File([new Uint8Array(bytes)], 'clipboard.png', {
+        type: 'image/png'
+      })
+      const dataTransfer = new DataTransfer()
+
+      dataTransfer.items.add(file)
+      element.dispatchEvent(
+        new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dataTransfer
+        })
+      )
+    }, pngBytes)
+
+    await expect
+      .poll(
+        async () =>
+          readdir(join(workspacePath, 'docs', '.mde', 'assets')).catch(() => []),
+        { timeout: 10_000 }
+      )
+      .toContainEqual(expect.stringMatching(/^image-.+\.png$/))
+    await expect
+      .poll(async () => readFile(diagramPath, 'utf8'), { timeout: 10_000 })
+      .toContain('.mde/assets/image-')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

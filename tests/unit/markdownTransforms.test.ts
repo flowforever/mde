@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
+  prepareMarkdownForEditor,
+  prepareMarkdownForStorage,
   type MarkdownBlockEditorAdapter
 } from '../../src/renderer/src/editor/markdownTransforms'
 
@@ -67,5 +69,31 @@ describe('markdownTransforms', () => {
     expect(result).toContain('- Bullet item')
     expect(result).toContain('> Quoted text')
     expect(result).toContain('```ts')
+  })
+
+  it('resolves local image asset paths to file URLs for editor preview', () => {
+    const result = prepareMarkdownForEditor(
+      '![Screenshot](.mde/assets/screenshot.png)',
+      {
+        markdownFilePath: 'docs/README.md',
+        workspaceRoot: '/Users/test/workspace'
+      }
+    )
+
+    expect(result).toBe(
+      '![Screenshot](file:///Users/test/workspace/docs/.mde/assets/screenshot.png)'
+    )
+  })
+
+  it('keeps stored Markdown portable by converting file URLs back to sibling asset paths', () => {
+    const result = prepareMarkdownForStorage(
+      '![Screenshot](file:///Users/test/workspace/docs/.mde/assets/screenshot.png)',
+      {
+        markdownFilePath: 'docs/README.md',
+        workspaceRoot: '/Users/test/workspace'
+      }
+    )
+
+    expect(result).toBe('![Screenshot](.mde/assets/screenshot.png)')
   })
 })

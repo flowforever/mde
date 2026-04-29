@@ -1,5 +1,6 @@
 import {
   link,
+  mkdir,
   mkdtemp,
   readFile,
   rm,
@@ -287,6 +288,34 @@ describe('fileHandlers integration', () => {
     await expect(readFile(join(workspacePath, 'README.md'), 'utf8')).resolves.toBe(
       '# Edited\n\nSaved from integration.\n'
     )
+  })
+
+  it('saves pasted image assets through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+
+    await mkdir(join(workspacePath, 'docs'))
+    await writeFile(join(workspacePath, 'docs', 'README.md'), '# Workspace')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    const result = (await handlers
+      .get(FILE_CHANNELS.saveImageAsset)
+      ?.(
+        {},
+        'docs/README.md',
+        'clipboard.png',
+        'image/png',
+        new Uint8Array([137, 80, 78, 71]).buffer,
+        workspace.rootPath
+      )) as { fileUrl: string; markdownPath: string }
+
+    expect(result.markdownPath).toMatch(/^\.mde\/assets\/image-.+\.png$/)
+    expect(result.fileUrl).toContain('/docs/.mde/assets/image-')
+    await expect(
+      readFile(join(workspacePath, 'docs', result.markdownPath))
+    ).resolves.toEqual(Buffer.from([137, 80, 78, 71]))
   })
 
   it('creates a Markdown file through the file IPC handler', async () => {

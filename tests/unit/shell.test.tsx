@@ -137,6 +137,7 @@ describe('App shell', () => {
         path: 'API.md'
       }),
       renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
       writeMarkdownFile: vi.fn()
     } satisfies EditorApi
 
@@ -188,6 +189,7 @@ describe('App shell', () => {
       }),
       readMarkdownFile: vi.fn(),
       renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
       writeMarkdownFile: vi.fn()
     } satisfies EditorApi
 
@@ -253,6 +255,7 @@ describe('App shell', () => {
         path: 'API.md'
       }),
       renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
       writeMarkdownFile: vi.fn()
     } satisfies EditorApi
 
@@ -376,6 +379,7 @@ describe('App shell', () => {
         path: 'API.md'
       }),
       renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
       writeMarkdownFile: vi.fn()
     } satisfies EditorApi
 
@@ -422,6 +426,7 @@ describe('App shell', () => {
         path: 'README.md'
       }),
       renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
       writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
     } satisfies EditorApi
 

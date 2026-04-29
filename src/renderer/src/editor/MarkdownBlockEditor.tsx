@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState
 } from 'react'
@@ -13,16 +14,26 @@ import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useCreateBlockNote } from '@blocknote/react'
 
-import { exportBlocksToMarkdown, importMarkdownToBlocks } from './markdownTransforms'
+import { replaceMermaidBlocksFromSource } from './flowchartMarkdown'
+import { MermaidFlowchartPanel } from './MermaidFlowchartPanel'
+import {
+  exportBlocksToMarkdown,
+  importMarkdownToBlocks,
+  prepareMarkdownForEditor,
+  prepareMarkdownForStorage
+} from './markdownTransforms'
 
 interface MarkdownBlockEditorProps {
+  readonly draftMarkdown: string
   readonly errorMessage: string | null
   readonly isDirty: boolean
   readonly isSaving: boolean
   readonly markdown: string
+  readonly onImageUpload: (file: File) => Promise<string>
   readonly onMarkdownChange: (contents: string) => void
   readonly onSaveRequest: (contents: string) => void | Promise<void>
   readonly path: string
+  readonly workspaceRoot: string
 }
 
 export interface MarkdownBlockEditorHandle {
@@ -38,26 +49,53 @@ export const MarkdownBlockEditor = forwardRef<
 >(function MarkdownBlockEditor(
   {
     errorMessage,
+    draftMarkdown,
     isDirty,
     isSaving,
     markdown,
+    onImageUpload,
     onMarkdownChange,
     onSaveRequest,
-    path
+    path,
+    workspaceRoot
   },
   ref
 ): React.JSX.Element {
-  const editor = useCreateBlockNote()
+  const editor = useCreateBlockNote(
+    {
+      uploadFile: onImageUpload
+    },
+    [onImageUpload]
+  )
   const isHydratingRef = useRef(false)
   const hasLocalChangesRef = useRef(false)
   const [parseErrorMessage, setParseErrorMessage] = useState<string | null>(null)
   const [serializationErrorMessage, setSerializationErrorMessage] = useState<
     string | null
   >(null)
+  const assetContext = useMemo(
+    () => ({
+      markdownFilePath: path,
+      workspaceRoot
+    }),
+    [path, workspaceRoot]
+  )
+  const editorMarkdown = useMemo(
+    () => prepareMarkdownForEditor(markdown, assetContext),
+    [assetContext, markdown]
+  )
 
   const serializeMarkdown = useCallback(
-    async (): Promise<string> => exportBlocksToMarkdown(editor, editor.document),
-    [editor]
+    async (): Promise<string> => {
+      const exportedMarkdown = await exportBlocksToMarkdown(editor, editor.document)
+      const portableMarkdown = prepareMarkdownForStorage(
+        exportedMarkdown,
+        assetContext
+      )
+
+      return replaceMermaidBlocksFromSource(portableMarkdown, draftMarkdown)
+    },
+    [assetContext, draftMarkdown, editor]
   )
 
   useImperativeHandle(
@@ -73,7 +111,7 @@ export const MarkdownBlockEditor = forwardRef<
 
     const loadMarkdown = async (): Promise<void> => {
       try {
-        const blocks = await importMarkdownToBlocks(editor, markdown)
+        const blocks = await importMarkdownToBlocks(editor, editorMarkdown)
 
         if (!isCurrent) {
           return
@@ -104,21 +142,21 @@ export const MarkdownBlockEditor = forwardRef<
       isCurrent = false
       isHydratingRef.current = false
     }
-  }, [editor, markdown])
+  }, [editor, editorMarkdown])
 
   useEffect(() => {
     hasLocalChangesRef.current = false
-  }, [markdown, path])
+  }, [markdown, path, workspaceRoot])
 
   const saveMarkdown = useCallback(async (): Promise<void> => {
-    if (isSaving || (!isDirty && !hasLocalChangesRef.current)) {
+    if (isSaving || !hasLocalChangesRef.current) {
       return
     }
 
     try {
       const contents = await serializeMarkdown()
 
-      if (!isDirty && contents === markdown) {
+      if (contents === markdown) {
         hasLocalChangesRef.current = false
         return
       }
@@ -131,7 +169,7 @@ export const MarkdownBlockEditor = forwardRef<
         getErrorMessage(error, 'Unable to serialize Markdown')
       )
     }
-  }, [isDirty, isSaving, markdown, onSaveRequest, serializeMarkdown])
+  }, [isSaving, markdown, onSaveRequest, serializeMarkdown])
 
   const saveMarkdownOnBlur = useCallback(
     (event: ReactFocusEvent<HTMLDivElement>): void => {
@@ -192,6 +230,10 @@ export const MarkdownBlockEditor = forwardRef<
           {errorMessage}
         </p>
       ) : null}
+      <MermaidFlowchartPanel
+        markdown={draftMarkdown}
+        onMarkdownChange={onMarkdownChange}
+      />
       <BlockNoteView
         className="markdown-editor-surface"
         data-testid="blocknote-view"
@@ -205,8 +247,15 @@ export const MarkdownBlockEditor = forwardRef<
           hasLocalChangesRef.current = true
           void exportBlocksToMarkdown(changedEditor, changedEditor.document)
             .then((contents) => {
+              const portableContents = prepareMarkdownForStorage(
+                contents,
+                assetContext
+              )
+
               setSerializationErrorMessage(null)
-              onMarkdownChange(contents)
+              onMarkdownChange(
+                replaceMermaidBlocksFromSource(portableContents, draftMarkdown)
+              )
             })
             .catch((error: unknown) => {
               setSerializationErrorMessage(

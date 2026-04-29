@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   lstat,
   mkdir,
@@ -9,9 +10,15 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises'
-import { dirname, extname, join, relative, sep } from 'node:path'
+import { dirname, extname, join, posix, relative, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
-import type { FileContents, RenamedEntry } from '../../shared/workspace'
+import type {
+  FileContents,
+  ImageAsset,
+  ImageAssetInput,
+  RenamedEntry
+} from '../../shared/workspace'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 
 const ignoredEntryNames = new Set([
@@ -33,6 +40,10 @@ export interface MarkdownFileService {
     filePath: string,
     contents: string
   ) => Promise<FileContents>
+  readonly saveImageAsset: (
+    workspacePath: string,
+    asset: ImageAssetInput
+  ) => Promise<ImageAsset>
   readonly createMarkdownFile: (
     workspacePath: string,
     filePath: string,
@@ -49,6 +60,15 @@ export interface MarkdownFileService {
 
 const isMarkdownPath = (filePath: string): boolean =>
   extname(filePath).toLowerCase() === '.md'
+
+const supportedImageMimeTypes = new Map([
+  ['image/gif', '.gif'],
+  ['image/jpeg', '.jpg'],
+  ['image/png', '.png'],
+  ['image/webp', '.webp']
+])
+
+const supportedImageExtensions = new Set(supportedImageMimeTypes.values())
 
 const isErrorWithCode = (
   error: unknown,
@@ -109,6 +129,54 @@ const assertSupportedMarkdownFileStats = (
     throw new Error('Hard-linked Markdown files are unsupported')
   }
 }
+
+const getSupportedImageExtension = ({
+  fileName,
+  mimeType
+}: Pick<ImageAssetInput, 'fileName' | 'mimeType'>): string => {
+  const normalizedMimeType = mimeType.toLowerCase().split(';')[0].trim()
+
+  if (normalizedMimeType.length > 0 && !normalizedMimeType.startsWith('image/')) {
+    throw new Error('Only image clipboard content can be saved')
+  }
+
+  const mimeExtension = supportedImageMimeTypes.get(normalizedMimeType)
+
+  if (mimeExtension) {
+    return mimeExtension
+  }
+
+  const fileExtension = extname(fileName).toLowerCase()
+
+  if (supportedImageExtensions.has(fileExtension)) {
+    return fileExtension
+  }
+
+  throw new Error('Unsupported image type')
+}
+
+const toBuffer = (contents: ImageAssetInput['contents']): Buffer =>
+  contents instanceof Uint8Array
+    ? Buffer.from(contents.buffer, contents.byteOffset, contents.byteLength)
+    : Buffer.from(contents)
+
+const createImageAssetFileName = (fileExtension: string): string =>
+  `image-${Date.now()}-${randomUUID().slice(0, 8)}${fileExtension}`
+
+const getParentWorkspacePath = (filePath: string): string => {
+  const normalizedPath = filePath.replaceAll('\\', '/')
+  const separatorIndex = normalizedPath.lastIndexOf('/')
+
+  return separatorIndex === -1 ? '' : normalizedPath.slice(0, separatorIndex)
+}
+
+const joinWorkspacePath = (...segments: readonly string[]): string =>
+  segments
+    .filter((segment) => segment.length > 0)
+    .join('/')
+
+const isSupportedImageAssetPath = (entryPath: string): boolean =>
+  supportedImageExtensions.has(extname(entryPath).toLowerCase())
 
 const assertNoSymlinkPathComponents = async (
   workspacePath: string,
@@ -215,7 +283,10 @@ const assertManageableDirectoryContents = async (
         return
       }
 
-      if (entryStats.isFile() && isMarkdownPath(entry.name)) {
+      if (
+        entryStats.isFile() &&
+        (isMarkdownPath(entry.name) || isSupportedImageAssetPath(entry.name))
+      ) {
         assertSupportedMarkdownFileStats(await stat(entryPath))
         return
       }
@@ -303,6 +374,35 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
     return Object.freeze({
       contents,
       path: filePath
+    })
+  },
+  async saveImageAsset(workspacePath, asset) {
+    const absoluteMarkdownFilePath = await resolveMutableMarkdownFile(
+      workspacePath,
+      asset.markdownFilePath
+    )
+    const fileExtension = getSupportedImageExtension(asset)
+    const assetFileName = createImageAssetFileName(fileExtension)
+    const markdownPath = posix.join('.mde', 'assets', assetFileName)
+    const markdownDirectoryPath = getParentWorkspacePath(asset.markdownFilePath)
+    const workspaceAssetPath = joinWorkspacePath(
+      markdownDirectoryPath,
+      markdownPath
+    )
+    const absoluteAssetPath = await prepareMutableNewPath(
+      workspacePath,
+      workspaceAssetPath
+    )
+
+    assertPathInsideWorkspace(dirname(absoluteMarkdownFilePath), absoluteAssetPath)
+    await assertPathDoesNotExist(absoluteAssetPath)
+    await writeFile(absoluteAssetPath, toBuffer(asset.contents), {
+      flag: 'wx'
+    })
+
+    return Object.freeze({
+      fileUrl: pathToFileURL(absoluteAssetPath).href,
+      markdownPath
     })
   },
   async createMarkdownFile(workspacePath, filePath, contents = '') {

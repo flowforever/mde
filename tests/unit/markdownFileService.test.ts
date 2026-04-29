@@ -124,6 +124,62 @@ describe('markdownFileService', () => {
     )
   })
 
+  it('saves pasted images beside the Markdown file under .mde/assets', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+
+    await mkdir(join(rootPath, 'docs'))
+    await writeFile(join(rootPath, 'docs', 'intro.md'), '# Intro')
+
+    const result = await createMarkdownFileService().saveImageAsset(rootPath, {
+      contents: new Uint8Array([137, 80, 78, 71]),
+      fileName: 'clipboard.png',
+      markdownFilePath: 'docs/intro.md',
+      mimeType: 'image/png'
+    })
+
+    expect(result.markdownPath).toMatch(/^\.mde\/assets\/image-.+\.png$/)
+    expect(result.fileUrl).toContain('/docs/.mde/assets/image-')
+    await expect(
+      readFile(join(rootPath, 'docs', result.markdownPath))
+    ).resolves.toEqual(Buffer.from([137, 80, 78, 71]))
+  })
+
+  it('rejects non-image assets before writing clipboard content', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+
+    await writeFile(join(rootPath, 'README.md'), '# Readme')
+
+    await expect(
+      createMarkdownFileService().saveImageAsset(rootPath, {
+        contents: new Uint8Array([1, 2, 3]),
+        fileName: 'notes.txt',
+        markdownFilePath: 'README.md',
+        mimeType: 'text/plain'
+      })
+    ).rejects.toThrow(/image/i)
+    await expect(stat(join(rootPath, '.mde'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
+  it('rejects image asset writes through symlinked asset directories', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-assets-outside-'))
+
+    await writeFile(join(rootPath, 'README.md'), '# Readme')
+    await mkdir(join(rootPath, '.mde'))
+    await symlink(outsidePath, join(rootPath, '.mde', 'assets'))
+
+    await expect(
+      createMarkdownFileService().saveImageAsset(rootPath, {
+        contents: new Uint8Array([137, 80, 78, 71]),
+        fileName: 'clipboard.png',
+        markdownFilePath: 'README.md',
+        mimeType: 'image/png'
+      })
+    ).rejects.toThrow(/symlink/i)
+  })
+
   it('rejects writes to non-Markdown files inside the workspace', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
