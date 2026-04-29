@@ -8,7 +8,7 @@ import {
 } from '../../src/main/services/pathSafety'
 
 describe('pathSafety', () => {
-  const workspacePath = resolve('/tmp/mdv-workspace')
+  const workspacePath = resolve('/tmp/mde-workspace')
 
   it('accepts paths inside the workspace', () => {
     const filePath = join(workspacePath, 'docs', 'intro.md')

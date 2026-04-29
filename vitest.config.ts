@@ -6,6 +6,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
+        'src/main/autoUpdate.ts',
         'src/main/ipc/**/*.ts',
         'src/main/services/**/*.ts',
         'src/renderer/src/app/appReducer.ts',

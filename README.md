@@ -1,6 +1,6 @@
-# MDV
+# MDE
 
-MDV is an Electron Markdown editor with a local-folder explorer and a BlockNote-powered editing surface.
+MDE is an Electron Markdown editor with a local-folder explorer and a BlockNote-powered editing surface.
 
 ## Install
 
@@ -34,4 +34,4 @@ npm run test
 
 ## v1 Limitation
 
-MDV stores files as Markdown. The current BlockNote-to-Markdown conversion is intentionally Markdown-compatible and may be lossy for future rich blocks that do not map cleanly to Markdown syntax.
+MDE stores files as Markdown. The current BlockNote-to-Markdown conversion is intentionally Markdown-compatible and may be lossy for future rich blocks that do not map cleanly to Markdown syntax.

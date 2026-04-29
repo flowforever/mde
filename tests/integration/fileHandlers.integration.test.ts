@@ -98,8 +98,8 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects Markdown symlinks that resolve outside the active workspace', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     const outsideFilePath = join(outsidePath, 'outside.md')
 
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
@@ -120,7 +120,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects Markdown symlinks that resolve to non-Markdown files inside the active workspace', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
 
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
     await writeFile(join(workspacePath, 'secret.txt'), 'plain text')
@@ -140,10 +140,10 @@ describe('fileHandlers integration', () => {
   })
 
   it('keeps file reads pinned to the canonical workspace root after an opened symlink is retargeted', async () => {
-    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
-    const retargetedWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-retargeted-'))
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
+    const retargetedWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-retargeted-'))
     const workspaceLinkPath = join(
-      await mkdtemp(join(tmpdir(), 'mdv-link-parent-')),
+      await mkdtemp(join(tmpdir(), 'mde-link-parent-')),
       'workspace-link'
     )
 
@@ -170,8 +170,8 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects Markdown hard links before reading through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     const outsideFilePath = join(outsidePath, 'outside.md')
 
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
@@ -192,8 +192,8 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects Markdown hard links before writing through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     const outsideFilePath = join(outsidePath, 'outside.md')
 
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
@@ -215,8 +215,8 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects stale writes when the expected workspace is no longer active', async () => {
-    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
-    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-active-'))
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -244,8 +244,8 @@ describe('fileHandlers integration', () => {
   })
 
   it('rejects stale destructive operations when the expected workspace is no longer active', async () => {
-    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
-    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-active-'))
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -273,7 +273,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('saves edited Markdown through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     await writeFile(join(workspacePath, 'README.md'), '# Original\n')
     const { handlers } = registerHandlers(workspacePath)
 
@@ -290,7 +290,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('creates a Markdown file through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
     const { handlers } = registerHandlers(workspacePath)
 
@@ -311,7 +311,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('creates a folder through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     await writeFile(join(workspacePath, 'README.md'), '# Workspace')
     const { handlers } = registerHandlers(workspacePath)
 
@@ -326,7 +326,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('renames an entry through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     await writeFile(join(workspacePath, 'draft.md'), '# Draft')
     const { handlers } = registerHandlers(workspacePath)
 
@@ -347,7 +347,7 @@ describe('fileHandlers integration', () => {
   })
 
   it('deletes an entry through the file IPC handler', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     await writeFile(join(workspacePath, 'old.md'), '# Old')
     const { handlers } = registerHandlers(workspacePath)
 

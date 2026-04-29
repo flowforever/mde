@@ -10,6 +10,6 @@ export interface ExplorerTreeProps {
   readonly selectedEntryPath: string | null
   readonly selectedFilePath: string | null
   readonly onOpenEntryMenu?: (request: ExplorerContextMenuRequest) => void
-  readonly onSelectEntry: (entryPath: string) => void
+  readonly onSelectEntry: (entryPath: string | null) => void
   readonly onSelectFile: (filePath: string) => void
 }

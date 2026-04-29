@@ -9,19 +9,19 @@ describe('App shell', () => {
   afterEach(() => {
     cleanup()
     localStorage.clear()
+    document.title = 'MDE'
     Reflect.deleteProperty(window, 'editorApi')
   })
 
-  it('opens a centered workspace popup from the initial action', async () => {
-    const user = userEvent.setup()
-
+  it('opens a centered workspace popup on initial empty launch', () => {
     render(<App />)
-
-    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
 
     expect(
       screen.getByRole('dialog', { name: /workspace manager/i })
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /^open workspace$/i })
+    ).toBeVisible()
     expect(
       screen.getByRole('button', { name: /open new workspace/i })
     ).toBeInTheDocument()
@@ -32,6 +32,24 @@ describe('App shell', () => {
       screen.getByRole('searchbox', { name: /search workspaces and files/i })
     ).toBeInTheDocument()
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('reopens the initial workspace popup from the trigger after dismissal', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /close workspace popup/i }))
+
+    expect(
+      screen.queryByRole('dialog', { name: /workspace manager/i })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
+
+    expect(
+      screen.getByRole('dialog', { name: /workspace manager/i })
+    ).toBeInTheDocument()
   })
 
   it('keeps initial empty states visible by text', () => {
@@ -49,7 +67,6 @@ describe('App shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
     await user.click(screen.getByRole('button', { name: /open new workspace/i }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(/editor api unavailable/i)
@@ -101,6 +118,12 @@ describe('App shell', () => {
     expect(
       await screen.findByRole('button', { name: /manage workspaces/i })
     ).toHaveTextContent('API.md')
+    await waitFor(() => {
+      expect(document.title).toBe('API.md - /notes')
+    })
+    expect(
+      screen.queryByRole('dialog', { name: /workspace manager/i })
+    ).not.toBeInTheDocument()
   })
 
   it('switches to a remembered workspace from the workspace menu', async () => {
@@ -114,7 +137,11 @@ describe('App shell', () => {
       onLaunchPath: vi.fn(() => vi.fn()),
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
-      openPath: vi.fn(),
+      openPath: vi.fn().mockRejectedValue(
+        new Error(
+          "Error invoking remote method 'workspace:open-path': Error: No handler registered for 'workspace:open-path'"
+        )
+      ),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
         name: 'Second Workspace',
@@ -132,7 +159,7 @@ describe('App shell', () => {
       value: editorApi
     })
     localStorage.setItem(
-      'mdv.recentWorkspaces',
+      'mde.recentWorkspaces',
       JSON.stringify([
         {
           name: 'Second Workspace',
@@ -144,7 +171,7 @@ describe('App shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
+    await screen.findByRole('dialog', { name: /workspace manager/i })
     await user.click(
       screen.getByRole('button', {
         name: /switch to workspace Second Workspace/i
@@ -152,16 +179,86 @@ describe('App shell', () => {
     )
 
     expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspaces/second')
+    expect(editorApi.openPath).not.toHaveBeenCalled()
     expect(
       await screen.findByRole('button', { name: /manage workspaces/i })
     ).toHaveTextContent('Second Workspace')
+    expect(document.title).toBe('/workspaces/second')
+  })
+
+  it('switches to a remembered file from the workspace menu without generic openPath IPC', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn().mockResolvedValue({
+        filePath: '/notes/API.md',
+        name: 'API.md',
+        openedFilePath: 'API.md',
+        rootPath: '/notes',
+        tree: [{ name: 'API.md', path: 'API.md', type: 'file' }],
+        type: 'file'
+      }),
+      openPath: vi.fn().mockRejectedValue(
+        new Error(
+          "Error invoking remote method 'workspace:open-path': Error: No handler registered for 'workspace:open-path'"
+        )
+      ),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# API',
+        path: 'API.md'
+      }),
+      renameEntry: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      'mde.recentWorkspaces',
+      JSON.stringify([
+        {
+          filePath: '/notes/API.md',
+          name: 'API.md',
+          openedFilePath: 'API.md',
+          rootPath: '/notes',
+          type: 'file'
+        }
+      ])
+    )
+
+    render(<App />)
+
+    await screen.findByRole('dialog', { name: /workspace manager/i })
+    await user.click(
+      screen.getByRole('button', {
+        name: /switch to file API\.md/i
+      })
+    )
+
+    expect(editorApi.openFileByPath).toHaveBeenCalledWith('/notes/API.md')
+    expect(editorApi.openPath).not.toHaveBeenCalled()
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith('API.md', '/notes')
+    expect(
+      await screen.findByRole('button', { name: /manage workspaces/i })
+    ).toHaveTextContent('API.md')
+    expect(document.title).toBe('API.md - /notes')
   })
 
   it('searches and forgets remembered workspace resources in the popup', async () => {
     const user = userEvent.setup()
 
     localStorage.setItem(
-      'mdv.recentWorkspaces',
+      'mde.recentWorkspaces',
       JSON.stringify([
         ...Array.from({ length: 12 }, (_, index) => ({
           name: `Workspace ${index + 1}`,
@@ -180,7 +277,7 @@ describe('App shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
+    await screen.findByRole('dialog', { name: /workspace manager/i })
     await user.type(
       screen.getByRole('searchbox', { name: /search workspaces and files/i }),
       'api'
@@ -200,7 +297,7 @@ describe('App shell', () => {
     expect(
       screen.queryByRole('button', { name: /switch to file API\.md/i })
     ).not.toBeInTheDocument()
-    expect(localStorage.getItem('mdv.recentWorkspaces')).not.toContain('API.md')
+    expect(localStorage.getItem('mde.recentWorkspaces')).not.toContain('API.md')
   })
 
   it('opens a standalone markdown file and remembers it from the popup', async () => {
@@ -252,7 +349,7 @@ describe('App shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
+    await screen.findByRole('dialog', { name: /workspace manager/i })
     await user.click(screen.getByRole('button', { name: /open markdown file/i }))
 
     expect(editorApi.openFile).toHaveBeenCalledTimes(1)
@@ -260,7 +357,7 @@ describe('App shell', () => {
     expect(
       await screen.findByRole('button', { name: /manage workspaces/i })
     ).toHaveTextContent('API.md')
-    expect(localStorage.getItem('mdv.recentWorkspaces')).toContain('"type":"file"')
+    expect(localStorage.getItem('mde.recentWorkspaces')).toContain('"type":"file"')
   })
 
   it('resizes the explorer sidebar from the drag separator', () => {

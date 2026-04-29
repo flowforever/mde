@@ -11,6 +11,7 @@ import type { RecentWorkspace } from '../../src/renderer/src/workspaces/recentWo
 describe('ExplorerTree', () => {
   afterEach(() => {
     cleanup()
+    localStorage.clear()
   })
 
   const tree: readonly TreeNode[] = Object.freeze([
@@ -37,6 +38,36 @@ describe('ExplorerTree', () => {
           type: 'file'
         }
       ])
+    },
+    {
+      name: 'README.md',
+      path: 'README.md',
+      type: 'file'
+    }
+  ])
+  const treeWithHiddenEntries: readonly TreeNode[] = Object.freeze([
+    {
+      name: '.vscode',
+      path: '.vscode',
+      type: 'directory',
+      children: Object.freeze<TreeNode[]>([
+        {
+          name: 'settings.md',
+          path: '.vscode/settings.md',
+          type: 'file'
+        }
+      ])
+    },
+    {
+      name: 'docs',
+      path: 'docs',
+      type: 'directory',
+      children: Object.freeze<TreeNode[]>([])
+    },
+    {
+      name: '.draft.md',
+      path: '.draft.md',
+      type: 'file'
     },
     {
       name: 'README.md',
@@ -74,11 +105,12 @@ describe('ExplorerTree', () => {
 
   it('toggles a directory from the visible row button with expanded state', async () => {
     const user = userEvent.setup()
+    const onSelectEntry = vi.fn()
 
-    render(
+    const { rerender } = render(
       <ExplorerTree
         nodes={tree}
-        onSelectEntry={vi.fn()}
+        onSelectEntry={onSelectEntry}
         onSelectFile={vi.fn()}
         selectedEntryPath={null}
         selectedFilePath={null}
@@ -91,13 +123,24 @@ describe('ExplorerTree', () => {
 
     await user.click(docsRow)
 
+    expect(onSelectEntry).toHaveBeenLastCalledWith('docs')
     expect(docsRow).toHaveAttribute('aria-expanded', 'true')
     expect(
       screen.getByRole('button', { name: /intro\.md Markdown file/i })
     ).toBeInTheDocument()
 
+    rerender(
+      <ExplorerTree
+        nodes={tree}
+        onSelectEntry={onSelectEntry}
+        onSelectFile={vi.fn()}
+        selectedEntryPath="docs"
+        selectedFilePath={null}
+      />
+    )
     await user.click(docsRow)
 
+    expect(onSelectEntry).toHaveBeenLastCalledWith(null)
     expect(docsRow).toHaveAttribute('aria-expanded', 'false')
     expect(
       screen.queryByRole('button', { name: /intro\.md Markdown file/i })
@@ -209,7 +252,7 @@ describe('ExplorerTree', () => {
       }
     }
 
-    render(
+    const { container } = render(
       <ExplorerPane
         onCreateFile={vi.fn()}
         onCreateFolder={vi.fn()}
@@ -236,10 +279,13 @@ describe('ExplorerTree', () => {
       name: /show hidden entries/i
     })
     const toolbar = screen.getByLabelText(/workspace actions/i)
+    const workspaceManagerButton = screen.getByRole('button', {
+      name: /manage workspaces/i
+    })
 
-    expect(
-      screen.getByRole('button', { name: /manage workspaces/i })
-    ).toBeInTheDocument()
+    expect(workspaceManagerButton).toHaveTextContent('workspace')
+    expect(workspaceManagerButton).toHaveTextContent('/workspace')
+    expect(container.querySelector('.explorer-workspace-name')).not.toBeInTheDocument()
     for (const button of [
       newMarkdownButton,
       newFolderButton,
@@ -437,6 +483,75 @@ describe('ExplorerTree', () => {
     expect(onCreateFolder).toHaveBeenCalledWith('daily')
   })
 
+  it('creates entries inside the selected directory and uses the root for file selections', async () => {
+    const user = userEvent.setup()
+    const onCreateFile = vi.fn()
+    const onCreateFolder = vi.fn()
+    const createState = (selectedEntryPath: string | null): AppState => ({
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath,
+      selectedFilePath:
+        selectedEntryPath === 'README.md' ? 'README.md' : null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    })
+    const renderPane = (state: AppState) => (
+      <ExplorerPane
+        onCreateFile={onCreateFile}
+        onCreateFolder={onCreateFolder}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    const { rerender } = render(renderPane(createState('docs')))
+
+    await user.click(screen.getByRole('button', { name: /new markdown file/i }))
+    expect(screen.getByLabelText(/markdown file path/i)).toHaveValue(
+      'docs/Untitled.md'
+    )
+    await user.clear(screen.getByLabelText(/markdown file path/i))
+    await user.type(screen.getByLabelText(/markdown file path/i), 'daily.md')
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(onCreateFile).toHaveBeenLastCalledWith('docs/daily.md')
+
+    await user.click(screen.getByRole('button', { name: /new folder/i }))
+    expect(screen.getByLabelText(/folder path/i)).toHaveValue('docs/notes')
+    await user.clear(screen.getByLabelText(/folder path/i))
+    await user.type(screen.getByLabelText(/folder path/i), 'assets')
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(onCreateFolder).toHaveBeenLastCalledWith('docs/assets')
+
+    rerender(renderPane(createState('README.md')))
+
+    await user.click(screen.getByRole('button', { name: /new markdown file/i }))
+    expect(screen.getByLabelText(/markdown file path/i)).toHaveValue(
+      'Untitled.md'
+    )
+    await user.clear(screen.getByLabelText(/markdown file path/i))
+    await user.type(screen.getByLabelText(/markdown file path/i), 'root.md')
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(onCreateFile).toHaveBeenLastCalledWith('root.md')
+  })
+
   it('submits rename and confirmed delete for the selected entry', async () => {
     const user = userEvent.setup()
     const onRenameEntry = vi.fn()
@@ -578,5 +693,238 @@ describe('ExplorerTree', () => {
     await user.click(screen.getByRole('button', { name: /confirm delete/i }))
 
     expect(onDeleteEntry).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps hidden entries scoped by workspace and can show them from the context menu', async () => {
+    const user = userEvent.setup()
+    const createState = (rootPath: string): AppState => ({
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: {
+        name: rootPath.endsWith('one') ? 'Workspace One' : 'Workspace Two',
+        rootPath,
+        tree
+      }
+    })
+    const renderPane = (state: AppState) => (
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    const { rerender } = render(renderPane(createState('/workspace-one')))
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
+      clientX: 36,
+      clientY: 48
+    })
+    await user.click(screen.getByRole('menuitem', { name: /^hide$/i }))
+
+    expect(screen.queryByRole('button', { name: /docs folder/i })).not.toBeInTheDocument()
+
+    rerender(renderPane(createState('/workspace-two')))
+
+    expect(screen.getByRole('button', { name: /docs folder/i })).toBeInTheDocument()
+
+    rerender(renderPane(createState('/workspace-one')))
+
+    expect(screen.queryByRole('button', { name: /docs folder/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /show hidden entries/i }))
+
+    expect(screen.getByRole('button', { name: /docs folder/i })).toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
+      clientX: 36,
+      clientY: 48
+    })
+
+    expect(screen.getByRole('menuitem', { name: /^show$/i })).toBeVisible()
+
+    await user.click(screen.getByRole('menuitem', { name: /^show$/i }))
+
+    expect(screen.getByRole('button', { name: /docs folder/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show hidden entries/i })).toBeDisabled()
+  })
+
+  it('defaults dot-prefixed workspace entries to hidden on first open', async () => {
+    const user = userEvent.setup()
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace-with-hidden-entries',
+        tree: treeWithHiddenEntries
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /docs folder/i })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /\.vscode folder/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /\.draft\.md Markdown file/i })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /show hidden entries/i }))
+
+    expect(screen.getByRole('button', { name: /\.vscode folder/i })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /\.draft\.md Markdown file/i })
+    ).toBeVisible()
+  })
+
+  it('does not reapply default hidden entries after a user shows one', async () => {
+    const user = userEvent.setup()
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace-default-hidden-override',
+        tree: treeWithHiddenEntries
+      }
+    }
+    const renderPane = () => (
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    let renderedPane = render(renderPane())
+
+    await user.click(screen.getByRole('button', { name: /show hidden entries/i }))
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: /\.vscode folder/i }),
+      { clientX: 36, clientY: 48 }
+    )
+    await user.click(screen.getByRole('menuitem', { name: /^show$/i }))
+
+    renderedPane.unmount()
+    renderedPane = render(renderPane())
+
+    expect(screen.getByRole('button', { name: /\.vscode folder/i })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /\.draft\.md Markdown file/i })
+    ).not.toBeInTheDocument()
+    renderedPane.unmount()
+  })
+
+  it('persists hidden entries across explorer remounts', async () => {
+    const user = userEvent.setup()
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+    const renderPane = () => (
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    let renderedPane = render(renderPane())
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
+      clientX: 36,
+      clientY: 48
+    })
+    await user.click(screen.getByRole('menuitem', { name: /^hide$/i }))
+
+    expect(screen.queryByRole('button', { name: /docs folder/i })).not.toBeInTheDocument()
+
+    renderedPane.unmount()
+    renderedPane = render(renderPane())
+
+    expect(screen.queryByRole('button', { name: /docs folder/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /show hidden entries/i }))
+    fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
+      clientX: 36,
+      clientY: 48
+    })
+    await user.click(screen.getByRole('menuitem', { name: /^show$/i }))
+
+    renderedPane.unmount()
+    renderedPane = render(renderPane())
+
+    expect(screen.getByRole('button', { name: /docs folder/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show hidden entries/i })).toBeDisabled()
+    renderedPane.unmount()
   })
 })

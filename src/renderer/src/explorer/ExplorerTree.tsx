@@ -70,7 +70,7 @@ const ExplorerTreeNode = ({
             }
             onContextMenu={openContextMenu}
             onClick={() => {
-              onSelectEntry(node.path)
+              onSelectEntry(selectedEntryPath === node.path ? null : node.path)
               toggleExpanded()
             }}
             type="button"

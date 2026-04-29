@@ -1,6 +1,6 @@
 {
-  "name": "mdv",
-  "version": "0.1.0",
+  "name": "mde",
+  "version": "1.0.0",
   "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
   "productName": "MDE",
   "private": true,
@@ -16,6 +16,7 @@
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "release:github": "npm run build && electron-builder --mac dmg zip --publish always",
     "register:cli": "npm link",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
@@ -57,6 +58,7 @@
     "@blocknote/react": "^0.49.0",
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^1.12.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
@@ -67,6 +69,14 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "flowforever",
+        "repo": "mde",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "out/**/*",
       "package.json"

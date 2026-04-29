@@ -1,5 +1,5 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
@@ -14,13 +14,40 @@ test.beforeAll(async ({ browserName }, testInfo) => {
   await buildElectronApp()
 })
 
+const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
+  const workspaceDialog = window.getByRole('dialog', {
+    name: /workspace manager/i
+  })
+  const workspaceDialogBackdrop = window.locator('.workspace-dialog-backdrop')
+
+  await workspaceDialogBackdrop
+    .waitFor({ state: 'visible', timeout: 1500 })
+    .catch(() => undefined)
+
+  if (await workspaceDialogBackdrop.isVisible().catch(() => false)) {
+    return
+  }
+
+  await window
+    .getByRole('button', { name: /^open workspace$/i })
+    .or(window.getByRole('button', { name: /manage workspaces/i }))
+    .click()
+  await expect(workspaceDialogBackdrop).toBeVisible()
+  await expect(workspaceDialog).toBeVisible()
+}
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 const openNewWorkspace = async (window: Page): Promise<void> => {
-  await window.getByRole('button', { name: /^open workspace$/i }).click()
+  await ensureWorkspaceDialogOpen(window)
+
   await window.getByRole('button', { name: /open new workspace/i }).click()
 }
 
 const openMarkdownFile = async (window: Page): Promise<void> => {
-  await window.getByRole('button', { name: /^open workspace$/i }).click()
+  await ensureWorkspaceDialogOpen(window)
+
   await window.getByRole('button', { name: /open markdown file/i }).click()
 }
 
@@ -32,9 +59,6 @@ test('shows the initial centered workspace popup', async () => {
       name: /^open workspace$/i
     })
 
-    await expect(workspaceButton).toBeVisible()
-    await workspaceButton.click()
-
     const workspaceDialog = window.getByRole('dialog', {
       name: /workspace manager/i
     })
@@ -42,7 +66,11 @@ test('shows the initial centered workspace popup', async () => {
       name: /open new workspace/i
     })
 
+    await expect(workspaceButton).toBeVisible()
     await expect(workspaceDialog).toBeVisible()
+    await expect(
+      window.getByRole('heading', { name: /^Open workspace$/ })
+    ).toBeVisible()
     await expect(openWorkspaceItem).toBeVisible()
     await expect(window.getByRole('menu')).toHaveCount(0)
 
@@ -92,7 +120,7 @@ test('searches and removes many recent workspace items from the manager popup', 
   try {
     await window.evaluate(() => {
       globalThis.localStorage.setItem(
-        'mdv.recentWorkspaces',
+        'mde.recentWorkspaces',
         JSON.stringify([
           ...Array.from({ length: 18 }, (_, index) => ({
             name: `Workspace ${index + 1}`,
@@ -110,8 +138,6 @@ test('searches and removes many recent workspace items from the manager popup', 
       )
       globalThis.location.reload()
     })
-
-    await window.getByRole('button', { name: /^open workspace$/i }).click()
 
     const resourceList = window.locator('.workspace-resource-list')
 
@@ -142,7 +168,7 @@ test('searches and removes many recent workspace items from the manager popup', 
     ).toHaveCount(0)
     expect(
       await window.evaluate(() =>
-        globalThis.localStorage.getItem('mdv.recentWorkspaces')
+        globalThis.localStorage.getItem('mde.recentWorkspaces')
       )
     ).not.toContain('API.md')
     expect(startupDiagnostics.errors).toEqual([])
@@ -153,6 +179,11 @@ test('searches and removes many recent workspace items from the manager popup', 
 
 test('opens a workspace and expands the docs folder', async () => {
   const workspacePath = await createFixtureWorkspace()
+
+  await mkdir(join(workspacePath, '.vscode'), { recursive: true })
+  await writeFile(join(workspacePath, '.vscode', 'settings.md'), '# Settings')
+  await writeFile(join(workspacePath, '.draft.md'), '# Draft')
+
   const { app, startupDiagnostics, window } = await launchElectronApp({
     args: [`--test-workspace=${workspacePath}`]
   })
@@ -163,9 +194,26 @@ test('opens a workspace and expands the docs folder', async () => {
     await expect(
       window.getByRole('button', { name: /README\.md Markdown file/i })
     ).toBeVisible()
+    await expect(window).toHaveTitle(await realpath(workspacePath))
     await expect(
       window.getByRole('button', { name: /docs folder/i })
     ).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /\.vscode folder/i })
+    ).toBeHidden()
+    await expect(
+      window.getByRole('button', { name: /\.draft\.md Markdown file/i })
+    ).toBeHidden()
+
+    await window.getByRole('button', { name: /show hidden entries/i }).click()
+
+    await expect(
+      window.getByRole('button', { name: /\.vscode folder/i })
+    ).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /\.draft\.md Markdown file/i })
+    ).toBeVisible()
+    await window.getByRole('button', { name: /hide hidden entries/i }).click()
 
     await window.getByRole('button', { name: /expand docs/i }).click()
 
@@ -191,6 +239,7 @@ test('opens a workspace from a command line path', async () => {
     await expect(
       window.getByRole('button', { name: /manage workspaces/i })
     ).toBeVisible()
+    await expect(window).toHaveTitle(await realpath(workspacePath))
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -342,6 +391,7 @@ test('opens a standalone markdown file and remembers it in the workspace manager
     await expect(window.getByTestId('markdown-block-editor')).toContainText(
       'Standalone File'
     )
+    await expect(window).toHaveTitle(`standalone.md - ${await realpath(workspacePath)}`)
 
     await window.getByRole('button', { name: /manage workspaces/i }).click()
     await expect(
@@ -349,7 +399,7 @@ test('opens a standalone markdown file and remembers it in the workspace manager
     ).toBeVisible()
     expect(
       await window.evaluate(() =>
-        globalThis.localStorage.getItem('mdv.recentWorkspaces')
+        globalThis.localStorage.getItem('mde.recentWorkspaces')
       )
     ).toContain('"type":"file"')
     expect(startupDiagnostics.errors).toEqual([])
@@ -375,6 +425,7 @@ test('opens a standalone markdown file from a command line path', async () => {
     await expect(window.getByTestId('markdown-block-editor')).toContainText(
       'CLI File'
     )
+    await expect(window).toHaveTitle(`cli-file.md - ${await realpath(workspacePath)}`)
     await expect(
       window.getByRole('button', { name: /manage workspaces/i })
     ).toHaveText(/cli-file\.md/i)
@@ -561,7 +612,30 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
     ).toBeVisible()
     await expect(readFile(join(workspacePath, 'notes.md'), 'utf8')).resolves.toBe('')
 
+    const docsRow = window.getByRole('button', { name: /docs folder/i })
+
+    await docsRow.click()
+    await expect(docsRow).toHaveAttribute('aria-current', 'page')
+    await window.getByRole('button', { name: /new markdown file/i }).click()
+    await expect(window.getByLabel(/markdown file path/i)).toHaveValue(
+      'docs/Untitled.md'
+    )
+    await window.getByLabel(/markdown file path/i).fill('inside-docs')
+    await window.getByRole('button', { name: /^create$/i }).click()
+
+    await expect(
+      window.getByRole('button', { name: /inside-docs\.md Markdown file/i })
+    ).toBeVisible()
+    await expect(
+      readFile(join(workspacePath, 'docs', 'inside-docs.md'), 'utf8')
+    ).resolves.toBe('')
+
+    await docsRow.click()
+    await expect(docsRow).toHaveAttribute('aria-current', 'page')
+    await docsRow.click()
+    await expect(docsRow).not.toHaveAttribute('aria-current', 'page')
     await window.getByRole('button', { name: /new folder/i }).click()
+    await expect(window.getByLabel(/folder path/i)).toHaveValue('notes')
     await window.getByLabel(/folder path/i).fill('drafts')
     await window.getByRole('button', { name: /^create$/i }).click()
 
@@ -578,6 +652,50 @@ test('edits and saves markdown by button and keyboard, then creates a new file',
       window.getByRole('button', { name: /drafts folder/i })
     ).toBeHidden()
     await expect(stat(join(workspacePath, 'drafts'))).resolves.toMatchObject({})
+    await window.getByRole('button', { name: /show hidden entries/i }).click()
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeVisible()
+    await window.getByRole('button', { name: /drafts folder/i }).click({
+      button: 'right'
+    })
+    await window.getByRole('menuitem', { name: /^show$/i }).click()
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /show hidden entries/i })
+    ).toBeDisabled()
+
+    await window.getByRole('button', { name: /drafts folder/i }).click({
+      button: 'right'
+    })
+    await window.getByRole('menuitem', { name: /^hide$/i }).click()
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeHidden()
+    await window.getByRole('button', { name: /show hidden entries/i }).click()
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeVisible()
+    await window.getByRole('button', { name: /hide hidden entries/i }).click()
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeHidden()
+
+    const workspaceName = basename(await realpath(workspacePath))
+
+    await window.reload()
+    await ensureWorkspaceDialogOpen(window)
+    await window
+      .getByRole('button', {
+        name: new RegExp(`switch to workspace ${escapeRegExp(workspaceName)}`, 'i')
+      })
+      .click()
+
+    await expect(
+      window.getByRole('button', { name: /drafts folder/i })
+    ).toBeHidden()
     await window.getByRole('button', { name: /show hidden entries/i }).click()
     await expect(
       window.getByRole('button', { name: /drafts folder/i })
@@ -643,7 +761,7 @@ test('remembers and switches recent workspaces from the workspace menu', async (
     await window.evaluate(
       ({ firstWorkspacePath, secondWorkspacePath }) => {
         globalThis.localStorage.setItem(
-          'mdv.recentWorkspaces',
+          'mde.recentWorkspaces',
           JSON.stringify([
             {
               name: 'Second Workspace',
@@ -660,7 +778,9 @@ test('remembers and switches recent workspaces from the workspace menu', async (
       { firstWorkspacePath, secondWorkspacePath }
     )
 
-    await window.getByRole('button', { name: /^open workspace$/i }).click()
+    await expect(
+      window.getByRole('dialog', { name: /workspace manager/i })
+    ).toBeVisible()
     await window
       .getByRole('button', { name: /switch to workspace Second Workspace/i })
       .click()
@@ -668,6 +788,7 @@ test('remembers and switches recent workspaces from the workspace menu', async (
     await expect(
       window.getByRole('button', { name: /SECOND\.md Markdown file/i })
     ).toBeVisible()
+    await expect(window).toHaveTitle(await realpath(secondWorkspacePath))
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

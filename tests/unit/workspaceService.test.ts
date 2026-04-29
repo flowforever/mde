@@ -8,7 +8,7 @@ import { createWorkspaceService } from '../../src/main/services/workspaceService
 
 describe('workspaceService', () => {
   it('sorts directories before Markdown files and ignores unsupported entries', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-workspace-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
 
     await mkdir(join(rootPath, 'z-folder'))
     await mkdir(join(rootPath, 'a-folder'))

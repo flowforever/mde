@@ -8,7 +8,7 @@ export const Shell = (): React.JSX.Element => (
     </aside>
     <section className="editor-pane" aria-label="Editor">
       <div className="editor-empty-state">
-        <p className="editor-kicker">Markdown Editor</p>
+        <p className="editor-kicker">MDE</p>
         <h1>Select a folder to begin</h1>
       </div>
     </section>

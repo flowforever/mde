@@ -19,9 +19,10 @@ interface LegacyRecentWorkspace {
   readonly rootPath: string
 }
 
-export const RECENT_WORKSPACES_STORAGE_KEY = 'mdv.recentWorkspaces'
+export const RECENT_WORKSPACES_STORAGE_KEY = 'mde.recentWorkspaces'
 
 const MAX_RECENT_WORKSPACES = 24
+const LEGACY_RECENT_WORKSPACES_STORAGE_KEY = 'mdv.recentWorkspaces'
 
 const isRecentWorkspace = (value: unknown): value is RecentWorkspace => {
   if (!value || typeof value !== 'object') {
@@ -72,7 +73,9 @@ export const readRecentWorkspaces = (
   storage: Pick<Storage, 'getItem'> = globalThis.localStorage
 ): readonly RecentWorkspace[] => {
   try {
-    const storedValue = storage.getItem(RECENT_WORKSPACES_STORAGE_KEY)
+    const storedValue =
+      storage.getItem(RECENT_WORKSPACES_STORAGE_KEY) ??
+      storage.getItem(LEGACY_RECENT_WORKSPACES_STORAGE_KEY)
 
     if (!storedValue) {
       return []

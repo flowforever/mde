@@ -3,9 +3,23 @@ import { readFile } from 'node:fs/promises'
 
 import { describe, expect, it } from 'vitest'
 
-import { createPreloadPath, createWindowOptions } from '../../src/main/index'
+import {
+  CAPTURE_STARTUP_DIAGNOSTICS_ENV,
+  DISABLE_SINGLE_INSTANCE_ENV,
+  STARTUP_DIAGNOSTICS_GLOBAL_KEY,
+  createPreloadPath,
+  createWindowOptions
+} from '../../src/main/index'
 
 describe('Electron window config', () => {
+  it('uses MDE-prefixed runtime diagnostics names', () => {
+    expect(CAPTURE_STARTUP_DIAGNOSTICS_ENV).toBe(
+      'MDE_CAPTURE_STARTUP_DIAGNOSTICS'
+    )
+    expect(DISABLE_SINGLE_INSTANCE_ENV).toBe('MDE_DISABLE_SINGLE_INSTANCE')
+    expect(STARTUP_DIAGNOSTICS_GLOBAL_KEY).toBe('__mdeStartupDiagnostics')
+  })
+
   it('keeps renderer isolated from Node.js', () => {
     const options = createWindowOptions('/tmp/preload.js')
 
@@ -23,6 +37,44 @@ describe('Electron window config', () => {
     expect(pathSegments).toContain('out')
     expect(pathSegments).toContain('preload')
     expect(pathSegments).not.toContain('main')
+  })
+})
+
+describe('Release automation config', () => {
+  it('publishes electron-builder artifacts to the GitHub releases feed', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      build?: {
+        publish?: {
+          owner?: string
+          provider?: string
+          releaseType?: string
+          repo?: string
+        }[]
+      }
+      scripts?: Record<string, string>
+    }
+
+    expect(packageJson.build?.publish).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          owner: 'flowforever',
+          provider: 'github',
+          releaseType: 'release',
+          repo: 'mde'
+        })
+      ])
+    )
+    expect(packageJson.scripts?.['release:github']).toContain('--publish always')
+  })
+
+  it('builds and publishes release artifacts when a version tag is pushed', async () => {
+    const workflow = await readFile('.github/workflows/release.yml', 'utf8')
+
+    expect(workflow).toContain('tags:')
+    expect(workflow).toContain('v*')
+    expect(workflow).toContain('contents: write')
+    expect(workflow).toContain('npm ci')
+    expect(workflow).toContain('npm run release:github')
   })
 })
 

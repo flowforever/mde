@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import {
   Eye,
   EyeOff,
+  FileText,
   FilePlus,
+  FolderOpen,
   FolderPlus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -13,6 +15,12 @@ import {
 } from 'lucide-react'
 
 import { ExplorerTree } from './ExplorerTree'
+import {
+  readDefaultHiddenExplorerWorkspaces,
+  readHiddenExplorerEntries,
+  writeDefaultHiddenExplorerWorkspaces,
+  writeHiddenExplorerEntries
+} from './hiddenExplorerEntries'
 import type { AppState } from '../app/appTypes'
 import type { RecentWorkspace } from '../workspaces/recentWorkspaces'
 import type { TreeNode } from '../../../shared/fileTree'
@@ -26,11 +34,12 @@ interface ExplorerPaneProps {
   readonly onOpenFile?: () => void
   readonly onOpenWorkspace: () => void
   readonly onRenameEntry: (entryName: string) => void
-  readonly onSelectEntry: (entryPath: string) => void
+  readonly onSelectEntry: (entryPath: string | null) => void
   readonly onSelectFile: (filePath: string) => void
   readonly onSwitchWorkspace?: (workspace: RecentWorkspace) => void
   readonly onToggleCollapsed?: () => void
   readonly recentWorkspaces?: readonly RecentWorkspace[]
+  readonly shouldAutoOpenWorkspaceDialog?: boolean
   readonly state: AppState
 }
 
@@ -42,10 +51,72 @@ interface EntryContextMenu {
   readonly y: number
 }
 
+const EMPTY_HIDDEN_ENTRY_PATHS: ReadonlySet<string> = new Set()
+
 const getEntryName = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf('/')
 
   return separatorIndex === -1 ? entryPath : entryPath.slice(separatorIndex + 1)
+}
+
+const joinEntryPath = (
+  directoryPath: string | null,
+  entryPath: string
+): string => (directoryPath ? `${directoryPath}/${entryPath}` : entryPath)
+
+const findDirectoryPath = (
+  nodes: readonly TreeNode[],
+  targetPath: string | null
+): string | null => {
+  if (!targetPath) {
+    return null
+  }
+
+  for (const node of nodes) {
+    if (node.type !== 'directory') {
+      continue
+    }
+
+    if (node.path === targetPath) {
+      return node.path
+    }
+
+    const childDirectoryPath = findDirectoryPath(node.children, targetPath)
+
+    if (childDirectoryPath) {
+      return childDirectoryPath
+    }
+  }
+
+  return null
+}
+
+const collectDefaultHiddenEntryPaths = (
+  nodes: readonly TreeNode[]
+): readonly string[] =>
+  nodes.reduce<readonly string[]>((entryPaths, node) => {
+    const childEntryPaths =
+      node.type === 'directory'
+        ? collectDefaultHiddenEntryPaths(node.children)
+        : []
+    const nodeEntryPaths = node.name.startsWith('.') ? [node.path] : []
+
+    return [...entryPaths, ...nodeEntryPaths, ...childEntryPaths]
+  }, [])
+
+const resolveCreatedEntryPath = (
+  directoryPath: string | null,
+  entryPath: string
+): string => {
+  if (
+    !directoryPath ||
+    entryPath === directoryPath ||
+    entryPath.startsWith(`${directoryPath}/`)
+  ) {
+    return entryPath
+  }
+
+  return joinEntryPath(directoryPath, entryPath)
 }
 
 const filterHiddenNodes = (
@@ -84,35 +155,101 @@ export const ExplorerPane = ({
   onSwitchWorkspace = () => undefined,
   onToggleCollapsed = () => undefined,
   recentWorkspaces = [],
+  shouldAutoOpenWorkspaceDialog = false,
   state
 }: ExplorerPaneProps): React.JSX.Element => {
   const [pendingAction, setPendingAction] = useState<PendingExplorerAction>(null)
+  const [actionTargetDirectoryPath, setActionTargetDirectoryPath] = useState<
+    string | null
+  >(null)
   const [entryValue, setEntryValue] = useState('')
   const [contextMenu, setContextMenu] = useState<EntryContextMenu | null>(null)
-  const [hiddenEntryPaths, setHiddenEntryPaths] = useState<ReadonlySet<string>>(
-    () => new Set()
-  )
+  const [hiddenEntryPathsByWorkspace, setHiddenEntryPathsByWorkspace] = useState<
+    ReadonlyMap<string, ReadonlySet<string>>
+  >(readHiddenExplorerEntries)
+  const [defaultHiddenWorkspaceRoots, setDefaultHiddenWorkspaceRoots] = useState<
+    ReadonlySet<string>
+  >(readDefaultHiddenExplorerWorkspaces)
+  const [hasDismissedAutoWorkspaceDialog, setHasDismissedAutoWorkspaceDialog] =
+    useState(false)
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
-  const [isShowingHiddenEntries, setIsShowingHiddenEntries] = useState(false)
-  const [isWorkspaceDialogOpen, setIsWorkspaceDialogOpen] = useState(false)
+  const [
+    showingHiddenEntriesWorkspaceRoot,
+    setShowingHiddenEntriesWorkspaceRoot
+  ] = useState<string | null>(null)
+  const [isWorkspaceDialogManuallyOpen, setIsWorkspaceDialogManuallyOpen] =
+    useState(false)
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState('')
+  const workspaceRoot = state.workspace?.rootPath ?? null
+  const hiddenEntryPaths = workspaceRoot
+    ? hiddenEntryPathsByWorkspace.get(workspaceRoot) ?? EMPTY_HIDDEN_ENTRY_PATHS
+    : EMPTY_HIDDEN_ENTRY_PATHS
+
+  useEffect(() => {
+    writeHiddenExplorerEntries(hiddenEntryPathsByWorkspace)
+  }, [hiddenEntryPathsByWorkspace])
+
+  useEffect(() => {
+    writeDefaultHiddenExplorerWorkspaces(defaultHiddenWorkspaceRoots)
+  }, [defaultHiddenWorkspaceRoots])
+
+  const commitHiddenEntryPaths = (nextPaths: ReadonlySet<string>): void => {
+    if (!workspaceRoot) {
+      return
+    }
+
+    setDefaultHiddenWorkspaceRoots((currentRoots) =>
+      currentRoots.has(workspaceRoot)
+        ? currentRoots
+        : new Set([...currentRoots, workspaceRoot])
+    )
+    setHiddenEntryPathsByWorkspace((currentPathsByWorkspace) => {
+      const nextPathsByWorkspace = new Map(currentPathsByWorkspace)
+
+      if (nextPaths.size === 0) {
+        nextPathsByWorkspace.delete(workspaceRoot)
+      } else {
+        nextPathsByWorkspace.set(workspaceRoot, nextPaths)
+      }
+
+      return nextPathsByWorkspace
+    })
+  }
 
   const beginAction = (
     action: Exclude<PendingExplorerAction, null>,
-    defaultValue: string
+    defaultValue: string,
+    targetDirectoryPath: string | null = null
   ): void => {
     setPendingAction(action)
+    setActionTargetDirectoryPath(targetDirectoryPath)
     setEntryValue(defaultValue)
     setIsConfirmingDelete(false)
   }
 
   const clearPendingAction = (): void => {
     setPendingAction(null)
+    setActionTargetDirectoryPath(null)
     setEntryValue('')
   }
 
   const closeContextMenu = (): void => {
     setContextMenu(null)
+  }
+
+  const closeWorkspaceDialog = (): void => {
+    setHasDismissedAutoWorkspaceDialog(true)
+    setIsWorkspaceDialogManuallyOpen(false)
+    setWorkspaceSearchQuery('')
+  }
+
+  const toggleWorkspaceDialog = (): void => {
+    if (isWorkspaceDialogOpen) {
+      closeWorkspaceDialog()
+      return
+    }
+
+    setIsWorkspaceDialogManuallyOpen(true)
   }
 
   const beginContextRename = (): void => {
@@ -143,8 +280,27 @@ export const ExplorerPane = ({
 
     const entryPath = contextMenu.entry.path
 
-    setHiddenEntryPaths((currentPaths) => new Set([...currentPaths, entryPath]))
-    setIsShowingHiddenEntries(false)
+    commitHiddenEntryPaths(new Set([...effectiveHiddenEntryPaths, entryPath]))
+    setShowingHiddenEntriesWorkspaceRoot(null)
+    closeContextMenu()
+  }
+
+  const showContextEntry = (): void => {
+    if (!contextMenu) {
+      return
+    }
+
+    const entryPath = contextMenu.entry.path
+    const isLastHiddenEntry =
+      effectiveHiddenEntryPaths.size === 1 &&
+      effectiveHiddenEntryPaths.has(entryPath)
+    const nextPaths = new Set(effectiveHiddenEntryPaths)
+
+    nextPaths.delete(entryPath)
+    commitHiddenEntryPaths(nextPaths)
+    if (isLastHiddenEntry) {
+      setShowingHiddenEntriesWorkspaceRoot(null)
+    }
     closeContextMenu()
   }
 
@@ -156,9 +312,11 @@ export const ExplorerPane = ({
     }
 
     if (pendingAction === 'create-file') {
-      onCreateFile(trimmedValue)
+      onCreateFile(resolveCreatedEntryPath(actionTargetDirectoryPath, trimmedValue))
     } else if (pendingAction === 'create-folder') {
-      onCreateFolder(trimmedValue)
+      onCreateFolder(
+        resolveCreatedEntryPath(actionTargetDirectoryPath, trimmedValue)
+      )
     } else {
       onRenameEntry(trimmedValue)
     }
@@ -169,8 +327,28 @@ export const ExplorerPane = ({
   const selectedEntryName = state.selectedEntryPath
     ? getEntryName(state.selectedEntryPath)
     : ''
-  const hasHiddenEntries = hiddenEntryPaths.size > 0
+  const defaultHiddenEntryPaths =
+    state.workspace && workspaceRoot && !defaultHiddenWorkspaceRoots.has(workspaceRoot)
+      ? collectDefaultHiddenEntryPaths(state.workspace.tree)
+      : []
+  const effectiveHiddenEntryPaths =
+    defaultHiddenEntryPaths.length > 0
+      ? new Set([...hiddenEntryPaths, ...defaultHiddenEntryPaths])
+      : hiddenEntryPaths
+  const hasHiddenEntries = effectiveHiddenEntryPaths.size > 0
   const hasSelectedEntry = Boolean(state.selectedEntryPath)
+  const selectedDirectoryPath = state.workspace
+    ? findDirectoryPath(state.workspace.tree, state.selectedEntryPath)
+    : null
+  const isContextEntryHidden = contextMenu
+    ? effectiveHiddenEntryPaths.has(contextMenu.entry.path)
+    : false
+  const isShowingHiddenEntries =
+    Boolean(workspaceRoot) && showingHiddenEntriesWorkspaceRoot === workspaceRoot
+  const shouldShowAutoWorkspaceDialog =
+    shouldAutoOpenWorkspaceDialog && !hasDismissedAutoWorkspaceDialog
+  const isWorkspaceDialogOpen =
+    isWorkspaceDialogManuallyOpen || shouldShowAutoWorkspaceDialog
   const workspaceTriggerLabel = state.isOpeningWorkspace
     ? 'Opening...'
     : state.workspace?.name ?? 'Open workspace'
@@ -193,7 +371,7 @@ export const ExplorerPane = ({
   const visibleTree = state.workspace
     ? isShowingHiddenEntries
       ? state.workspace.tree
-      : filterHiddenNodes(state.workspace.tree, hiddenEntryPaths)
+      : filterHiddenNodes(state.workspace.tree, effectiveHiddenEntryPaths)
     : []
 
   if (isCollapsed) {
@@ -232,9 +410,7 @@ export const ExplorerPane = ({
         aria-label={workspaceTriggerAriaLabel}
         className="workspace-manager-button workspace-item-button"
         disabled={state.isOpeningWorkspace}
-        onClick={() => {
-          setIsWorkspaceDialogOpen((currentValue) => !currentValue)
-        }}
+        onClick={toggleWorkspaceDialog}
         type="button"
       >
         <span>{workspaceTriggerLabel}</span>
@@ -243,9 +419,7 @@ export const ExplorerPane = ({
       {isWorkspaceDialogOpen ? (
         <div
           className="workspace-dialog-backdrop"
-          onClick={() => {
-            setIsWorkspaceDialogOpen(false)
-          }}
+          onClick={closeWorkspaceDialog}
         >
           <div
             aria-label="Workspace manager"
@@ -256,19 +430,29 @@ export const ExplorerPane = ({
             }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
-                setIsWorkspaceDialogOpen(false)
+                closeWorkspaceDialog()
               }
             }}
             role="dialog"
           >
             <div className="workspace-dialog-header">
-              <div className="workspace-dialog-title">Workspaces</div>
+              <div className="workspace-dialog-heading">
+                <div className="workspace-dialog-mark" aria-hidden="true">
+                  MDE
+                </div>
+                <div className="workspace-dialog-title-group">
+                  <h2 className="workspace-dialog-title">
+                    {state.workspace ? 'Workspaces' : 'Open workspace'}
+                  </h2>
+                  <p className="workspace-dialog-subtitle">
+                    Choose a folder workspace or a single Markdown file.
+                  </p>
+                </div>
+              </div>
               <button
                 aria-label="Close workspace popup"
                 className="explorer-icon-button workspace-dialog-close"
-                onClick={() => {
-                  setIsWorkspaceDialogOpen(false)
-                }}
+                onClick={closeWorkspaceDialog}
                 title="Close workspace popup"
                 type="button"
               >
@@ -276,37 +460,56 @@ export const ExplorerPane = ({
               </button>
             </div>
             <div className="workspace-dialog-content">
-              <label className="workspace-search-field">
-                <span>Search workspaces and files</span>
-                <input
-                  onChange={(event) => {
-                    setWorkspaceSearchQuery(event.target.value)
+              <div className="workspace-primary-actions">
+                <button
+                  className="workspace-item-button workspace-action-button"
+                  onClick={() => {
+                    closeWorkspaceDialog()
+                    onOpenWorkspace()
                   }}
-                  placeholder="Search"
-                  type="search"
-                  value={workspaceSearchQuery}
-                />
-              </label>
-              <button
-                className="workspace-item-button"
-                onClick={() => {
-                  setIsWorkspaceDialogOpen(false)
-                  onOpenWorkspace()
-                }}
-                type="button"
-              >
-                <span>Open new workspace</span>
-              </button>
-              <button
-                className="workspace-item-button"
-                onClick={() => {
-                  setIsWorkspaceDialogOpen(false)
-                  onOpenFile()
-                }}
-                type="button"
-              >
-                <span>Open Markdown file</span>
-              </button>
+                  type="button"
+                >
+                  <span className="workspace-action-icon" aria-hidden="true">
+                    <FolderOpen aria-hidden="true" focusable="false" size={18} />
+                  </span>
+                  <span className="workspace-action-copy">
+                    <span>Open new workspace</span>
+                    <span>Folder workspace</span>
+                  </span>
+                </button>
+                <button
+                  className="workspace-item-button workspace-action-button"
+                  onClick={() => {
+                    closeWorkspaceDialog()
+                    onOpenFile()
+                  }}
+                  type="button"
+                >
+                  <span className="workspace-action-icon" aria-hidden="true">
+                    <FileText aria-hidden="true" focusable="false" size={18} />
+                  </span>
+                  <span className="workspace-action-copy">
+                    <span>Open Markdown file</span>
+                    <span>Single file</span>
+                  </span>
+                </button>
+              </div>
+              <div className="workspace-recent-header">
+                <div className="workspace-section-title">Recent</div>
+                <label className="workspace-search-field">
+                  <span className="visually-hidden">
+                    Search workspaces and files
+                  </span>
+                  <input
+                    onChange={(event) => {
+                      setWorkspaceSearchQuery(event.target.value)
+                    }}
+                    placeholder="Search"
+                    type="search"
+                    value={workspaceSearchQuery}
+                  />
+                </label>
+              </div>
               {recentWorkspaces.length > 0 ? (
                 <div
                   aria-label="Recent workspaces and files"
@@ -330,7 +533,7 @@ export const ExplorerPane = ({
                             aria-label={`Switch to ${resourceType} ${workspace.name}`}
                             className="workspace-item-button workspace-resource-button"
                             onClick={() => {
-                              setIsWorkspaceDialogOpen(false)
+                              closeWorkspaceDialog()
                               onSwitchWorkspace(workspace)
                             }}
                             type="button"
@@ -378,13 +581,16 @@ export const ExplorerPane = ({
       ) : null}
       {state.workspace ? (
         <div className="explorer-workspace">
-          <div className="explorer-workspace-name">{state.workspace.name}</div>
           <div className="explorer-toolbar" aria-label="Workspace actions">
             <button
               aria-label="New Markdown file"
               className="explorer-icon-button"
               onClick={() => {
-                beginAction('create-file', 'Untitled.md')
+                beginAction(
+                  'create-file',
+                  joinEntryPath(selectedDirectoryPath, 'Untitled.md'),
+                  selectedDirectoryPath
+                )
               }}
               title="New Markdown file"
               type="button"
@@ -395,7 +601,11 @@ export const ExplorerPane = ({
               aria-label="New folder"
               className="explorer-icon-button"
               onClick={() => {
-                beginAction('create-folder', 'notes')
+                beginAction(
+                  'create-folder',
+                  joinEntryPath(selectedDirectoryPath, 'notes'),
+                  selectedDirectoryPath
+                )
               }}
               title="New folder"
               type="button"
@@ -451,7 +661,9 @@ export const ExplorerPane = ({
               className="explorer-icon-button"
               disabled={!hasHiddenEntries}
               onClick={() => {
-                setIsShowingHiddenEntries((currentValue) => !currentValue)
+                setShowingHiddenEntriesWorkspaceRoot((currentWorkspaceRoot) =>
+                  currentWorkspaceRoot === workspaceRoot ? null : workspaceRoot
+                )
               }}
               title={
                 isShowingHiddenEntries ? 'Hide hidden entries' : 'Show hidden entries'
@@ -524,7 +736,7 @@ export const ExplorerPane = ({
             onOpenEntryMenu={({ clientX, clientY, entry }) => {
               onSelectEntry(entry.path)
               setContextMenu({ entry, x: clientX, y: clientY })
-              setIsWorkspaceDialogOpen(false)
+              closeWorkspaceDialog()
             }}
             onSelectEntry={onSelectEntry}
             onSelectFile={onSelectFile}
@@ -546,8 +758,12 @@ export const ExplorerPane = ({
               <button onClick={beginContextRename} role="menuitem" type="button">
                 Rename
               </button>
-              <button onClick={hideContextEntry} role="menuitem" type="button">
-                Hide
+              <button
+                onClick={isContextEntryHidden ? showContextEntry : hideContextEntry}
+                role="menuitem"
+                type="button"
+              >
+                {isContextEntryHidden ? 'Show' : 'Hide'}
               </button>
               <button onClick={beginContextDelete} role="menuitem" type="button">
                 Delete

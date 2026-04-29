@@ -16,7 +16,7 @@ import { createMarkdownFileService } from '../../src/main/services/markdownFileS
 
 describe('markdownFileService', () => {
   it('reads Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await mkdir(join(rootPath, 'docs'))
     await writeFile(join(rootPath, 'docs', 'intro.md'), '# Intro\n\nHello.')
 
@@ -32,7 +32,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects non-Markdown files', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await writeFile(join(rootPath, 'notes.txt'), 'plain text')
 
     await expect(
@@ -41,8 +41,8 @@ describe('markdownFileService', () => {
   })
 
   it('rejects paths outside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     await writeFile(join(outsidePath, 'outside.md'), '# Outside')
 
     await expect(
@@ -54,8 +54,8 @@ describe('markdownFileService', () => {
   })
 
   it('rejects Markdown symlinks that resolve outside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     const outsideFilePath = join(outsidePath, 'outside.md')
 
     await writeFile(outsideFilePath, '# Outside')
@@ -67,7 +67,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects Markdown symlinks that resolve to non-Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await writeFile(join(rootPath, 'secret.txt'), 'plain text')
     await symlink(join(rootPath, 'secret.txt'), join(rootPath, 'leak.md'))
@@ -78,8 +78,8 @@ describe('markdownFileService', () => {
   })
 
   it('rejects Markdown hard links before reading', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     const outsideFilePath = join(outsidePath, 'outside.md')
 
     await writeFile(outsideFilePath, '# Outside')
@@ -91,8 +91,8 @@ describe('markdownFileService', () => {
   })
 
   it('rejects Markdown hard links before writing and leaves the linked file unchanged', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
-    const outsidePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     const outsideFilePath = join(outsidePath, 'outside.md')
 
     await writeFile(outsideFilePath, '# Outside')
@@ -109,7 +109,7 @@ describe('markdownFileService', () => {
   })
 
   it('writes Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await mkdir(join(rootPath, 'docs'))
     await writeFile(join(rootPath, 'docs', 'intro.md'), '# Intro')
 
@@ -125,7 +125,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects writes to non-Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await writeFile(join(rootPath, 'package.json'), '{}')
 
@@ -142,7 +142,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects writes through symlinked parent paths', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'realdir'))
     await writeFile(join(rootPath, 'realdir', 'file.md'), '# Original')
@@ -161,7 +161,7 @@ describe('markdownFileService', () => {
   })
 
   it('creates Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     const result = await createMarkdownFileService().createMarkdownFile(
       rootPath,
@@ -178,7 +178,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects Markdown file creation in ignored workspace paths', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'node_modules'))
 
@@ -194,7 +194,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects Markdown file creation through symlinked parent paths', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'realdir'))
     await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
@@ -208,7 +208,7 @@ describe('markdownFileService', () => {
   })
 
   it('creates folders inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await createMarkdownFileService().createFolder(rootPath, 'notes/daily')
 
@@ -218,7 +218,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects ignored folder creation targets', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await expect(
       createMarkdownFileService().createFolder(rootPath, '.git')
@@ -229,7 +229,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects folder creation through symlinked parent paths', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'realdir'))
     await symlink(join(rootPath, 'realdir'), join(rootPath, 'linkdir'))
@@ -243,7 +243,7 @@ describe('markdownFileService', () => {
   })
 
   it('renames files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await writeFile(join(rootPath, 'draft.md'), '# Draft')
 
     const result = await createMarkdownFileService().renameEntry(
@@ -264,7 +264,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects renames of non-Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await writeFile(join(rootPath, 'package.json'), '{}')
 
@@ -284,7 +284,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects renames through symlinked parent paths', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'realdir'))
     await writeFile(join(rootPath, 'realdir', 'file.md'), '# Original')
@@ -306,7 +306,7 @@ describe('markdownFileService', () => {
   })
 
   it('deletes entries inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await writeFile(join(rootPath, 'old.md'), '# Old')
 
     await createMarkdownFileService().deleteEntry(rootPath, 'old.md')
@@ -317,7 +317,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects deletion of non-Markdown files inside the workspace', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await writeFile(join(rootPath, 'package.json'), '{}')
 
@@ -330,7 +330,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects recursive deletion of directories containing unsupported entries', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'notes'))
     await writeFile(join(rootPath, 'notes', 'keep.txt'), 'plain text')
@@ -344,7 +344,7 @@ describe('markdownFileService', () => {
   })
 
   it('rejects deletes through symlinked parent paths', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'mdv-markdown-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'realdir'))
     await writeFile(join(rootPath, 'realdir', 'file.md'), '# Original')

@@ -9,7 +9,8 @@ import {
 } from '../../src/renderer/src/workspaces/recentWorkspaces'
 
 const createStorage = (
-  initialValue?: string
+  initialValue?: string,
+  initialKey = RECENT_WORKSPACES_STORAGE_KEY
 ): {
   readonly setItem: ReturnType<typeof vi.fn>
   readonly storage: Storage
@@ -20,7 +21,7 @@ const createStorage = (
   })
 
   if (initialValue !== undefined) {
-    values.set(RECENT_WORKSPACES_STORAGE_KEY, initialValue)
+    values.set(initialKey, initialValue)
   }
 
   return {
@@ -43,6 +44,10 @@ const createStorage = (
 }
 
 describe('recentWorkspaces', () => {
+  it('uses the MDE storage key', () => {
+    expect(RECENT_WORKSPACES_STORAGE_KEY).toBe('mde.recentWorkspaces')
+  })
+
   it('reads only valid remembered workspaces', () => {
     const { storage } = createStorage(
       JSON.stringify([
@@ -76,6 +81,19 @@ describe('recentWorkspaces', () => {
         rootPath: '/notes',
         type: 'file'
       }
+    ])
+  })
+
+  it('reads legacy MDV recent workspaces when the MDE key is empty', () => {
+    const { storage } = createStorage(
+      JSON.stringify([
+        { name: 'Legacy Docs', rootPath: '/workspaces/legacy', type: 'workspace' }
+      ]),
+      'mdv.recentWorkspaces'
+    )
+
+    expect(readRecentWorkspaces(storage)).toEqual([
+      { name: 'Legacy Docs', rootPath: '/workspaces/legacy', type: 'workspace' }
     ])
   })
 
@@ -166,7 +184,7 @@ describe('recentWorkspaces', () => {
     ])
 
     expect(setItem).toHaveBeenCalledWith(
-      RECENT_WORKSPACES_STORAGE_KEY,
+      'mde.recentWorkspaces',
       JSON.stringify([
         { name: 'Docs', rootPath: '/workspaces/docs', type: 'workspace' }
       ])

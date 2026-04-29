@@ -31,7 +31,7 @@ export type AppAction =
       readonly message: string
       readonly workspaceRoot: string
     }
-  | { readonly type: 'explorer/entry-selected'; readonly entryPath: string }
+  | { readonly type: 'explorer/entry-selected'; readonly entryPath: string | null }
   | { readonly type: 'file/selected'; readonly filePath: string }
   | {
       readonly type: 'file/load-started'

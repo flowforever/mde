@@ -3,6 +3,11 @@ import { promisify } from 'node:util'
 
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 
+import {
+  CAPTURE_STARTUP_DIAGNOSTICS_ENV,
+  DISABLE_SINGLE_INSTANCE_ENV
+} from '../../../src/shared/appIdentity'
+
 const execFileAsync = promisify(execFile)
 const startupDiagnosticPattern = /preload|security|unable to load preload/i
 
@@ -32,8 +37,8 @@ export const launchElectronApp = async (
     args: ['out/main/index.js', ...options.args ?? []],
     env: {
       ...process.env,
-      MDV_CAPTURE_STARTUP_DIAGNOSTICS: '1',
-      MDV_DISABLE_SINGLE_INSTANCE: '1'
+      [CAPTURE_STARTUP_DIAGNOSTICS_ENV]: '1',
+      [DISABLE_SINGLE_INSTANCE_ENV]: '1'
     }
   })
 
@@ -71,7 +76,7 @@ export const launchElectronApp = async (
 
   const window = await app.firstWindow()
   const mainDiagnostics = await app.evaluate(() => {
-    const diagnostics = globalThis.__mdvStartupDiagnostics as
+    const diagnostics = globalThis.__mdeStartupDiagnostics as
       | StartupDiagnostics
       | undefined
 

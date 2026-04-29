@@ -17,6 +17,18 @@ import { WORKSPACE_CHANNELS } from './ipc/channels'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
+import {
+  CAPTURE_STARTUP_DIAGNOSTICS_ENV,
+  DISABLE_SINGLE_INSTANCE_ENV,
+  STARTUP_DIAGNOSTICS_GLOBAL_KEY
+} from '../shared/appIdentity'
+import { configureAutoUpdates } from './autoUpdate'
+
+export {
+  CAPTURE_STARTUP_DIAGNOSTICS_ENV,
+  DISABLE_SINGLE_INSTANCE_ENV,
+  STARTUP_DIAGNOSTICS_GLOBAL_KEY
+} from '../shared/appIdentity'
 
 type BrowserWindowConstructor = typeof BrowserWindow
 interface StartupDiagnostics {
@@ -25,22 +37,28 @@ interface StartupDiagnostics {
 }
 
 declare global {
-  var __mdvStartupDiagnostics: StartupDiagnostics | undefined
+  var __mdeStartupDiagnostics: StartupDiagnostics | undefined
+}
+
+type StartupDiagnosticsGlobal = typeof globalThis & {
+  [STARTUP_DIAGNOSTICS_GLOBAL_KEY]?: StartupDiagnostics
 }
 
 const startupDiagnosticPattern = /preload|security|unable to load preload/i
 
 const getStartupDiagnostics = (): StartupDiagnostics | undefined => {
-  if (process.env.MDV_CAPTURE_STARTUP_DIAGNOSTICS !== '1') {
+  if (process.env[CAPTURE_STARTUP_DIAGNOSTICS_ENV] !== '1') {
     return undefined
   }
 
-  globalThis.__mdvStartupDiagnostics ??= {
+  const diagnosticsGlobal = globalThis as StartupDiagnosticsGlobal
+
+  diagnosticsGlobal[STARTUP_DIAGNOSTICS_GLOBAL_KEY] ??= {
     errors: [],
     output: []
   }
 
-  return globalThis.__mdvStartupDiagnostics
+  return diagnosticsGlobal[STARTUP_DIAGNOSTICS_GLOBAL_KEY]
 }
 
 const recordStartupError = (message: string): void => {
@@ -126,9 +144,10 @@ const bootstrap = async (): Promise<void> => {
     dialog: Electron.Dialog
     ipcMain: Electron.IpcMain
   }
+  const { autoUpdater } = await import('electron-updater')
   const initialLaunchPath = getLaunchPathFromArgv()
   const hasSingleInstanceLock =
-    process.env.MDV_DISABLE_SINGLE_INSTANCE === '1' ||
+    process.env[DISABLE_SINGLE_INSTANCE_ENV] === '1' ||
     app.requestSingleInstanceLock()
 
   if (!hasSingleInstanceLock) {
@@ -166,6 +185,7 @@ const bootstrap = async (): Promise<void> => {
   })
 
   await app.whenReady()
+  configureAutoUpdates({ app, autoUpdater })
   const workspaceSession = registerWorkspaceHandlers({
     dialog,
     initialLaunchPath,

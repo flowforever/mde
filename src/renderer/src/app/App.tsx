@@ -74,11 +74,25 @@ const EXPLORER_WIDTH_MAX = 440
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
 
+const getWindowTitle = (workspace: Workspace | null): string => {
+  if (!workspace) {
+    return 'MDE'
+  }
+
+  if (workspace.type === 'file') {
+    return `${workspace.name} - ${workspace.rootPath}`
+  }
+
+  return workspace.rootPath
+}
+
 export const App = (): React.JSX.Element => {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialAppState)
   const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT)
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false)
   const [isResizingExplorer, setIsResizingExplorer] = useState(false)
+  const [hasResolvedInitialLaunchPath, setHasResolvedInitialLaunchPath] =
+    useState(() => !window.editorApi)
   const [recentWorkspaces, setRecentWorkspaces] = useState(
     readRecentWorkspaces
   )
@@ -151,6 +165,10 @@ export const App = (): React.JSX.Element => {
 
     setExplorerWidth(clampExplorerWidth(clientX - shellLeft))
   }, [])
+
+  useEffect(() => {
+    document.title = getWindowTitle(state.workspace)
+  }, [state.workspace])
 
   useEffect(() => {
     if (!isResizingExplorer) {
@@ -282,9 +300,20 @@ export const App = (): React.JSX.Element => {
     let isCancelled = false
 
     void editorApi.consumeLaunchPath().then((resourcePath) => {
-      if (!isCancelled && resourcePath) {
-        void openPath(resourcePath)
+      if (isCancelled) {
+        return
       }
+
+      if (resourcePath) {
+        void openPath(resourcePath).finally(() => {
+          if (!isCancelled) {
+            setHasResolvedInitialLaunchPath(true)
+          }
+        })
+        return
+      }
+
+      setHasResolvedInitialLaunchPath(true)
     })
 
     const unsubscribe = editorApi.onLaunchPath((resourcePath) => {
@@ -569,7 +598,6 @@ export const App = (): React.JSX.Element => {
     >
       <ExplorerPane
         isCollapsed={isExplorerCollapsed}
-        key={state.workspace?.rootPath ?? 'empty-workspace'}
         onCreateFile={(filePath) => {
           void createMarkdownFile(filePath)
         }}
@@ -602,6 +630,11 @@ export const App = (): React.JSX.Element => {
           setIsExplorerCollapsed((currentValue) => !currentValue)
         }}
         recentWorkspaces={recentWorkspaces}
+        shouldAutoOpenWorkspaceDialog={
+          hasResolvedInitialLaunchPath &&
+          !state.workspace &&
+          !state.isOpeningWorkspace
+        }
         state={state}
       />
       {!isExplorerCollapsed ? (
@@ -648,7 +681,7 @@ export const App = (): React.JSX.Element => {
           />
         ) : (
           <div className="editor-empty-state">
-            <p className="editor-kicker">Markdown Editor</p>
+            <p className="editor-kicker">MDE</p>
             <h1>{state.selectedFilePath ?? 'Select a folder to begin'}</h1>
             {state.isLoadingFile ? <p>Loading file...</p> : null}
             {state.fileErrorMessage ? (

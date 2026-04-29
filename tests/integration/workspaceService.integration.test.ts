@@ -34,7 +34,7 @@ describe('workspaceService integration', () => {
   })
 
   it('opens a standalone Markdown file as a file workspace', async () => {
-    const fileParentPath = await mkdtemp(join(tmpdir(), 'mdv-file-parent-'))
+    const fileParentPath = await mkdtemp(join(tmpdir(), 'mde-file-parent-'))
     const filePath = join(fileParentPath, 'single.md')
 
     await writeFile(filePath, '# Single file')
@@ -58,7 +58,7 @@ describe('workspaceService integration', () => {
   })
 
   it('opens a generic launch path as either workspace or file', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-launch-workspace-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-launch-workspace-'))
     const filePath = join(workspacePath, 'launch.md')
 
     await writeFile(filePath, '# Launch')
@@ -145,7 +145,7 @@ describe('workspaceService integration', () => {
   })
 
   it('opens a renderer supplied launch path through IPC', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mdv-open-path-'))
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-open-path-'))
     const filePath = join(workspacePath, 'single.md')
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
@@ -183,7 +183,7 @@ describe('workspaceService integration', () => {
   })
 
   it('registers file open handlers and pins the active root to the file parent', async () => {
-    const fileParentPath = await mkdtemp(join(tmpdir(), 'mdv-file-open-'))
+    const fileParentPath = await mkdtemp(join(tmpdir(), 'mde-file-open-'))
     const filePath = join(fileParentPath, 'single.md')
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
@@ -230,7 +230,7 @@ describe('workspaceService integration', () => {
   })
 
   it('does not let listDirectory choose a renderer-supplied workspace root', async () => {
-    const outsideWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-outside-'))
+    const outsideWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-outside-'))
     await writeFile(join(outsideWorkspacePath, 'outside.md'), '# Outside')
 
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -261,8 +261,8 @@ describe('workspaceService integration', () => {
   })
 
   it('switches the active workspace from a remembered workspace path', async () => {
-    const firstWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-first-'))
-    const secondWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-second-'))
+    const firstWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-first-'))
+    const secondWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-second-'))
 
     await writeFile(join(firstWorkspacePath, 'first.md'), '# First')
     await writeFile(join(secondWorkspacePath, 'second.md'), '# Second')
@@ -294,10 +294,10 @@ describe('workspaceService integration', () => {
   })
 
   it('keeps listDirectory pinned to the canonical workspace root after an opened symlink is retargeted', async () => {
-    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-original-'))
-    const retargetedWorkspacePath = await mkdtemp(join(tmpdir(), 'mdv-retargeted-'))
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
+    const retargetedWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-retargeted-'))
     const workspaceLinkPath = join(
-      await mkdtemp(join(tmpdir(), 'mdv-link-parent-')),
+      await mkdtemp(join(tmpdir(), 'mde-link-parent-')),
       'workspace-link'
     )
 
