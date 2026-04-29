@@ -7,6 +7,7 @@ import {
   DEFAULT_LIGHT_THEME_ID,
   disableSystemThemePreference,
   enableSystemThemePreference,
+  getAppThemeRows,
   readThemePreference,
   resolveThemePreference,
   selectAppTheme,
@@ -14,20 +15,91 @@ import {
   writeThemePreference
 } from '../../src/renderer/src/theme/appThemes'
 
+const getHexHue = (hexColor: string): number => {
+  const normalizedHexColor = hexColor.replace('#', '')
+  const red = Number.parseInt(normalizedHexColor.slice(0, 2), 16) / 255
+  const green = Number.parseInt(normalizedHexColor.slice(2, 4), 16) / 255
+  const blue = Number.parseInt(normalizedHexColor.slice(4, 6), 16) / 255
+  const max = Math.max(red, green, blue)
+  const min = Math.min(red, green, blue)
+  const delta = max - min
+
+  if (delta === 0) {
+    return 0
+  }
+
+  if (max === red) {
+    return ((green - blue) / delta + (green < blue ? 6 : 0)) * 60
+  }
+
+  if (max === green) {
+    return ((blue - red) / delta + 2) * 60
+  }
+
+  return ((red - green) / delta + 4) * 60
+}
+
+const getHueDistance = (firstHue: number, secondHue: number): number => {
+  const distance = Math.abs(firstHue - secondHue)
+
+  return Math.min(distance, 360 - distance)
+}
+
 describe('app theme preferences', () => {
-  it('defines eight dark themes and eight light themes with first-run defaults', () => {
+  it('defines eight dark themes and sixteen light themes in complete colorway rows', () => {
     expect(APP_THEME_STORAGE_KEY).toBe('mde.themePreference')
     expect(APP_THEMES.filter((theme) => theme.family === 'dark')).toHaveLength(8)
-    expect(APP_THEMES.filter((theme) => theme.family === 'light')).toHaveLength(8)
+    expect(APP_THEMES.filter((theme) => theme.family === 'light')).toHaveLength(16)
     expect(
       APP_THEMES.filter(
         (theme) => theme.family === 'light' && theme.panelFamily === 'light'
       )
-    ).toHaveLength(4)
+    ).toHaveLength(8)
+    expect(
+      APP_THEMES.filter(
+        (theme) => theme.family === 'light' && theme.panelFamily === 'dark'
+      )
+    ).toHaveLength(8)
+    expect(getAppThemeRows()).toHaveLength(8)
+    expect(
+      getAppThemeRows().every(
+        (row) =>
+          row.darkTheme.family === 'dark' &&
+          row.lightPanelTheme.family === 'light' &&
+          row.lightPanelTheme.panelFamily === 'light' &&
+          row.darkPanelTheme.family === 'light' &&
+          row.darkPanelTheme.panelFamily === 'dark'
+      )
+    ).toBe(true)
+    expect(getAppThemeRows().find((row) => row.id === 'blue')).toMatchObject({
+      darkTheme: { id: 'blue-hour' },
+      lightPanelTheme: { id: 'glacier' },
+      darkPanelTheme: { id: 'paper-blue' }
+    })
     expect(APP_THEMES[0]?.id).toBe(DEFAULT_DARK_THEME_ID)
     expect(APP_THEMES.find((theme) => theme.family === 'light')?.id).toBe(
       DEFAULT_LIGHT_THEME_ID
     )
+  })
+
+  it('keeps every colorway row in the same visual color family', () => {
+    getAppThemeRows().forEach((row) => {
+      const rowThemes = [row.darkTheme, row.lightPanelTheme, row.darkPanelTheme]
+      const rowHues = rowThemes.map((theme) => getHexHue(theme.accent))
+      const maxHueDistance = Math.max(
+        ...rowHues.flatMap((hue) =>
+          rowHues.map((comparisonHue) => getHueDistance(hue, comparisonHue))
+        )
+      )
+
+      expect(
+        maxHueDistance,
+        `${row.label} row accents should share one color family`
+      ).toBeLessThanOrEqual(45)
+      expect(rowThemes.map((theme) => theme.swatches.at(-1))).toEqual(
+        rowThemes.map((theme) => theme.accent)
+      )
+    })
   })
 
   it('falls back to following system with the first dark and light themes', () => {

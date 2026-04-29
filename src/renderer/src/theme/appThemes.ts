@@ -19,15 +19,50 @@ export type AppThemeId =
   | 'atelier'
   | 'mint'
   | 'paper-blue'
+  | 'glacier'
+  | 'ivory'
+  | 'apricot'
+  | 'lilac'
+  | 'canopy'
+  | 'ledger'
+  | 'terracotta'
+  | 'lagoon'
+
+export type AppThemeColorGroup =
+  | 'neutral'
+  | 'blue'
+  | 'warm'
+  | 'green'
+  | 'brass'
+  | 'ember'
+  | 'teal'
+  | 'violet'
+
+export type AppThemeTone = 'dark' | 'light-panel' | 'dark-panel'
 
 export interface AppTheme {
   readonly accent: string
+  readonly colorGroup: AppThemeColorGroup
   readonly description: string
   readonly family: AppThemeFamily
   readonly id: AppThemeId
   readonly label: string
   readonly panelFamily: AppThemeFamily
   readonly swatches: readonly string[]
+  readonly tone: AppThemeTone
+}
+
+export interface AppThemeColorGroupDefinition {
+  readonly id: AppThemeColorGroup
+  readonly label: string
+}
+
+export interface AppThemeRow {
+  readonly darkPanelTheme: AppTheme
+  readonly darkTheme: AppTheme
+  readonly id: AppThemeColorGroup
+  readonly label: string
+  readonly lightPanelTheme: AppTheme
 }
 
 export interface ThemePreference {
@@ -36,152 +71,311 @@ export interface ThemePreference {
   readonly mode: AppThemeMode
 }
 
+export const APP_THEME_COLOR_GROUPS: readonly AppThemeColorGroupDefinition[] = [
+  { id: 'neutral', label: 'Neutral' },
+  { id: 'blue', label: 'Blue' },
+  { id: 'warm', label: 'Warm' },
+  { id: 'green', label: 'Green' },
+  { id: 'brass', label: 'Brass' },
+  { id: 'ember', label: 'Ember' },
+  { id: 'teal', label: 'Teal' },
+  { id: 'violet', label: 'Violet' }
+]
+
 export const APP_THEMES: readonly AppTheme[] = [
   {
-    accent: '#7cb8d6',
+    accent: '#8ea2ae',
+    colorGroup: 'neutral',
     description: 'Neutral dark for focused work.',
     family: 'dark',
     id: 'carbon',
     label: 'Carbon',
     panelFamily: 'dark',
-    swatches: ['#111418', '#191d21', '#20262c', '#7cb8d6']
+    swatches: ['#111418', '#191d21', '#20262c', '#8ea2ae'],
+    tone: 'dark'
   },
   {
     accent: '#6aa7ff',
+    colorGroup: 'blue',
     description: 'Cool technical night mode.',
     family: 'dark',
     id: 'blue-hour',
     label: 'Blue Hour',
     panelFamily: 'dark',
-    swatches: ['#0d1117', '#111827', '#17202b', '#6aa7ff']
+    swatches: ['#0d1117', '#111827', '#17202b', '#6aa7ff'],
+    tone: 'dark'
   },
   {
     accent: '#d19a66',
+    colorGroup: 'warm',
     description: 'Warm low-light writing.',
     family: 'dark',
     id: 'cedar',
     label: 'Cedar',
     panelFamily: 'dark',
-    swatches: ['#171411', '#1d1a17', '#25211d', '#d19a66']
+    swatches: ['#171411', '#1d1a17', '#25211d', '#d19a66'],
+    tone: 'dark'
   },
   {
     accent: '#8fbf9b',
+    colorGroup: 'green',
     description: 'Soft green-gray dark mode.',
     family: 'dark',
     id: 'moss',
     label: 'Moss',
     panelFamily: 'dark',
-    swatches: ['#101511', '#151b18', '#1d2520', '#8fbf9b']
+    swatches: ['#101511', '#151b18', '#1d2520', '#8fbf9b'],
+    tone: 'dark'
   },
   {
     accent: '#b6a16f',
+    colorGroup: 'brass',
     description: 'Deep ink with brass highlights.',
     family: 'dark',
     id: 'ink',
     label: 'Ink',
     panelFamily: 'dark',
-    swatches: ['#101214', '#181a1e', '#22252a', '#b6a16f']
+    swatches: ['#101214', '#181a1e', '#22252a', '#b6a16f'],
+    tone: 'dark'
   },
   {
     accent: '#d87852',
+    colorGroup: 'ember',
     description: 'Low-glow dark with warm markers.',
     family: 'dark',
     id: 'ember',
     label: 'Ember',
     panelFamily: 'dark',
-    swatches: ['#151112', '#1d1717', '#29201d', '#d87852']
+    swatches: ['#151112', '#1d1717', '#29201d', '#d87852'],
+    tone: 'dark'
   },
   {
     accent: '#7fb0a8',
+    colorGroup: 'teal',
     description: 'Graphite dark with mineral teal.',
     family: 'dark',
     id: 'basalt',
     label: 'Basalt',
     panelFamily: 'dark',
-    swatches: ['#0f1314', '#161b1d', '#20282a', '#7fb0a8']
+    swatches: ['#0f1314', '#161b1d', '#20282a', '#7fb0a8'],
+    tone: 'dark'
   },
   {
     accent: '#b08ac6',
+    colorGroup: 'violet',
     description: 'Muted violet for late research.',
     family: 'dark',
     id: 'plum',
     label: 'Plum',
     panelFamily: 'dark',
-    swatches: ['#151219', '#1c1722', '#282131', '#b08ac6']
+    swatches: ['#151219', '#1c1722', '#282131', '#b08ac6'],
+    tone: 'dark'
   },
   {
-    accent: '#2e6f8f',
-    description: 'Warm paper editor with a dark rail.',
+    accent: '#a96b3f',
+    colorGroup: 'warm',
+    description: 'Warm paper editor with a soft rail.',
     family: 'light',
     id: 'manuscript',
     label: 'Manuscript',
     panelFamily: 'light',
-    swatches: ['#faf7f0', '#f0e8dc', '#fffdf8', '#2e6f8f']
+    swatches: ['#faf7f0', '#f0e8dc', '#fffdf8', '#a96b3f'],
+    tone: 'light-panel'
   },
   {
-    accent: '#356d9f',
+    accent: '#6d8296',
+    colorGroup: 'neutral',
     description: 'Crisp technical light mode.',
     family: 'light',
     id: 'porcelain',
     label: 'Porcelain',
     panelFamily: 'light',
-    swatches: ['#f7f8fa', '#edf1f5', '#ffffff', '#356d9f']
+    swatches: ['#f7f8fa', '#edf1f5', '#ffffff', '#6d8296'],
+    tone: 'light-panel'
   },
   {
     accent: '#4f7d60',
+    colorGroup: 'green',
     description: 'Soft green paper for reading.',
     family: 'light',
     id: 'sage-paper',
     label: 'Sage Paper',
     panelFamily: 'light',
-    swatches: ['#f5f7f1', '#e8efe3', '#fcfdf8', '#4f7d60']
+    swatches: ['#f5f7f1', '#e8efe3', '#fcfdf8', '#4f7d60'],
+    tone: 'light-panel'
   },
   {
-    accent: '#8a6246',
-    description: 'Neutral stone workspace.',
+    accent: '#74818a',
+    colorGroup: 'neutral',
+    description: 'Gray stone workspace with a charcoal rail.',
     family: 'light',
     id: 'quarry',
     label: 'Quarry',
     panelFamily: 'dark',
-    swatches: ['#f3f1ec', '#1d2020', '#fbfaf6', '#8a6246']
+    swatches: ['#f3f1ec', '#1d2020', '#fbfaf6', '#74818a'],
+    tone: 'dark-panel'
   },
   {
     accent: '#6652a3',
+    colorGroup: 'violet',
     description: 'Cool research-note light mode.',
     family: 'light',
     id: 'binder',
     label: 'Binder',
     panelFamily: 'dark',
-    swatches: ['#f6f4fa', '#201c28', '#fdfcff', '#6652a3']
+    swatches: ['#f6f4fa', '#201c28', '#fdfcff', '#6652a3'],
+    tone: 'dark-panel'
   },
   {
     accent: '#9a5a3c',
+    colorGroup: 'warm',
     description: 'Warm studio paper and charcoal rail.',
     family: 'light',
     id: 'atelier',
     label: 'Atelier',
     panelFamily: 'dark',
-    swatches: ['#f7f2e8', '#211d1a', '#fffaf0', '#9a5a3c']
+    swatches: ['#f7f2e8', '#211d1a', '#fffaf0', '#9a5a3c'],
+    tone: 'dark-panel'
   },
   {
     accent: '#377a70',
+    colorGroup: 'teal',
     description: 'Fresh pale workspace with mint ink.',
     family: 'light',
     id: 'mint',
     label: 'Mint',
     panelFamily: 'light',
-    swatches: ['#f1f8f6', '#e4f0ed', '#fcfffd', '#377a70']
+    swatches: ['#f1f8f6', '#e4f0ed', '#fcfffd', '#377a70'],
+    tone: 'light-panel'
   },
   {
     accent: '#3f6f91',
+    colorGroup: 'blue',
     description: 'Soft blue paper for technical notes.',
     family: 'light',
     id: 'paper-blue',
     label: 'Paper Blue',
     panelFamily: 'dark',
-    swatches: ['#f2f6fb', '#18212b', '#fbfdff', '#3f6f91']
+    swatches: ['#f2f6fb', '#18212b', '#fbfdff', '#3f6f91'],
+    tone: 'dark-panel'
+  },
+  {
+    accent: '#3c7898',
+    colorGroup: 'blue',
+    description: 'Clear blue light mode with a pale rail.',
+    family: 'light',
+    id: 'glacier',
+    label: 'Glacier',
+    panelFamily: 'light',
+    swatches: ['#f3f8fb', '#e8f0f5', '#ffffff', '#3c7898'],
+    tone: 'light-panel'
+  },
+  {
+    accent: '#8d7638',
+    colorGroup: 'brass',
+    description: 'Ivory paper with restrained brass markers.',
+    family: 'light',
+    id: 'ivory',
+    label: 'Ivory',
+    panelFamily: 'light',
+    swatches: ['#f8f5eb', '#efe9d9', '#fffdf5', '#8d7638'],
+    tone: 'light-panel'
+  },
+  {
+    accent: '#b66242',
+    colorGroup: 'ember',
+    description: 'Soft apricot paper for warm writing.',
+    family: 'light',
+    id: 'apricot',
+    label: 'Apricot',
+    panelFamily: 'light',
+    swatches: ['#fbf2ec', '#f1e5dc', '#fffaf6', '#b66242'],
+    tone: 'light-panel'
+  },
+  {
+    accent: '#8565a5',
+    colorGroup: 'violet',
+    description: 'Quiet violet notes with a pale side rail.',
+    family: 'light',
+    id: 'lilac',
+    label: 'Lilac',
+    panelFamily: 'light',
+    swatches: ['#f7f4fa', '#eee8f3', '#fffefe', '#8565a5'],
+    tone: 'light-panel'
+  },
+  {
+    accent: '#557844',
+    colorGroup: 'green',
+    description: 'Green paper paired with a deep canopy rail.',
+    family: 'light',
+    id: 'canopy',
+    label: 'Canopy',
+    panelFamily: 'dark',
+    swatches: ['#f4f7ee', '#172016', '#fcfdf8', '#557844'],
+    tone: 'dark-panel'
+  },
+  {
+    accent: '#9a7a32',
+    colorGroup: 'brass',
+    description: 'Ledger paper with an ink-dark brass rail.',
+    family: 'light',
+    id: 'ledger',
+    label: 'Ledger',
+    panelFamily: 'dark',
+    swatches: ['#f7f4ea', '#1d1b16', '#fffdf4', '#9a7a32'],
+    tone: 'dark-panel'
+  },
+  {
+    accent: '#b86545',
+    colorGroup: 'ember',
+    description: 'Warm clay editor with a charcoal rail.',
+    family: 'light',
+    id: 'terracotta',
+    label: 'Terracotta',
+    panelFamily: 'dark',
+    swatches: ['#faf0ea', '#241a16', '#fff9f4', '#b86545'],
+    tone: 'dark-panel'
+  },
+  {
+    accent: '#3e7f77',
+    colorGroup: 'teal',
+    description: 'Pale lagoon editor with a deep teal rail.',
+    family: 'light',
+    id: 'lagoon',
+    label: 'Lagoon',
+    panelFamily: 'dark',
+    swatches: ['#eef7f5', '#142321', '#fbfffd', '#3e7f77'],
+    tone: 'dark-panel'
   }
 ]
+
+const findThemeForRow = (
+  themes: readonly AppTheme[],
+  colorGroup: AppThemeColorGroup,
+  tone: AppThemeTone
+): AppTheme => {
+  const theme = themes.find(
+    (candidateTheme) =>
+      candidateTheme.colorGroup === colorGroup && candidateTheme.tone === tone
+  )
+
+  if (!theme) {
+    throw new Error(`Missing ${tone} theme for ${colorGroup}`)
+  }
+
+  return theme
+}
+
+export const getAppThemeRows = (
+  themes: readonly AppTheme[] = APP_THEMES
+): readonly AppThemeRow[] =>
+  APP_THEME_COLOR_GROUPS.map((colorGroup) => ({
+    darkPanelTheme: findThemeForRow(themes, colorGroup.id, 'dark-panel'),
+    darkTheme: findThemeForRow(themes, colorGroup.id, 'dark'),
+    id: colorGroup.id,
+    label: colorGroup.label,
+    lightPanelTheme: findThemeForRow(themes, colorGroup.id, 'light-panel')
+  }))
 
 export const DEFAULT_DARK_THEME_ID = APP_THEMES.find(
   (theme) => theme.family === 'dark'

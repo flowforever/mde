@@ -1,4 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -725,6 +733,16 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: /choose theme/i }))
 
     expect(screen.getByRole('dialog', { name: /themes/i })).toBeVisible()
+    const colorwayPicker = screen.getByRole('radiogroup', {
+      name: /theme colorways/i
+    })
+
+    expect(within(colorwayPicker).queryByText(/^Dark$/i)).not.toBeInTheDocument()
+    expect(within(colorwayPicker).queryByText(/Light panel/i))
+      .not.toBeInTheDocument()
+    expect(within(colorwayPicker).queryByText(/Dark panel/i))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /glacier/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /cedar/i })).toBeChecked()
 
     await user.click(screen.getByRole('radio', { name: /sage paper/i }))
@@ -788,10 +806,18 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: /choose theme/i }))
 
     expect(screen.getByRole('dialog', { name: /themes/i })).toBeVisible()
-    expect(screen.queryByRole('radiogroup', { name: /dark themes/i }))
+    const colorwayPicker = screen.getByRole('radiogroup', {
+      name: /theme colorways/i
+    })
+
+    expect(within(colorwayPicker).queryByText(/^Dark$/i)).not.toBeInTheDocument()
+    expect(within(colorwayPicker).queryByText(/Light panel/i))
       .not.toBeInTheDocument()
-    expect(screen.getByRole('radiogroup', { name: /light themes/i }))
-      .toBeInTheDocument()
+    expect(within(colorwayPicker).queryByText(/Dark panel/i))
+      .not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /blue hour/i }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /glacier/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('radio', { name: /binder/i }))
 

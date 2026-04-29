@@ -185,21 +185,17 @@ test('selects and persists a manual theme from the explorer footer', async () =>
     await window.getByRole('button', { name: /choose theme/i }).click()
     await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
 
-    const themeFamilyWidthDelta = await window
-      .locator('.theme-family-section')
-      .evaluateAll((sections) => {
-        const widths = sections.map((section) =>
-          section.getBoundingClientRect().width
-        )
+    const themePicker = window.locator('.theme-colorway-grid')
+    const blueColorway = window.locator('[data-theme-row="blue"]')
 
-        if (widths.length !== 2) {
-          return Number.POSITIVE_INFINITY
-        }
+    await expect(themePicker).toHaveAttribute('data-column-count', '3')
+    await expect(window.locator('.theme-column-heading')).toHaveCount(0)
+    await expect(window.locator('.theme-colorway-row')).toHaveCount(8)
+    await expect(blueColorway.locator('[data-theme-id="blue-hour"]')).toBeVisible()
+    await expect(blueColorway.locator('[data-theme-id="glacier"]')).toBeVisible()
+    await expect(blueColorway.locator('[data-theme-id="paper-blue"]')).toBeVisible()
+    await expect(blueColorway.locator('[role="radio"]')).toHaveCount(3)
 
-        return Math.abs(widths[0] - widths[1])
-      })
-
-    expect(themeFamilyWidthDelta).toBeLessThan(2)
     await window.getByRole('radio', { name: /blue hour/i }).click()
 
     await expect(appShell).toHaveAttribute('data-theme', 'blue-hour')
@@ -254,10 +250,16 @@ test('selects the current system theme family without leaving follow-system mode
 
     await window.getByRole('button', { name: /choose theme/i }).click()
     await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
-    await expect(window.getByRole('radiogroup', { name: /light themes/i }))
+    await expect(window.getByRole('radiogroup', { name: /theme colorways/i }))
       .toBeVisible()
-    await expect(window.getByRole('radiogroup', { name: /dark themes/i }))
+    await expect(window.locator('.theme-colorway-grid')).toHaveAttribute(
+      'data-column-count',
+      '2'
+    )
+    await expect(window.locator('.theme-column-heading')).toHaveCount(0)
+    await expect(window.getByRole('radio', { name: /blue hour/i }))
       .toHaveCount(0)
+    await expect(window.getByRole('radio', { name: /glacier/i })).toBeVisible()
 
     await window.getByRole('radio', { name: /binder/i }).click()
 

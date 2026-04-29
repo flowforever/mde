@@ -33,9 +33,12 @@ import {
 import type { AppState } from '../app/appTypes'
 import {
   APP_THEMES,
+  getAppThemeRows,
   type AppTheme,
   type AppThemeFamily,
   type AppThemeId,
+  type AppThemeRow,
+  type AppThemeTone,
   type ThemePreference
 } from '../theme/appThemes'
 import type { RecentWorkspace } from '../workspaces/recentWorkspaces'
@@ -222,8 +225,40 @@ const filterHiddenNodes = (
     ]
   }, [])
 
-const getThemesByFamily = (family: AppThemeFamily): readonly AppTheme[] =>
-  APP_THEMES.filter((theme) => theme.family === family)
+interface ThemeDialogColumn {
+  readonly id: AppThemeTone
+  readonly label: string
+}
+
+const THEME_DIALOG_COLUMNS: readonly ThemeDialogColumn[] = [
+  { id: 'dark', label: 'Dark' },
+  { id: 'light-panel', label: 'Light panel' },
+  { id: 'dark-panel', label: 'Dark panel' }
+]
+
+const getThemeDialogColumns = (
+  isFollowingSystemTheme: boolean,
+  resolvedFamily: AppThemeFamily
+): readonly ThemeDialogColumn[] => {
+  if (!isFollowingSystemTheme) {
+    return THEME_DIALOG_COLUMNS
+  }
+
+  return resolvedFamily === 'dark'
+    ? [THEME_DIALOG_COLUMNS[0]]
+    : [THEME_DIALOG_COLUMNS[1], THEME_DIALOG_COLUMNS[2]]
+}
+
+const getThemeForColumn = (
+  row: AppThemeRow,
+  columnId: AppThemeTone
+): AppTheme => {
+  if (columnId === 'dark') {
+    return row.darkTheme
+  }
+
+  return columnId === 'light-panel' ? row.lightPanelTheme : row.darkPanelTheme
+}
 
 export const ExplorerPane = ({
   isCollapsed = false,
@@ -531,9 +566,11 @@ export const ExplorerPane = ({
   const isWorkspaceDialogOpen =
     isWorkspaceDialogManuallyOpen || shouldShowAutoWorkspaceDialog
   const isFollowingSystemTheme = themePreference.mode === 'system'
-  const themeDialogFamilies: readonly AppThemeFamily[] = isFollowingSystemTheme
-    ? [resolvedTheme.family]
-    : ['dark', 'light']
+  const themeDialogColumns = getThemeDialogColumns(
+    isFollowingSystemTheme,
+    resolvedTheme.family
+  )
+  const themeDialogRows = getAppThemeRows()
   const workspaceTriggerLabel = state.isOpeningWorkspace
     ? 'Opening...'
     : state.workspace?.name ?? 'Open workspace'
@@ -653,68 +690,78 @@ export const ExplorerPane = ({
               <X aria-hidden="true" focusable="false" size={16} />
             </button>
           </div>
-          <div
-            className={[
-              'theme-dialog-content',
-              isFollowingSystemTheme ? 'is-single-family' : ''
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            {themeDialogFamilies.map((family) => (
-              <section
-                aria-label={`${family} themes`}
-                className="theme-family-section"
-                key={family}
-                role="radiogroup"
-              >
-                <h3>{family === 'dark' ? 'Dark' : 'Light'}</h3>
-                {getThemesByFamily(family).map((theme) => {
-                  const isSelected = resolvedTheme.id === theme.id
+          <div className="theme-dialog-content">
+            <div
+              aria-label="Theme colorways"
+              className="theme-colorway-grid"
+              data-column-count={themeDialogColumns.length}
+              role="radiogroup"
+            >
+              {themeDialogRows.map((row) => (
+                <div
+                  className="theme-colorway-row"
+                  data-theme-row={row.id}
+                  key={row.id}
+                >
+                  <span className="theme-colorway-label">{row.label}</span>
+                  {themeDialogColumns.map((column) => {
+                    const theme = getThemeForColumn(row, column.id)
+                    const isSelected = resolvedTheme.id === theme.id
 
-                  return (
-                    <button
-                      aria-checked={isSelected}
-                      aria-label={`${theme.label}: ${theme.description}`}
-                      className={[
-                        'theme-option-button',
-                        isSelected ? 'is-selected' : ''
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                      key={theme.id}
-                      onClick={() => {
-                        onSelectTheme(theme.id)
-                      }}
-                      role="radio"
-                      type="button"
-                    >
-                      <span className="theme-option-check" aria-hidden="true">
-                        {isSelected ? (
-                          <Check aria-hidden="true" focusable="false" size={13} />
-                        ) : null}
-                      </span>
-                      <span className="theme-option-copy">
-                        <span>{theme.label}</span>
-                        <span>{theme.description}</span>
-                      </span>
-                      <span className="theme-option-swatches" aria-hidden="true">
-                        {theme.swatches.map((swatch) => (
-                          <span
-                            key={swatch}
-                            style={{ backgroundColor: swatch }}
-                          />
-                        ))}
-                      </span>
-                      <span className="theme-option-preview" aria-hidden="true">
-                        <span />
-                        <span />
-                      </span>
-                    </button>
-                  )
-                })}
-              </section>
-            ))}
+                    return (
+                      <button
+                        aria-checked={isSelected}
+                        aria-label={`${theme.label}: ${theme.description}`}
+                        className={[
+                          'theme-option-button',
+                          isSelected ? 'is-selected' : ''
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        data-theme-column={column.id}
+                        data-theme-id={theme.id}
+                        data-theme-row={row.id}
+                        key={theme.id}
+                        onClick={() => {
+                          onSelectTheme(theme.id)
+                        }}
+                        role="radio"
+                        type="button"
+                      >
+                        <span className="theme-option-check" aria-hidden="true">
+                          {isSelected ? (
+                            <Check
+                              aria-hidden="true"
+                              focusable="false"
+                              size={13}
+                            />
+                          ) : null}
+                        </span>
+                        <span className="theme-option-copy">
+                          <span>{theme.label}</span>
+                          <span>{theme.description}</span>
+                        </span>
+                        <span
+                          className="theme-option-swatches"
+                          aria-hidden="true"
+                        >
+                          {theme.swatches.map((swatch) => (
+                            <span
+                              key={swatch}
+                              style={{ backgroundColor: swatch }}
+                            />
+                          ))}
+                        </span>
+                        <span className="theme-option-preview" aria-hidden="true">
+                          <span />
+                          <span />
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
