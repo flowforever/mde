@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -469,16 +475,16 @@ describe('ExplorerTree', () => {
     )
 
     await user.click(screen.getByRole('button', { name: /new markdown file/i }))
-    await user.clear(screen.getByLabelText(/markdown file path/i))
-    await user.type(screen.getByLabelText(/markdown file path/i), 'daily.md')
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.clear(screen.getByLabelText(/new markdown file name/i))
+    await user.type(screen.getByLabelText(/new markdown file name/i), 'daily.md')
+    await user.keyboard('{Enter}')
 
     expect(onCreateFile).toHaveBeenCalledWith('daily.md')
 
     await user.click(screen.getByRole('button', { name: /new folder/i }))
-    await user.clear(screen.getByLabelText(/folder path/i))
-    await user.type(screen.getByLabelText(/folder path/i), 'daily')
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.clear(screen.getByLabelText(/new folder name/i))
+    await user.type(screen.getByLabelText(/new folder name/i), 'daily')
+    await user.keyboard('{Enter}')
 
     expect(onCreateFolder).toHaveBeenCalledWith('daily')
   })
@@ -522,32 +528,38 @@ describe('ExplorerTree', () => {
     const { rerender } = render(renderPane(createState('docs')))
 
     await user.click(screen.getByRole('button', { name: /new markdown file/i }))
-    expect(screen.getByLabelText(/markdown file path/i)).toHaveValue(
-      'docs/Untitled.md'
+    const docsRow = screen.getByRole('button', { name: /docs folder/i })
+    const docsItem = docsRow.closest('li') as HTMLElement
+    const nestedFileInput = within(docsItem).getByLabelText(
+      /new markdown file name/i
     )
-    await user.clear(screen.getByLabelText(/markdown file path/i))
-    await user.type(screen.getByLabelText(/markdown file path/i), 'daily.md')
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(nestedFileInput).toHaveValue('Untitled.md')
+    await user.clear(nestedFileInput)
+    await user.type(nestedFileInput, 'daily.md')
+    await user.keyboard('{Enter}')
 
     expect(onCreateFile).toHaveBeenLastCalledWith('docs/daily.md')
 
     await user.click(screen.getByRole('button', { name: /new folder/i }))
-    expect(screen.getByLabelText(/folder path/i)).toHaveValue('docs/notes')
-    await user.clear(screen.getByLabelText(/folder path/i))
-    await user.type(screen.getByLabelText(/folder path/i), 'assets')
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    const nestedFolderInput = within(docsItem).getByLabelText(/new folder name/i)
+
+    expect(nestedFolderInput).toHaveValue('notes')
+    await user.clear(nestedFolderInput)
+    await user.type(nestedFolderInput, 'assets')
+    await user.keyboard('{Enter}')
 
     expect(onCreateFolder).toHaveBeenLastCalledWith('docs/assets')
 
     rerender(renderPane(createState('README.md')))
 
     await user.click(screen.getByRole('button', { name: /new markdown file/i }))
-    expect(screen.getByLabelText(/markdown file path/i)).toHaveValue(
+    expect(screen.getByLabelText(/new markdown file name/i)).toHaveValue(
       'Untitled.md'
     )
-    await user.clear(screen.getByLabelText(/markdown file path/i))
-    await user.type(screen.getByLabelText(/markdown file path/i), 'root.md')
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.clear(screen.getByLabelText(/new markdown file name/i))
+    await user.type(screen.getByLabelText(/new markdown file name/i), 'root.md')
+    await user.keyboard('{Enter}')
 
     expect(onCreateFile).toHaveBeenLastCalledWith('root.md')
   })
@@ -592,9 +604,9 @@ describe('ExplorerTree', () => {
     )
 
     await user.click(screen.getByRole('button', { name: /rename selected README\.md/i }))
-    await user.clear(screen.getByLabelText(/entry name/i))
-    await user.type(screen.getByLabelText(/entry name/i), 'renamed.md')
-    await user.click(screen.getByRole('button', { name: /^rename$/i }))
+    await user.clear(screen.getByLabelText(/rename README\.md/i))
+    await user.type(screen.getByLabelText(/rename README\.md/i), 'renamed.md')
+    await user.keyboard('{Enter}')
 
     expect(onRenameEntry).toHaveBeenCalledWith('renamed.md')
 
@@ -679,9 +691,9 @@ describe('ExplorerTree', () => {
       clientY: 48
     })
     await user.click(screen.getByRole('menuitem', { name: /^rename$/i }))
-    await user.clear(screen.getByLabelText(/entry name/i))
-    await user.type(screen.getByLabelText(/entry name/i), 'guides')
-    await user.click(screen.getByRole('button', { name: /^rename$/i }))
+    await user.clear(screen.getByLabelText(/rename docs/i))
+    await user.type(screen.getByLabelText(/rename docs/i), 'guides')
+    await user.keyboard('{Enter}')
 
     expect(onRenameEntry).toHaveBeenCalledWith('guides')
 
@@ -693,6 +705,297 @@ describe('ExplorerTree', () => {
     await user.click(screen.getByRole('button', { name: /confirm delete/i }))
 
     expect(onDeleteEntry).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the row context menu when focus moves outside or Escape is pressed', async () => {
+    const user = userEvent.setup()
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: /README\.md Markdown file/i }),
+      { clientX: 36, clientY: 48 }
+    )
+
+    expect(screen.getByRole('menu', { name: /README\.md actions/i })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /docs folder/i }))
+
+    expect(
+      screen.queryByRole('menu', { name: /README\.md actions/i })
+    ).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: /README\.md Markdown file/i }),
+      { clientX: 36, clientY: 48 }
+    )
+
+    expect(screen.getByRole('menu', { name: /README\.md actions/i })).toBeVisible()
+
+    await user.keyboard('{Escape}')
+
+    expect(
+      screen.queryByRole('menu', { name: /README\.md actions/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows create inputs under the selected folder and cancels inline editing with Escape', async () => {
+    const user = userEvent.setup()
+    const onCreateFile = vi.fn()
+    const onCreateFolder = vi.fn()
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'docs',
+      selectedFilePath: null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={onCreateFile}
+        onCreateFolder={onCreateFolder}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    const docsRow = screen.getByRole('button', { name: /docs folder/i })
+
+    await user.click(screen.getByRole('button', { name: /new markdown file/i }))
+
+    const docsItem = docsRow.closest('li')
+    const fileInput = within(docsItem as HTMLElement).getByLabelText(
+      /new markdown file name/i
+    )
+
+    expect(fileInput).toHaveValue('Untitled.md')
+
+    await user.clear(fileInput)
+    await user.type(fileInput, 'daily.md')
+    await user.keyboard('{Enter}')
+
+    expect(onCreateFile).toHaveBeenCalledWith('docs/daily.md')
+
+    await user.click(screen.getByRole('button', { name: /new folder/i }))
+
+    const folderInput = within(docsItem as HTMLElement).getByLabelText(
+      /new folder name/i
+    )
+
+    expect(folderInput).toHaveValue('notes')
+
+    await user.keyboard('{Escape}')
+
+    expect(
+      screen.queryByLabelText(/new folder name/i)
+    ).not.toBeInTheDocument()
+    expect(onCreateFolder).not.toHaveBeenCalled()
+  })
+
+  it('renames entries inline at their original tree row and cancels with Escape', async () => {
+    const user = userEvent.setup()
+    const onRenameEntry = vi.fn()
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={onRenameEntry}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    const readmeRow = screen.getByRole('button', {
+      name: /README\.md Markdown file/i
+    })
+    const readmeItem = readmeRow.closest('li')
+
+    await user.click(screen.getByRole('button', { name: /rename selected README\.md/i }))
+
+    const renameInput = within(readmeItem as HTMLElement).getByLabelText(
+      /rename README\.md/i
+    )
+
+    expect(renameInput).toHaveValue('README.md')
+
+    await user.keyboard('{Escape}')
+
+    expect(
+      screen.queryByLabelText(/rename README\.md/i)
+    ).not.toBeInTheDocument()
+    expect(onRenameEntry).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible()
+  })
+
+  it('shows recent files below the tree and supports collapse and resizing', async () => {
+    const user = userEvent.setup()
+    const onOpenRecentFile = vi.fn()
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace-recent-files',
+        tree
+      }
+    }
+
+    const { container } = render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenRecentFile={onOpenRecentFile}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        recentFilePaths={['docs/intro.md', 'README.md']}
+        state={state}
+      />
+    )
+
+    const recentFileButtons = screen.getAllByRole('button', {
+      name: /open recent file/i
+    })
+
+    expect(recentFileButtons[0]).toHaveTextContent('intro.md')
+    expect(recentFileButtons[1]).toHaveTextContent('README.md')
+
+    await user.click(recentFileButtons[1])
+
+    expect(onOpenRecentFile).toHaveBeenCalledWith('README.md')
+
+    await user.click(screen.getByRole('button', { name: /recent files/i }))
+
+    expect(
+      screen.queryByRole('button', { name: /open recent file README\.md/i })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /recent files/i }))
+
+    const resizeHandle = screen.getByRole('separator', {
+      name: /resize recent files panel/i
+    })
+    const explorerContent = container.querySelector(
+      '.explorer-content'
+    )!
+
+    vi.spyOn(explorerContent, 'getBoundingClientRect').mockReturnValue({
+      bottom: 500,
+      height: 500,
+      left: 0,
+      right: 288,
+      toJSON: () => ({}),
+      top: 0,
+      width: 288,
+      x: 0,
+      y: 0
+    })
+
+    const pointerDown = new Event('pointerdown', { bubbles: true })
+
+    Object.defineProperty(pointerDown, 'clientY', { value: 360 })
+    fireEvent(resizeHandle, pointerDown)
+    expect(resizeHandle).toHaveAttribute('aria-valuenow', '140')
+
+    const pointerMove = new Event('pointermove')
+
+    Object.defineProperty(pointerMove, 'clientY', { value: 300 })
+    window.dispatchEvent(pointerMove)
+    fireEvent.pointerUp(window)
+
+    expect(resizeHandle).toHaveAttribute('aria-valuenow', '200')
+    expect(localStorage.getItem('mde.explorerRecentFilesPanel')).toContain(
+      '"height":200'
+    )
   })
 
   it('keeps hidden entries scoped by workspace and can show them from the context menu', async () => {

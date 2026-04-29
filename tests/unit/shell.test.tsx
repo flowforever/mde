@@ -296,6 +296,91 @@ describe('App shell', () => {
     expect(document.title).toBe('API.md - /notes')
   })
 
+  it('restores the active workspace and last opened file on renderer launch', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: 'Workspace',
+        rootPath: '/workspace',
+        tree: [
+          { name: 'README.md', path: 'README.md', type: 'file' },
+          {
+            children: [
+              { name: 'intro.md', path: 'docs/intro.md', type: 'file' }
+            ],
+            name: 'docs',
+            path: 'docs',
+            type: 'directory'
+          }
+        ],
+        type: 'workspace'
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Intro',
+        path: 'docs/intro.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      'mde.activeWorkspace',
+      JSON.stringify({
+        name: 'Workspace',
+        rootPath: '/workspace',
+        type: 'workspace'
+      })
+    )
+    localStorage.setItem(
+      'mde.workspaceFileHistory',
+      JSON.stringify([
+        {
+          lastOpenedFilePath: 'docs/intro.md',
+          recentFilePaths: ['docs/intro.md', 'README.md'],
+          workspaceRoot: '/workspace'
+        }
+      ])
+    )
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspace')
+    })
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+      'docs/intro.md',
+      '/workspace'
+    )
+    expect(await screen.findAllByText('docs/intro.md')).not.toHaveLength(0)
+    await user.click(
+      screen.getByRole('button', { name: /open recent file README\.md/i })
+    )
+    await waitFor(() => {
+      expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+        'README.md',
+        '/workspace'
+      )
+    })
+    expect(
+      screen.queryByRole('dialog', { name: /workspace manager/i })
+    ).not.toBeInTheDocument()
+  })
+
   it('searches and forgets remembered workspace resources in the popup', async () => {
     const user = userEvent.setup()
 

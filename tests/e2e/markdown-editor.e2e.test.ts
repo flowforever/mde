@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
@@ -47,9 +47,6 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
   await expect(workspaceDialogBackdrop).toBeVisible()
   await expect(workspaceDialog).toBeVisible()
 }
-
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const openNewWorkspace = async (window: Page): Promise<void> => {
   await ensureWorkspaceDialogOpen(window)
@@ -747,6 +744,9 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await expect(
       window.getByRole('button', { name: /save README\.md/i })
     ).toHaveCount(0)
+    await expect(
+      window.getByRole('button', { name: /open recent file README\.md/i })
+    ).toBeVisible()
     expect(
       await window.evaluate(
         () =>
@@ -786,8 +786,8 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await window.getByRole('button', { name: /close workspace popup/i }).click()
 
     await window.getByRole('button', { name: /new markdown file/i }).click()
-    await window.getByLabel(/markdown file path/i).fill('notes.md')
-    await window.getByRole('button', { name: /^create$/i }).click()
+    await window.getByLabel(/new markdown file name/i).fill('notes.md')
+    await window.keyboard.press('Enter')
 
     await expect(
       window.getByRole('button', { name: /notes\.md Markdown file/i })
@@ -799,11 +799,11 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await docsRow.click()
     await expect(docsRow).toHaveAttribute('aria-current', 'page')
     await window.getByRole('button', { name: /new markdown file/i }).click()
-    await expect(window.getByLabel(/markdown file path/i)).toHaveValue(
-      'docs/Untitled.md'
+    await expect(window.getByLabel(/new markdown file name/i)).toHaveValue(
+      'Untitled.md'
     )
-    await window.getByLabel(/markdown file path/i).fill('inside-docs')
-    await window.getByRole('button', { name: /^create$/i }).click()
+    await window.getByLabel(/new markdown file name/i).fill('inside-docs')
+    await window.keyboard.press('Enter')
 
     await expect(
       window.getByRole('button', { name: /inside-docs\.md Markdown file/i })
@@ -817,15 +817,21 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await docsRow.click()
     await expect(docsRow).not.toHaveAttribute('aria-current', 'page')
     await window.getByRole('button', { name: /new folder/i }).click()
-    await expect(window.getByLabel(/folder path/i)).toHaveValue('notes')
-    await window.getByLabel(/folder path/i).fill('drafts')
-    await window.getByRole('button', { name: /^create$/i }).click()
+    await expect(window.getByLabel(/new folder name/i)).toHaveValue('notes')
+    await window.getByLabel(/new folder name/i).fill('drafts')
+    await window.keyboard.press('Enter')
 
     await expect(
       window.getByRole('button', { name: /drafts folder/i })
     ).toBeVisible()
     await expect(stat(join(workspacePath, 'drafts'))).resolves.toMatchObject({})
 
+    await window.getByRole('button', { name: /drafts folder/i }).click({
+      button: 'right'
+    })
+    await expect(window.getByRole('menu', { name: /drafts actions/i })).toBeVisible()
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await expect(window.getByRole('menu', { name: /drafts actions/i })).toHaveCount(0)
     await window.getByRole('button', { name: /drafts folder/i }).click({
       button: 'right'
     })
@@ -865,15 +871,13 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
       window.getByRole('button', { name: /drafts folder/i })
     ).toBeHidden()
 
-    const workspaceName = basename(await realpath(workspacePath))
-
     await window.reload()
-    await ensureWorkspaceDialogOpen(window)
-    await window
-      .getByRole('button', {
-        name: new RegExp(`switch to workspace ${escapeRegExp(workspaceName)}`, 'i')
-      })
-      .click()
+    await expect(
+      window.getByRole('button', { name: /manage workspaces/i })
+    ).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /rename selected inside-docs\.md/i })
+    ).toBeVisible()
 
     await expect(
       window.getByRole('button', { name: /drafts folder/i })
@@ -893,8 +897,8 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
 
     await notesRow.click({ button: 'right' })
     await window.getByRole('menuitem', { name: /^rename$/i }).click()
-    await window.getByLabel(/entry name/i).fill('renamed')
-    await window.getByRole('button', { name: /^rename$/i }).click()
+    await window.getByLabel(/rename notes\.md/i).fill('renamed')
+    await window.keyboard.press('Enter')
 
     await expect(
       window.getByRole('button', { name: /renamed\.md Markdown file/i })

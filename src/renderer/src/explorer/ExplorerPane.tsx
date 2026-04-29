@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent
+} from 'react'
 import {
+  ChevronDown,
+  ChevronRight,
   Eye,
   EyeOff,
   FileText,
@@ -32,12 +38,14 @@ interface ExplorerPaneProps {
   readonly onDeleteEntry: () => void
   readonly onForgetWorkspace?: (workspace: RecentWorkspace) => void
   readonly onOpenFile?: () => void
+  readonly onOpenRecentFile?: (filePath: string) => void
   readonly onOpenWorkspace: () => void
   readonly onRenameEntry: (entryName: string) => void
   readonly onSelectEntry: (entryPath: string | null) => void
   readonly onSelectFile: (filePath: string) => void
   readonly onSwitchWorkspace?: (workspace: RecentWorkspace) => void
   readonly onToggleCollapsed?: () => void
+  readonly recentFilePaths?: readonly string[]
   readonly recentWorkspaces?: readonly RecentWorkspace[]
   readonly shouldAutoOpenWorkspaceDialog?: boolean
   readonly state: AppState
@@ -52,11 +60,70 @@ interface EntryContextMenu {
 }
 
 const EMPTY_HIDDEN_ENTRY_PATHS: ReadonlySet<string> = new Set()
+const EXPLORER_RECENT_FILES_PANEL_STORAGE_KEY =
+  'mde.explorerRecentFilesPanel'
+const RECENT_FILES_PANEL_HEIGHT_DEFAULT = 164
+const RECENT_FILES_PANEL_HEIGHT_MIN = 96
+const RECENT_FILES_PANEL_HEIGHT_MAX = 320
+
+interface RecentFilesPanelState {
+  readonly height: number
+  readonly isCollapsed: boolean
+}
 
 const getEntryName = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf('/')
 
   return separatorIndex === -1 ? entryPath : entryPath.slice(separatorIndex + 1)
+}
+
+const clampRecentFilesPanelHeight = (height: number): number =>
+  Number.isFinite(height)
+    ? Math.min(
+        RECENT_FILES_PANEL_HEIGHT_MAX,
+        Math.max(RECENT_FILES_PANEL_HEIGHT_MIN, Math.round(height))
+      )
+    : RECENT_FILES_PANEL_HEIGHT_DEFAULT
+
+const readRecentFilesPanelState = (): RecentFilesPanelState => {
+  try {
+    const storedValue = globalThis.localStorage.getItem(
+      EXPLORER_RECENT_FILES_PANEL_STORAGE_KEY
+    )
+
+    if (!storedValue) {
+      return {
+        height: RECENT_FILES_PANEL_HEIGHT_DEFAULT,
+        isCollapsed: false
+      }
+    }
+
+    const parsedValue = JSON.parse(storedValue) as Record<string, unknown>
+
+    return {
+      height:
+        typeof parsedValue.height === 'number'
+          ? clampRecentFilesPanelHeight(parsedValue.height)
+          : RECENT_FILES_PANEL_HEIGHT_DEFAULT,
+      isCollapsed: parsedValue.isCollapsed === true
+    }
+  } catch {
+    return {
+      height: RECENT_FILES_PANEL_HEIGHT_DEFAULT,
+      isCollapsed: false
+    }
+  }
+}
+
+const writeRecentFilesPanelState = (state: RecentFilesPanelState): void => {
+  try {
+    globalThis.localStorage.setItem(
+      EXPLORER_RECENT_FILES_PANEL_STORAGE_KEY,
+      JSON.stringify(state)
+    )
+  } catch {
+    // Storage may be unavailable in restricted renderer contexts.
+  }
 }
 
 const joinEntryPath = (
@@ -148,12 +215,14 @@ export const ExplorerPane = ({
   onDeleteEntry,
   onForgetWorkspace = () => undefined,
   onOpenFile = () => undefined,
+  onOpenRecentFile = () => undefined,
   onOpenWorkspace,
   onRenameEntry,
   onSelectEntry,
   onSelectFile,
   onSwitchWorkspace = () => undefined,
   onToggleCollapsed = () => undefined,
+  recentFilePaths = [],
   recentWorkspaces = [],
   shouldAutoOpenWorkspaceDialog = false,
   state
@@ -162,8 +231,15 @@ export const ExplorerPane = ({
   const [actionTargetDirectoryPath, setActionTargetDirectoryPath] = useState<
     string | null
   >(null)
+  const [actionTargetEntryPath, setActionTargetEntryPath] = useState<
+    string | null
+  >(null)
   const [entryValue, setEntryValue] = useState('')
   const [contextMenu, setContextMenu] = useState<EntryContextMenu | null>(null)
+  const [recentFilesPanelState, setRecentFilesPanelState] = useState(
+    readRecentFilesPanelState
+  )
+  const [isResizingRecentFiles, setIsResizingRecentFiles] = useState(false)
   const [hiddenEntryPathsByWorkspace, setHiddenEntryPathsByWorkspace] = useState<
     ReadonlyMap<string, ReadonlySet<string>>
   >(readHiddenExplorerEntries)
@@ -180,6 +256,7 @@ export const ExplorerPane = ({
   const [isWorkspaceDialogManuallyOpen, setIsWorkspaceDialogManuallyOpen] =
     useState(false)
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState('')
+  const workspaceContentRef = useRef<HTMLDivElement | null>(null)
   const workspaceRoot = state.workspace?.rootPath ?? null
   const hiddenEntryPaths = workspaceRoot
     ? hiddenEntryPathsByWorkspace.get(workspaceRoot) ?? EMPTY_HIDDEN_ENTRY_PATHS
@@ -192,6 +269,48 @@ export const ExplorerPane = ({
   useEffect(() => {
     writeDefaultHiddenExplorerWorkspaces(defaultHiddenWorkspaceRoots)
   }, [defaultHiddenWorkspaceRoots])
+
+  useEffect(() => {
+    writeRecentFilesPanelState(recentFilesPanelState)
+  }, [recentFilesPanelState])
+
+  const updateRecentFilesHeightFromPointer = useCallback((clientY: number): void => {
+    const bounds = workspaceContentRef.current?.getBoundingClientRect()
+
+    if (!bounds) {
+      return
+    }
+
+    setRecentFilesPanelState(() => ({
+      height: clampRecentFilesPanelHeight(bounds.bottom - clientY),
+      isCollapsed: false
+    }))
+  }, [])
+
+  useEffect(() => {
+    if (!isResizingRecentFiles) {
+      return
+    }
+
+    const updateHeight = (event: PointerEvent): void => {
+      updateRecentFilesHeightFromPointer(event.clientY)
+    }
+    const stopResizing = (): void => {
+      setIsResizingRecentFiles(false)
+    }
+
+    document.body.classList.add('is-resizing-explorer-panel')
+    window.addEventListener('pointermove', updateHeight)
+    window.addEventListener('pointerup', stopResizing)
+    window.addEventListener('pointercancel', stopResizing)
+
+    return () => {
+      document.body.classList.remove('is-resizing-explorer-panel')
+      window.removeEventListener('pointermove', updateHeight)
+      window.removeEventListener('pointerup', stopResizing)
+      window.removeEventListener('pointercancel', stopResizing)
+    }
+  }, [isResizingRecentFiles, updateRecentFilesHeightFromPointer])
 
   const commitHiddenEntryPaths = (nextPaths: ReadonlySet<string>): void => {
     if (!workspaceRoot) {
@@ -219,10 +338,12 @@ export const ExplorerPane = ({
   const beginAction = (
     action: Exclude<PendingExplorerAction, null>,
     defaultValue: string,
-    targetDirectoryPath: string | null = null
+    targetDirectoryPath: string | null = null,
+    targetEntryPath: string | null = null
   ): void => {
     setPendingAction(action)
     setActionTargetDirectoryPath(targetDirectoryPath)
+    setActionTargetEntryPath(targetEntryPath)
     setEntryValue(defaultValue)
     setIsConfirmingDelete(false)
   }
@@ -230,6 +351,7 @@ export const ExplorerPane = ({
   const clearPendingAction = (): void => {
     setPendingAction(null)
     setActionTargetDirectoryPath(null)
+    setActionTargetEntryPath(null)
     setEntryValue('')
   }
 
@@ -252,13 +374,38 @@ export const ExplorerPane = ({
     setIsWorkspaceDialogManuallyOpen(true)
   }
 
+  useEffect(() => {
+    if (!contextMenu) {
+      return
+    }
+
+    const closeMenu = (): void => {
+      setContextMenu(null)
+    }
+    const closeMenuOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        closeMenu()
+      }
+    }
+
+    window.addEventListener('pointerdown', closeMenu)
+    window.addEventListener('keydown', closeMenuOnEscape)
+    window.addEventListener('scroll', closeMenu, true)
+
+    return () => {
+      window.removeEventListener('pointerdown', closeMenu)
+      window.removeEventListener('keydown', closeMenuOnEscape)
+      window.removeEventListener('scroll', closeMenu, true)
+    }
+  }, [contextMenu])
+
   const beginContextRename = (): void => {
     if (!contextMenu) {
       return
     }
 
     onSelectEntry(contextMenu.entry.path)
-    beginAction('rename', getEntryName(contextMenu.entry.path))
+    beginAction('rename', getEntryName(contextMenu.entry.path), null, contextMenu.entry.path)
     closeContextMenu()
   }
 
@@ -373,6 +520,60 @@ export const ExplorerPane = ({
       ? state.workspace.tree
       : filterHiddenNodes(state.workspace.tree, effectiveHiddenEntryPaths)
     : []
+  const inlineEditor = pendingAction
+    ? {
+        targetDirectoryPath: actionTargetDirectoryPath,
+        targetEntryPath: actionTargetEntryPath,
+        type: pendingAction,
+        value: entryValue
+      }
+    : null
+  const isRecentFilesCollapsed = recentFilesPanelState.isCollapsed
+  const recentFilesSectionStyle = {
+    '--recent-files-height': `${recentFilesPanelState.height}px`
+  } as CSSProperties
+  const beginRecentFilesResize = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ): void => {
+    event.preventDefault()
+    updateRecentFilesHeightFromPointer(event.clientY)
+    setIsResizingRecentFiles(true)
+  }
+  const resizeRecentFilesFromKeyboard = (
+    event: ReactKeyboardEvent<HTMLDivElement>
+  ): void => {
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setRecentFilesPanelState((currentState) => ({
+        height: clampRecentFilesPanelHeight(currentState.height + 16),
+        isCollapsed: false
+      }))
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setRecentFilesPanelState((currentState) => ({
+        height: clampRecentFilesPanelHeight(currentState.height - 16),
+        isCollapsed: false
+      }))
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      setRecentFilesPanelState({
+        height: RECENT_FILES_PANEL_HEIGHT_MIN,
+        isCollapsed: false
+      })
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      setRecentFilesPanelState({
+        height: RECENT_FILES_PANEL_HEIGHT_MAX,
+        isCollapsed: false
+      })
+    }
+  }
+  const toggleRecentFilesPanel = (): void => {
+    setRecentFilesPanelState((currentState) => ({
+      ...currentState,
+      isCollapsed: !currentState.isCollapsed
+    }))
+  }
 
   if (isCollapsed) {
     return (
@@ -588,7 +789,7 @@ export const ExplorerPane = ({
               onClick={() => {
                 beginAction(
                   'create-file',
-                  joinEntryPath(selectedDirectoryPath, 'Untitled.md'),
+                  'Untitled.md',
                   selectedDirectoryPath
                 )
               }}
@@ -603,7 +804,7 @@ export const ExplorerPane = ({
               onClick={() => {
                 beginAction(
                   'create-folder',
-                  joinEntryPath(selectedDirectoryPath, 'notes'),
+                  'notes',
                   selectedDirectoryPath
                 )
               }}
@@ -625,7 +826,12 @@ export const ExplorerPane = ({
                   return
                 }
 
-                beginAction('rename', selectedEntryName)
+                beginAction(
+                  'rename',
+                  selectedEntryName,
+                  null,
+                  state.selectedEntryPath
+                )
               }}
               title="Rename"
               type="button"
@@ -677,37 +883,6 @@ export const ExplorerPane = ({
               )}
             </button>
           </div>
-          {pendingAction ? (
-            <form
-              className="explorer-entry-form"
-              onSubmit={(event) => {
-                event.preventDefault()
-                submitPendingAction()
-              }}
-            >
-              <label>
-                {pendingAction === 'create-file'
-                  ? 'Markdown file path'
-                  : pendingAction === 'create-folder'
-                    ? 'Folder path'
-                    : 'Entry name'}
-                <input
-                  onChange={(event) => {
-                    setEntryValue(event.target.value)
-                  }}
-                  value={entryValue}
-                />
-              </label>
-              <div className="explorer-form-actions">
-                <button type="submit">
-                  {pendingAction === 'rename' ? 'Rename' : 'Create'}
-                </button>
-                <button onClick={clearPendingAction} type="button">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : null}
           {isConfirmingDelete && state.selectedEntryPath ? (
             <div className="explorer-delete-confirmation">
               <p>Delete {state.selectedEntryPath}?</p>
@@ -730,46 +905,136 @@ export const ExplorerPane = ({
               </button>
             </div>
           ) : null}
-          <ExplorerTree
-            key={state.workspace.rootPath}
-            nodes={visibleTree}
-            onOpenEntryMenu={({ clientX, clientY, entry }) => {
-              onSelectEntry(entry.path)
-              setContextMenu({ entry, x: clientX, y: clientY })
-              closeWorkspaceDialog()
-            }}
-            onSelectEntry={onSelectEntry}
-            onSelectFile={onSelectFile}
-            selectedEntryPath={state.selectedEntryPath}
-            selectedFilePath={state.selectedFilePath}
-          />
-          {contextMenu ? (
-            <div
-              aria-label={`${contextMenu.entry.name} actions`}
-              className="explorer-context-menu"
-              role="menu"
-              style={
-                {
-                  '--context-menu-x': `${contextMenu.x}px`,
-                  '--context-menu-y': `${contextMenu.y}px`
-                } as CSSProperties
-              }
+          <div className="explorer-content" ref={workspaceContentRef}>
+            <section className="explorer-files-section" aria-label="Files">
+              <ExplorerTree
+                inlineEditor={inlineEditor}
+                key={state.workspace.rootPath}
+                nodes={visibleTree}
+                onInlineEditorCancel={clearPendingAction}
+                onInlineEditorChange={setEntryValue}
+                onInlineEditorSubmit={submitPendingAction}
+                onOpenEntryMenu={({ clientX, clientY, entry }) => {
+                  onSelectEntry(entry.path)
+                  setContextMenu({ entry, x: clientX, y: clientY })
+                  closeWorkspaceDialog()
+                }}
+                onSelectEntry={onSelectEntry}
+                onSelectFile={onSelectFile}
+                selectedEntryPath={state.selectedEntryPath}
+                selectedFilePath={state.selectedFilePath}
+              />
+              {contextMenu ? (
+                <div
+                  aria-label={`${contextMenu.entry.name} actions`}
+                  className="explorer-context-menu"
+                  role="menu"
+                  style={
+                    {
+                      '--context-menu-x': `${contextMenu.x}px`,
+                      '--context-menu-y': `${contextMenu.y}px`
+                    } as CSSProperties
+                  }
+                  onPointerDown={(event) => {
+                    event.stopPropagation()
+                  }}
+                >
+                  <button
+                    onClick={beginContextRename}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={
+                      isContextEntryHidden ? showContextEntry : hideContextEntry
+                    }
+                    role="menuitem"
+                    type="button"
+                  >
+                    {isContextEntryHidden ? 'Show' : 'Hide'}
+                  </button>
+                  <button
+                    onClick={beginContextDelete}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : null}
+            </section>
+            {!isRecentFilesCollapsed ? (
+              <div
+                aria-label="Resize recent files panel"
+                aria-orientation="horizontal"
+                aria-valuemax={RECENT_FILES_PANEL_HEIGHT_MAX}
+                aria-valuemin={RECENT_FILES_PANEL_HEIGHT_MIN}
+                aria-valuenow={recentFilesPanelState.height}
+                className="explorer-panel-resize-handle"
+                onKeyDown={resizeRecentFilesFromKeyboard}
+                onPointerDown={beginRecentFilesResize}
+                role="separator"
+                tabIndex={0}
+              />
+            ) : null}
+            <section
+              aria-label="Recent files"
+              className={[
+                'explorer-recent-files-section',
+                isRecentFilesCollapsed ? 'is-collapsed' : ''
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              style={recentFilesSectionStyle}
             >
-              <button onClick={beginContextRename} role="menuitem" type="button">
-                Rename
-              </button>
               <button
-                onClick={isContextEntryHidden ? showContextEntry : hideContextEntry}
-                role="menuitem"
+                aria-expanded={!isRecentFilesCollapsed}
+                className="explorer-section-header-button"
+                onClick={toggleRecentFilesPanel}
                 type="button"
               >
-                {isContextEntryHidden ? 'Show' : 'Hide'}
+                {isRecentFilesCollapsed ? (
+                  <ChevronRight aria-hidden="true" focusable="false" size={14} />
+                ) : (
+                  <ChevronDown aria-hidden="true" focusable="false" size={14} />
+                )}
+                <span>Recent Files</span>
+                <span>{recentFilePaths.length}</span>
               </button>
-              <button onClick={beginContextDelete} role="menuitem" type="button">
-                Delete
-              </button>
-            </div>
-          ) : null}
+              {!isRecentFilesCollapsed ? (
+                recentFilePaths.length > 0 ? (
+                  <div
+                    aria-label="Recent file list"
+                    className="explorer-recent-file-list"
+                  >
+                    {recentFilePaths.map((filePath) => (
+                      <button
+                        aria-label={`Open recent file ${filePath}`}
+                        className="explorer-recent-file-button"
+                        key={filePath}
+                        onClick={() => {
+                          onOpenRecentFile(filePath)
+                        }}
+                        type="button"
+                      >
+                        <FileText
+                          aria-hidden="true"
+                          focusable="false"
+                          size={14}
+                        />
+                        <span>{getEntryName(filePath)}</span>
+                        <span>{filePath}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="explorer-recent-empty">No recent files</p>
+                )
+              ) : null}
+            </section>
+          </div>
         </div>
       ) : (
         <p className="explorer-empty">Open a folder to browse Markdown files.</p>

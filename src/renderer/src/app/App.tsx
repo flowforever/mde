@@ -29,11 +29,23 @@ import { ExplorerPane } from '../explorer/ExplorerPane'
 import { UpdateDialog, type UpdateDialogStatus } from './UpdateDialog'
 import {
   forgetRecentWorkspace,
+  readActiveWorkspace,
   readRecentWorkspaces,
   rememberWorkspace,
   type RecentWorkspace,
+  writeActiveWorkspace,
   writeRecentWorkspaces
 } from '../workspaces/recentWorkspaces'
+import {
+  getWorkspaceLastOpenedFile,
+  getWorkspaceRecentFiles,
+  readWorkspaceFileHistory,
+  rememberWorkspaceFile,
+  removeWorkspaceFileHistoryEntry,
+  renameWorkspaceFileHistoryEntry,
+  type WorkspaceFileHistory,
+  writeWorkspaceFileHistory
+} from '../workspaces/workspaceFileHistory'
 import type { TreeNode } from '../../../shared/fileTree'
 
 declare global {
@@ -65,6 +77,15 @@ const findNodeByPath = (
   }
 
   return null
+}
+
+const findFileNodeByPath = (
+  nodes: readonly TreeNode[],
+  targetPath: string
+): TreeNode | null => {
+  const node = findNodeByPath(nodes, targetPath)
+
+  return node?.type === 'file' ? node : null
 }
 
 const getParentPath = (entryPath: string): string => {
@@ -99,6 +120,21 @@ const getWindowTitle = (workspace: Workspace | null): string => {
   return workspace.rootPath
 }
 
+const createRecentWorkspace = (workspace: Workspace): RecentWorkspace =>
+  workspace.type === 'file' && workspace.filePath && workspace.openedFilePath
+    ? {
+        filePath: workspace.filePath,
+        name: workspace.name,
+        openedFilePath: workspace.openedFilePath,
+        rootPath: workspace.rootPath,
+        type: 'file'
+      }
+    : {
+        name: workspace.name,
+        rootPath: workspace.rootPath,
+        type: 'workspace'
+      }
+
 export const App = (): React.JSX.Element => {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialAppState)
   const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT)
@@ -109,6 +145,9 @@ export const App = (): React.JSX.Element => {
     useState(() => !window.editorApi)
   const [recentWorkspaces, setRecentWorkspaces] = useState(
     readRecentWorkspaces
+  )
+  const [workspaceFileHistory, setWorkspaceFileHistory] = useState(
+    readWorkspaceFileHistory
   )
   const [availableUpdate, setAvailableUpdate] =
     useState<AvailableUpdate | null>(null)
@@ -122,8 +161,10 @@ export const App = (): React.JSX.Element => {
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false)
   const appShellRef = useRef<HTMLElement | null>(null)
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null)
+  const hasConsumedInitialLaunchPathRef = useRef(false)
 
   const rememberOpenedWorkspace = useCallback((workspace: Workspace): void => {
+    writeActiveWorkspace(globalThis.localStorage, createRecentWorkspace(workspace))
     setRecentWorkspaces((currentWorkspaces) => {
       const nextWorkspaces = rememberWorkspace(currentWorkspaces, workspace)
 
@@ -132,6 +173,27 @@ export const App = (): React.JSX.Element => {
       return nextWorkspaces
     })
   }, [])
+
+  const updateWorkspaceFileHistory = useCallback((
+    createNextHistory: (history: WorkspaceFileHistory) => WorkspaceFileHistory
+  ): void => {
+    setWorkspaceFileHistory((currentHistory) => {
+      const nextHistory = createNextHistory(currentHistory)
+
+      writeWorkspaceFileHistory(nextHistory)
+
+      return nextHistory
+    })
+  }, [])
+
+  const rememberOpenedFile = useCallback((
+    workspaceRoot: string,
+    filePath: string
+  ): void => {
+    updateWorkspaceFileHistory((currentHistory) =>
+      rememberWorkspaceFile(currentHistory, workspaceRoot, filePath)
+    )
+  }, [updateWorkspaceFileHistory])
 
   const completeWorkspaceOpen = useCallback((workspace: Workspace): void => {
     dispatch({ type: 'workspace/opened', workspace })
@@ -164,6 +226,7 @@ export const App = (): React.JSX.Element => {
       const file = await window.editorApi.readMarkdownFile(filePath, workspaceRoot)
 
       dispatch({ type: 'file/loaded', file, workspaceRoot })
+      rememberOpenedFile(workspaceRoot, file.path)
     } catch (error) {
       dispatch({
         filePath,
@@ -172,17 +235,30 @@ export const App = (): React.JSX.Element => {
         workspaceRoot
       })
     }
-  }, [state.workspace?.rootPath])
+  }, [rememberOpenedFile, state.workspace?.rootPath])
 
-  const loadOpenedWorkspaceFile = useCallback(async (
+  const loadWorkspaceDefaultFile = useCallback(async (
     workspace: Workspace
   ): Promise<void> => {
-    if (workspace.type !== 'file' || !workspace.openedFilePath) {
+    if (workspace.type === 'file' && workspace.openedFilePath) {
+      await loadFile(workspace.openedFilePath, workspace.rootPath)
       return
     }
 
-    await loadFile(workspace.openedFilePath, workspace.rootPath)
-  }, [loadFile])
+    const lastOpenedFilePath = getWorkspaceLastOpenedFile(
+      workspaceFileHistory,
+      workspace.rootPath
+    )
+
+    if (
+      !lastOpenedFilePath ||
+      !findFileNodeByPath(workspace.tree, lastOpenedFilePath)
+    ) {
+      return
+    }
+
+    await loadFile(lastOpenedFilePath, workspace.rootPath)
+  }, [loadFile, workspaceFileHistory])
 
   const updateExplorerWidthFromPointer = useCallback((clientX: number): void => {
     const shellLeft = appShellRef.current?.getBoundingClientRect().left ?? 0
@@ -297,7 +373,7 @@ export const App = (): React.JSX.Element => {
       }
 
       completeWorkspaceOpen(workspace)
-      await loadOpenedWorkspaceFile(workspace)
+      await loadWorkspaceDefaultFile(workspace)
     } catch (error) {
       dispatch({
         type: 'workspace/open-failed',
@@ -322,7 +398,7 @@ export const App = (): React.JSX.Element => {
       }
 
       completeWorkspaceOpen(workspace)
-      await loadOpenedWorkspaceFile(workspace)
+      await loadWorkspaceDefaultFile(workspace)
     } catch (error) {
       dispatch({
         type: 'workspace/open-failed',
@@ -331,7 +407,7 @@ export const App = (): React.JSX.Element => {
     }
   }
 
-  const switchWorkspace = async (
+  const switchWorkspace = useCallback(async (
     workspace: RecentWorkspace
   ): Promise<void> => {
     dispatch({ type: 'workspace/open-started' })
@@ -347,14 +423,14 @@ export const App = (): React.JSX.Element => {
           : await window.editorApi.openWorkspaceByPath(workspace.rootPath)
 
       completeWorkspaceOpen(openedWorkspace)
-      await loadOpenedWorkspaceFile(openedWorkspace)
+      await loadWorkspaceDefaultFile(openedWorkspace)
     } catch (error) {
       dispatch({
         type: 'workspace/open-failed',
         message: getErrorMessage(error, 'Unable to switch workspace')
       })
     }
-  }
+  }, [completeWorkspaceOpen, loadWorkspaceDefaultFile])
 
   const openPath = useCallback(async (resourcePath: string): Promise<void> => {
     dispatch({ type: 'workspace/open-started' })
@@ -367,24 +443,25 @@ export const App = (): React.JSX.Element => {
       const workspace = await window.editorApi.openPath(resourcePath)
 
       completeWorkspaceOpen(workspace)
-      await loadOpenedWorkspaceFile(workspace)
+      await loadWorkspaceDefaultFile(workspace)
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, 'Unable to open launch path'),
         type: 'workspace/open-failed'
       })
     }
-  }, [completeWorkspaceOpen, loadOpenedWorkspaceFile])
+  }, [completeWorkspaceOpen, loadWorkspaceDefaultFile])
 
   useEffect(() => {
     const editorApi = window.editorApi
 
-    if (!editorApi) {
+    if (!editorApi || hasConsumedInitialLaunchPathRef.current) {
       return
     }
 
     let isCancelled = false
 
+    hasConsumedInitialLaunchPathRef.current = true
     void editorApi.consumeLaunchPath().then((resourcePath) => {
       if (isCancelled) {
         return
@@ -392,6 +469,17 @@ export const App = (): React.JSX.Element => {
 
       if (resourcePath) {
         void openPath(resourcePath).finally(() => {
+          if (!isCancelled) {
+            setHasResolvedInitialLaunchPath(true)
+          }
+        })
+        return
+      }
+
+      const activeWorkspace = readActiveWorkspace(globalThis.localStorage)
+
+      if (activeWorkspace) {
+        void switchWorkspace(activeWorkspace).finally(() => {
           if (!isCancelled) {
             setHasResolvedInitialLaunchPath(true)
           }
@@ -410,7 +498,7 @@ export const App = (): React.JSX.Element => {
       isCancelled = true
       unsubscribe()
     }
-  }, [openPath])
+  }, [openPath, switchWorkspace])
 
   const forgetWorkspace = (workspace: RecentWorkspace): void => {
     setRecentWorkspaces((currentWorkspaces) => {
@@ -658,6 +746,14 @@ export const App = (): React.JSX.Element => {
         type: 'file/entry-renamed',
         workspaceRoot
       })
+      updateWorkspaceFileHistory((currentHistory) =>
+        renameWorkspaceFileHistoryEntry(
+          currentHistory,
+          workspaceRoot,
+          selectedEntryPath,
+          result.path
+        )
+      )
       await refreshWorkspaceTree(workspaceRoot)
     } catch (error) {
       dispatch({
@@ -687,6 +783,13 @@ export const App = (): React.JSX.Element => {
         type: 'file/entry-deleted',
         workspaceRoot
       })
+      updateWorkspaceFileHistory((currentHistory) =>
+        removeWorkspaceFileHistoryEntry(
+          currentHistory,
+          workspaceRoot,
+          selectedEntryPath
+        )
+      )
       await refreshWorkspaceTree(workspaceRoot)
     } catch (error) {
       dispatch({
@@ -764,6 +867,9 @@ export const App = (): React.JSX.Element => {
   const editorViewToggleLabel = isEditorFullWidth
     ? 'Use centered editor view'
     : 'Use full-width editor view'
+  const recentFilePaths = state.workspace
+    ? getWorkspaceRecentFiles(workspaceFileHistory, state.workspace.rootPath)
+    : []
 
   return (
     <main
@@ -792,6 +898,9 @@ export const App = (): React.JSX.Element => {
         onOpenFile={() => {
           void openFile()
         }}
+        onOpenRecentFile={(filePath) => {
+          void loadFile(filePath)
+        }}
         onOpenWorkspace={() => {
           void openWorkspace()
         }}
@@ -810,6 +919,7 @@ export const App = (): React.JSX.Element => {
         onToggleCollapsed={() => {
           setIsExplorerCollapsed((currentValue) => !currentValue)
         }}
+        recentFilePaths={recentFilePaths}
         recentWorkspaces={recentWorkspaces}
         shouldAutoOpenWorkspaceDialog={
           hasResolvedInitialLaunchPath &&

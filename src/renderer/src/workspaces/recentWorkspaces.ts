@@ -20,6 +20,7 @@ interface LegacyRecentWorkspace {
 }
 
 export const RECENT_WORKSPACES_STORAGE_KEY = 'mde.recentWorkspaces'
+export const ACTIVE_WORKSPACE_STORAGE_KEY = 'mde.activeWorkspace'
 
 const MAX_RECENT_WORKSPACES = 24
 const LEGACY_RECENT_WORKSPACES_STORAGE_KEY = 'mdv.recentWorkspaces'
@@ -109,6 +110,28 @@ export const readRecentWorkspaces = (
   }
 }
 
+export const readActiveWorkspace = (
+  storage: Pick<Storage, 'getItem'> = globalThis.localStorage
+): RecentWorkspace | null => {
+  try {
+    const storedValue = storage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)
+
+    if (!storedValue) {
+      return null
+    }
+
+    const parsedValue = JSON.parse(storedValue) as unknown
+
+    if (!isRecentWorkspace(parsedValue)) {
+      return null
+    }
+
+    return normalizeRecentWorkspace(parsedValue)
+  } catch {
+    return null
+  }
+}
+
 export const rememberWorkspace = (
   currentWorkspaces: readonly RecentWorkspace[],
   workspace: Pick<
@@ -158,6 +181,17 @@ export const writeRecentWorkspaces = (
 ): void => {
   try {
     storage.setItem(RECENT_WORKSPACES_STORAGE_KEY, JSON.stringify(workspaces))
+  } catch {
+    // Storage may be unavailable in restricted renderer contexts.
+  }
+}
+
+export const writeActiveWorkspace = (
+  storage: Pick<Storage, 'setItem'> = globalThis.localStorage,
+  workspace: RecentWorkspace
+): void => {
+  try {
+    storage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, JSON.stringify(workspace))
   } catch {
     // Storage may be unavailable in restricted renderer contexts.
   }

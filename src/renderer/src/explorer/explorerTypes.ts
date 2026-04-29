@@ -6,9 +6,22 @@ export interface ExplorerContextMenuRequest {
   readonly entry: TreeNode
 }
 
+export type ExplorerInlineEditorType = 'create-file' | 'create-folder' | 'rename'
+
+export interface ExplorerInlineEditor {
+  readonly targetDirectoryPath: string | null
+  readonly targetEntryPath: string | null
+  readonly type: ExplorerInlineEditorType
+  readonly value: string
+}
+
 export interface ExplorerTreeProps {
+  readonly inlineEditor?: ExplorerInlineEditor | null
   readonly selectedEntryPath: string | null
   readonly selectedFilePath: string | null
+  readonly onInlineEditorCancel?: () => void
+  readonly onInlineEditorChange?: (value: string) => void
+  readonly onInlineEditorSubmit?: () => void
   readonly onOpenEntryMenu?: (request: ExplorerContextMenuRequest) => void
   readonly onSelectEntry: (entryPath: string | null) => void
   readonly onSelectFile: (filePath: string) => void

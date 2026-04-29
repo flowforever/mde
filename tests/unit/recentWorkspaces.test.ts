@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  ACTIVE_WORKSPACE_STORAGE_KEY,
   RECENT_WORKSPACES_STORAGE_KEY,
   forgetRecentWorkspace,
+  readActiveWorkspace,
   readRecentWorkspaces,
   rememberWorkspace,
+  writeActiveWorkspace,
   writeRecentWorkspaces
 } from '../../src/renderer/src/workspaces/recentWorkspaces'
 
@@ -46,6 +49,7 @@ const createStorage = (
 describe('recentWorkspaces', () => {
   it('uses the MDE storage key', () => {
     expect(RECENT_WORKSPACES_STORAGE_KEY).toBe('mde.recentWorkspaces')
+    expect(ACTIVE_WORKSPACE_STORAGE_KEY).toBe('mde.activeWorkspace')
   })
 
   it('reads only valid remembered workspaces', () => {
@@ -188,6 +192,42 @@ describe('recentWorkspaces', () => {
       JSON.stringify([
         { name: 'Docs', rootPath: '/workspaces/docs', type: 'workspace' }
       ])
+    )
+  })
+
+  it('reads and writes the active workspace separately from the recent list', () => {
+    const { setItem, storage } = createStorage(
+      JSON.stringify({
+        name: 'Docs',
+        rootPath: '/workspaces/docs',
+        type: 'workspace'
+      }),
+      ACTIVE_WORKSPACE_STORAGE_KEY
+    )
+
+    expect(readActiveWorkspace(storage)).toEqual({
+      name: 'Docs',
+      rootPath: '/workspaces/docs',
+      type: 'workspace'
+    })
+
+    writeActiveWorkspace(storage, {
+      filePath: '/notes/API.md',
+      name: 'API.md',
+      openedFilePath: 'API.md',
+      rootPath: '/notes',
+      type: 'file'
+    })
+
+    expect(setItem).toHaveBeenCalledWith(
+      ACTIVE_WORKSPACE_STORAGE_KEY,
+      JSON.stringify({
+        filePath: '/notes/API.md',
+        name: 'API.md',
+        openedFilePath: 'API.md',
+        rootPath: '/notes',
+        type: 'file'
+      })
     )
   })
 })
