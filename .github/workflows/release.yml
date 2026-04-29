@@ -52,3 +52,12 @@ jobs:
         run: npm run release:github
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore release notes
+        run: |
+          git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > /tmp/release-notes.md
+          gh release edit "$GITHUB_REF_NAME" \
+            --title "MDE ${GITHUB_REF_NAME#v}" \
+            --notes-file /tmp/release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

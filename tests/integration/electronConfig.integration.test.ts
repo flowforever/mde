@@ -114,6 +114,9 @@ describe('Release automation config', () => {
     expect(workflow).toContain('npm ci')
     expect(workflow).toContain('gh release create')
     expect(workflow).toContain('--notes-from-tag')
+    expect(workflow).toContain('Restore release notes')
+    expect(workflow).toContain('git for-each-ref')
+    expect(workflow).toContain('gh release edit')
     expect(workflow).toContain('npm run release:github')
   })
 
@@ -126,6 +129,20 @@ describe('Release automation config', () => {
     expect(releaseNotesConfig).toContain('Bug Fixes')
     expect(releaseNotesConfig).toContain('Maintenance')
     expect(releaseNotesConfig).toContain('"*"')
+  })
+
+  it('syncs curated release notes back to existing GitHub releases', async () => {
+    const workflow = await readFile(
+      '.github/workflows/release-notes-sync.yml',
+      'utf8'
+    )
+    const notes = await readFile('.github/release-notes/v1.1.1.md', 'utf8')
+
+    expect(workflow).toContain('.github/release-notes/*.md')
+    expect(workflow).toContain('gh release edit')
+    expect(workflow).toContain('--notes-file')
+    expect(notes).toContain('Fixed installed release builds')
+    expect(notes).toContain('macOS Intel')
   })
 })
 

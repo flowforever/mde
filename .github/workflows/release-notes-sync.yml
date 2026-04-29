@@ -1,0 +1,52 @@
+name: Release Notes Sync
+
+on:
+  push:
+    paths:
+      - '.github/release-notes/*.md'
+      - '.github/workflows/release-notes-sync.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to sync, such as v1.1.1. Leave empty to sync all curated notes.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sync-release-notes:
+    name: Sync curated release notes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Sync release notes
+        run: |
+          sync_note() {
+            notes_file="$1"
+            tag="$(basename "$notes_file" .md)"
+
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              echo "Release $tag does not exist; skipping."
+              return
+            fi
+
+            gh release edit "$tag" \
+              --title "MDE ${tag#v}" \
+              --notes-file "$notes_file"
+          }
+
+          if [ -n "${{ inputs.tag }}" ]; then
+            sync_note ".github/release-notes/${{ inputs.tag }}.md"
+          else
+            for notes_file in .github/release-notes/*.md; do
+              [ -f "$notes_file" ] || continue
+              sync_note "$notes_file"
+            done
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
