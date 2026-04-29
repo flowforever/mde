@@ -1,19 +1,98 @@
 {
   "name": "mdv",
   "version": "0.1.0",
+  "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
+  "productName": "MDE",
   "private": true,
   "type": "module",
+  "main": "out/main/index.js",
+  "bin": {
+    "mde": "./bin/mde.js"
+  },
   "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "package": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "register:cli": "npm link",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:integration && npm run test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.3",
+    "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20.19.39",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0",
     "eslint": "^9.39.3",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
+    "jsdom": "^26.1.0",
+    "playwright": "^1.59.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.55.0"
+    "typescript-eslint": "^8.55.0",
+    "vite": "^6.4.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@blocknote/core": "^0.49.0",
+    "@blocknote/mantine": "^0.49.0",
+    "@blocknote/react": "^0.49.0",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
+    "lucide-react": "^1.12.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "build": {
+    "appId": "com.huashu.mde",
+    "productName": "MDE",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/mde.js",
+        "to": "cli/mde"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
   }
 }
