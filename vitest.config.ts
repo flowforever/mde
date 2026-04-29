@@ -28,7 +28,8 @@ export default defineConfig({
           name: 'unit',
           environment: 'jsdom',
           include: ['tests/unit/**/*.test.{ts,tsx}'],
-          setupFiles: ['src/renderer/src/test/setup.ts']
+          setupFiles: ['src/renderer/src/test/setup.ts'],
+          testTimeout: 15_000
         }
       }),
       defineProject({

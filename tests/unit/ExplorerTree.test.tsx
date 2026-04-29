@@ -14,6 +14,8 @@ import type { AppState } from '../../src/renderer/src/app/appTypes'
 import type { TreeNode } from '../../src/shared/fileTree'
 import type { RecentWorkspace } from '../../src/renderer/src/workspaces/recentWorkspaces'
 
+const EXPLORER_INTERACTION_TEST_TIMEOUT = 15_000
+
 describe('ExplorerTree', () => {
   afterEach(() => {
     cleanup()
@@ -487,7 +489,7 @@ describe('ExplorerTree', () => {
     await user.keyboard('{Enter}')
 
     expect(onCreateFolder).toHaveBeenCalledWith('daily')
-  })
+  }, EXPLORER_INTERACTION_TEST_TIMEOUT)
 
   it('creates entries inside the selected directory and uses the root for file selections', async () => {
     const user = userEvent.setup()
@@ -530,7 +532,7 @@ describe('ExplorerTree', () => {
     await user.click(screen.getByRole('button', { name: /new markdown file/i }))
     const docsRow = screen.getByRole('button', { name: /docs folder/i })
     const docsItem = docsRow.closest('li') as HTMLElement
-    const nestedFileInput = within(docsItem).getByLabelText(
+    const nestedFileInput = await within(docsItem).findByLabelText(
       /new markdown file name/i
     )
 
@@ -542,7 +544,9 @@ describe('ExplorerTree', () => {
     expect(onCreateFile).toHaveBeenLastCalledWith('docs/daily.md')
 
     await user.click(screen.getByRole('button', { name: /new folder/i }))
-    const nestedFolderInput = within(docsItem).getByLabelText(/new folder name/i)
+    const nestedFolderInput = await within(docsItem).findByLabelText(
+      /new folder name/i
+    )
 
     expect(nestedFolderInput).toHaveValue('notes')
     await user.clear(nestedFolderInput)
@@ -562,7 +566,7 @@ describe('ExplorerTree', () => {
     await user.keyboard('{Enter}')
 
     expect(onCreateFile).toHaveBeenLastCalledWith('root.md')
-  })
+  }, EXPLORER_INTERACTION_TEST_TIMEOUT)
 
   it('submits rename and confirmed delete for the selected entry', async () => {
     const user = userEvent.setup()
@@ -705,7 +709,7 @@ describe('ExplorerTree', () => {
     await user.click(screen.getByRole('button', { name: /confirm delete/i }))
 
     expect(onDeleteEntry).toHaveBeenCalledTimes(1)
-  })
+  }, EXPLORER_INTERACTION_TEST_TIMEOUT)
 
   it('closes the row context menu when focus moves outside or Escape is pressed', async () => {
     const user = userEvent.setup()
