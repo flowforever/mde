@@ -26,24 +26,30 @@ If the user asks for an exact version, validate that it does not reuse an existi
 1. Inspect `git status`, current branch, recent commits, `package.json`, and existing local/remote tags.
 2. Compute the next version from the latest release tag unless the user supplied an exact version.
 3. Update `package.json` and `package-lock.json` to the same version.
-4. Create `.github/release-notes/vX.Y.Z.md` with complete notes:
+4. Confirm the GitHub repository has the macOS signing and notarization secrets required by `.github/workflows/release.yml`:
+   - `CSC_LINK`
+   - `CSC_KEY_PASSWORD`
+   - `APPLE_API_KEY_P8_BASE64`
+   - `APPLE_API_KEY_ID`
+   - `APPLE_API_ISSUER`
+5. Create `.github/release-notes/vX.Y.Z.md` with complete notes:
    - Features
    - Bug Fixes
    - Breaking Changes
    - Maintenance
    - Verification
    - Artifacts
-5. Run verification for the changed surface:
+6. Run verification for the changed surface:
    - Always run `npm run lint`, `npm run typecheck`, `npm run test:unit`, and `npm run test:integration`.
    - Run `npm run test:e2e` for feature or bug-fix runtime changes unless it already passed for the same code state and the user explicitly says not to repeat local E2E.
-6. Commit the release-ready changes with the repository commit message style.
-7. Create an annotated tag from the release notes, preserving Markdown headings:
+7. Commit the release-ready changes with the repository commit message style.
+8. Create an annotated tag from the release notes, preserving Markdown headings:
 
 ```bash
 git tag -a vX.Y.Z --cleanup=verbatim -F .github/release-notes/vX.Y.Z.md
 ```
 
-8. Push the branch and tag together:
+9. Push the branch and tag together:
 
 ```bash
 git push origin master vX.Y.Z
@@ -51,7 +57,7 @@ git push origin master vX.Y.Z
 
 If the user explicitly said not to rerun local E2E and verification already passed for the same code state, use `ECC_SKIP_PREPUSH=1` for that push so the global pre-push hook does not repeat the full local suite. Do not skip the GitHub Actions release workflow.
 
-9. Verify release automation:
+10. Verify release automation:
 
 ```bash
 gh run list --workflow Release --limit 5
