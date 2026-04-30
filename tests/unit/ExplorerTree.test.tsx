@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -286,10 +287,16 @@ describe('ExplorerTree', () => {
     const showHiddenButton = screen.getByRole('button', {
       name: /show hidden entries/i
     })
+    const refreshButton = screen.getByRole('button', {
+      name: /refresh explorer/i
+    })
     const toolbar = screen.getByLabelText(/workspace actions/i)
     const workspaceManagerButton = screen.getByRole('button', {
       name: /manage workspaces/i
     })
+    const toolbarButtons = Array.from(
+      toolbar.querySelectorAll('button')
+    ) as HTMLElement[]
 
     expect(workspaceManagerButton).toHaveTextContent('workspace')
     expect(workspaceManagerButton).toHaveTextContent('/workspace')
@@ -299,12 +306,16 @@ describe('ExplorerTree', () => {
       newFolderButton,
       renameButton,
       deleteButton,
-      showHiddenButton
+      showHiddenButton,
+      refreshButton
     ]) {
       expect(toolbar).toContainElement(button)
       expect(button.textContent?.trim()).toBe('')
       expect(button.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
     }
+    expect(toolbarButtons.indexOf(refreshButton)).toBe(
+      toolbarButtons.indexOf(showHiddenButton) + 1
+    )
   })
 
   it('labels explorer rows with entry type and active state', () => {
@@ -842,6 +853,108 @@ describe('ExplorerTree', () => {
       screen.queryByLabelText(/new folder name/i)
     ).not.toBeInTheDocument()
     expect(onCreateFolder).not.toHaveBeenCalled()
+  })
+
+  it('refreshes a directory when it is expanded', async () => {
+    const user = userEvent.setup()
+    const onRefreshTree = vi.fn().mockResolvedValue(undefined)
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace-refresh-expand',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRefreshTree={onRefreshTree}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /expand docs/i }))
+
+    await waitFor(() => {
+      expect(onRefreshTree).toHaveBeenCalledWith(['docs'])
+    })
+  })
+
+  it('refreshes expanded directories and locates the current open file', async () => {
+    const user = userEvent.setup()
+    const onRefreshTree = vi.fn().mockResolvedValue(undefined)
+    const scrollIntoView = vi.fn()
+    const state: AppState = {
+      draftMarkdown: '# Deep',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Deep',
+        path: 'docs/nested/deep.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'docs/nested/deep.md',
+      selectedFilePath: 'docs/nested/deep.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace-refresh-locate',
+        tree
+      }
+    }
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView
+    })
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRefreshTree={onRefreshTree}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /expand docs/i }))
+    onRefreshTree.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /refresh explorer/i }))
+
+    await waitFor(() => {
+      expect(onRefreshTree).toHaveBeenCalledWith(['docs', 'docs/nested'])
+    })
+    expect(
+      screen.getByRole('button', { name: /deep\.md Markdown file/i })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(scrollIntoView).toHaveBeenCalled()
   })
 
   it('renames entries inline at their original tree row and cancels with Escape', async () => {

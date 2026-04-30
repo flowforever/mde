@@ -16,9 +16,16 @@ export interface ExplorerInlineEditor {
 }
 
 export interface ExplorerTreeProps {
+  readonly expandedDirectoryPaths?: ReadonlySet<string>
   readonly inlineEditor?: ExplorerInlineEditor | null
+  readonly locateFilePath?: string | null
+  readonly locateFileRequestId?: number
   readonly selectedEntryPath: string | null
   readonly selectedFilePath: string | null
+  readonly onDirectoryExpandedChange?: (
+    directoryPath: string,
+    isExpanded: boolean
+  ) => void
   readonly onInlineEditorCancel?: () => void
   readonly onInlineEditorChange?: (value: string) => void
   readonly onInlineEditorSubmit?: () => void

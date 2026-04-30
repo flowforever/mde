@@ -67,6 +67,7 @@ interface ExplorerPaneProps {
   readonly onOpenFile?: () => void
   readonly onOpenRecentFile?: (filePath: string) => void
   readonly onOpenWorkspace: () => void
+  readonly onRefreshTree?: (directoryPaths: readonly string[]) => Promise<void> | void
   readonly onRenameEntry: (entryName: string) => void
   readonly onSelectTheme?: (themeId: AppThemeId) => void
   readonly onSelectEntry: (entryPath: string | null) => void
@@ -106,6 +107,19 @@ interface RecentFilesPanelState {
   readonly height: number
   readonly isCollapsed: boolean
 }
+
+interface LocateFileRequest {
+  readonly id: number
+  readonly path: string
+  readonly workspaceRoot: string | null
+}
+
+interface ExpandedDirectoryState {
+  readonly paths: ReadonlySet<string>
+  readonly workspaceRoot: string | null
+}
+
+const EMPTY_EXPANDED_DIRECTORY_PATHS = new Set<string>()
 
 const getEntryName = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf('/')
@@ -166,6 +180,26 @@ const joinEntryPath = (
   directoryPath: string | null,
   entryPath: string
 ): string => (directoryPath ? `${directoryPath}/${entryPath}` : entryPath)
+
+const getAncestorDirectoryPaths = (entryPath: string): readonly string[] => {
+  const segments = entryPath.split('/').filter((segment) => segment.length > 0)
+
+  return segments.slice(0, -1).map((_segment, index) =>
+    segments.slice(0, index + 1).join('/')
+  )
+}
+
+const getDirectoryDepth = (directoryPath: string): number =>
+  directoryPath.split('/').filter((segment) => segment.length > 0).length
+
+const sortDirectoryPaths = (
+  directoryPaths: Iterable<string>
+): readonly string[] =>
+  Array.from(new Set(directoryPaths)).sort(
+    (leftPath, rightPath) =>
+      getDirectoryDepth(leftPath) - getDirectoryDepth(rightPath) ||
+      leftPath.localeCompare(rightPath)
+  )
 
 const findDirectoryPath = (
   nodes: readonly TreeNode[],
@@ -293,6 +327,7 @@ export const ExplorerPane = ({
   onOpenFile = () => undefined,
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
+  onRefreshTree = () => undefined,
   onRenameEntry,
   onSelectTheme = () => undefined,
   onSelectEntry,
@@ -311,6 +346,7 @@ export const ExplorerPane = ({
     mode: 'system'
   }
 }: ExplorerPaneProps): React.JSX.Element => {
+  const workspaceRoot = state.workspace?.rootPath ?? null
   const [pendingAction, setPendingAction] = useState<PendingExplorerAction>(null)
   const [actionTargetDirectoryPath, setActionTargetDirectoryPath] = useState<
     string | null
@@ -323,6 +359,13 @@ export const ExplorerPane = ({
   const [recentFilesPanelState, setRecentFilesPanelState] = useState(
     readRecentFilesPanelState
   )
+  const [expandedDirectoryState, setExpandedDirectoryState] =
+    useState<ExpandedDirectoryState>(() => ({
+      paths: new Set(),
+      workspaceRoot
+    }))
+  const [locateFileRequest, setLocateFileRequest] =
+    useState<LocateFileRequest | null>(null)
   const [isResizingRecentFiles, setIsResizingRecentFiles] = useState(false)
   const [hiddenEntryPathsByWorkspace, setHiddenEntryPathsByWorkspace] = useState<
     ReadonlyMap<string, ReadonlySet<string>>
@@ -351,7 +394,13 @@ export const ExplorerPane = ({
   >(null)
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState('')
   const workspaceContentRef = useRef<HTMLDivElement | null>(null)
-  const workspaceRoot = state.workspace?.rootPath ?? null
+  const locateFileRequestIdRef = useRef(0)
+  const expandedDirectoryPaths =
+    expandedDirectoryState.workspaceRoot === workspaceRoot
+      ? expandedDirectoryState.paths
+      : EMPTY_EXPANDED_DIRECTORY_PATHS
+  const activeLocateFileRequest =
+    locateFileRequest?.workspaceRoot === workspaceRoot ? locateFileRequest : null
   const hiddenEntryPaths = workspaceRoot
     ? hiddenEntryPathsByWorkspace.get(workspaceRoot) ?? EMPTY_HIDDEN_ENTRY_PATHS
     : EMPTY_HIDDEN_ENTRY_PATHS
@@ -462,6 +511,74 @@ export const ExplorerPane = ({
   const closeSettingsDialog = (): void => {
     setIsSettingsDialogOpen(false)
     setSettingsUpdateErrorMessage(null)
+  }
+
+  const requestLocateFile = (filePath: string): void => {
+    locateFileRequestIdRef.current += 1
+    setLocateFileRequest({
+      id: locateFileRequestIdRef.current,
+      path: filePath,
+      workspaceRoot
+    })
+  }
+
+  const refreshDirectoryPaths = (
+    directoryPaths: Iterable<string>,
+    shouldLocateOpenFile = false
+  ): void => {
+    const currentOpenFilePath = state.loadedFile?.path ?? state.selectedFilePath
+    const nextExpandedDirectoryPaths = new Set(expandedDirectoryPaths)
+
+    if (shouldLocateOpenFile && currentOpenFilePath) {
+      for (const directoryPath of getAncestorDirectoryPaths(currentOpenFilePath)) {
+        nextExpandedDirectoryPaths.add(directoryPath)
+      }
+
+      setExpandedDirectoryState({
+        paths: nextExpandedDirectoryPaths,
+        workspaceRoot
+      })
+    }
+
+    void Promise.resolve(
+      onRefreshTree(sortDirectoryPaths(
+        shouldLocateOpenFile ? nextExpandedDirectoryPaths : directoryPaths
+      ))
+    )
+      .then(() => {
+        if (shouldLocateOpenFile && currentOpenFilePath) {
+          requestLocateFile(currentOpenFilePath)
+        }
+      })
+      .catch(() => undefined)
+  }
+
+  const changeDirectoryExpansion = (
+    directoryPath: string,
+    isExpanded: boolean
+  ): void => {
+    setExpandedDirectoryState((currentState) => {
+      const currentPaths =
+        currentState.workspaceRoot === workspaceRoot
+          ? currentState.paths
+          : EMPTY_EXPANDED_DIRECTORY_PATHS
+      const nextPaths = new Set(currentPaths)
+
+      if (isExpanded) {
+        nextPaths.add(directoryPath)
+      } else {
+        nextPaths.delete(directoryPath)
+      }
+
+      return {
+        paths: nextPaths,
+        workspaceRoot
+      }
+    })
+
+    if (isExpanded) {
+      refreshDirectoryPaths([directoryPath])
+    }
   }
 
   const toggleWorkspaceDialog = (): void => {
@@ -1371,6 +1488,17 @@ export const ExplorerPane = ({
                 <Eye aria-hidden="true" focusable="false" size={16} />
               )}
             </button>
+            <button
+              aria-label="Refresh explorer"
+              className="explorer-icon-button"
+              onClick={() => {
+                refreshDirectoryPaths(expandedDirectoryPaths, true)
+              }}
+              title="Refresh explorer"
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" focusable="false" size={16} />
+            </button>
           </div>
           {isConfirmingDelete && state.selectedEntryPath ? (
             <div className="explorer-delete-confirmation">
@@ -1397,9 +1525,13 @@ export const ExplorerPane = ({
           <div className="explorer-content" ref={workspaceContentRef}>
             <section className="explorer-files-section" aria-label="Files">
               <ExplorerTree
+                expandedDirectoryPaths={expandedDirectoryPaths}
                 inlineEditor={inlineEditor}
                 key={state.workspace.rootPath}
+                locateFilePath={activeLocateFileRequest?.path ?? null}
+                locateFileRequestId={activeLocateFileRequest?.id ?? 0}
                 nodes={visibleTree}
+                onDirectoryExpandedChange={changeDirectoryExpansion}
                 onInlineEditorCancel={clearPendingAction}
                 onInlineEditorChange={setEntryValue}
                 onInlineEditorSubmit={submitPendingAction}

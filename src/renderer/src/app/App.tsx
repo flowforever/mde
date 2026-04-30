@@ -116,6 +116,48 @@ const findFileNodeByPath = (
   return node?.type === 'file' ? node : null
 }
 
+const hasDirectoryNode = (
+  nodes: readonly TreeNode[],
+  targetPath: string
+): boolean => findNodeByPath(nodes, targetPath)?.type === 'directory'
+
+const replaceDirectoryChildren = (
+  nodes: readonly TreeNode[],
+  targetPath: string,
+  children: readonly TreeNode[]
+): readonly TreeNode[] =>
+  nodes.map((node) => {
+    if (node.type !== 'directory') {
+      return node
+    }
+
+    if (node.path === targetPath) {
+      return {
+        ...node,
+        children
+      }
+    }
+
+    return {
+      ...node,
+      children: replaceDirectoryChildren(node.children, targetPath, children)
+    }
+  })
+
+const getDirectoryDepth = (directoryPath: string): number =>
+  directoryPath.split('/').filter((segment) => segment.length > 0).length
+
+const sortDirectoryPaths = (
+  directoryPaths: readonly string[]
+): readonly string[] =>
+  Array.from(new Set(directoryPaths))
+    .filter((directoryPath) => directoryPath.length > 0)
+    .sort(
+      (leftPath, rightPath) =>
+        getDirectoryDepth(leftPath) - getDirectoryDepth(rightPath) ||
+        leftPath.localeCompare(rightPath)
+    )
+
 const getParentPath = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf('/')
 
@@ -702,33 +744,51 @@ export const App = (): React.JSX.Element => {
     })
   }
 
-  const refreshWorkspaceTree = useCallback(async (workspaceRoot?: string): Promise<void> => {
-    const scopedWorkspaceRoot = workspaceRoot ?? state.workspace?.rootPath
+  const refreshWorkspaceTree = useCallback(
+    async (
+      workspaceRoot?: string,
+      directoryPaths: readonly string[] = []
+    ): Promise<void> => {
+      const scopedWorkspaceRoot = workspaceRoot ?? state.workspace?.rootPath
 
-    if (!scopedWorkspaceRoot) {
-      return
-    }
-
-    try {
-      if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+      if (!scopedWorkspaceRoot) {
+        return
       }
 
-      const tree = await window.editorApi.listDirectory('')
+      try {
+        if (!window.editorApi) {
+          throw new Error('Editor API unavailable. Restart the app and try again.')
+        }
 
-      dispatch({
-        tree,
-        type: 'workspace/tree-refreshed',
-        workspaceRoot: scopedWorkspaceRoot
-      })
-    } catch (error) {
-      dispatch({
-        message: getErrorMessage(error, 'Unable to refresh workspace'),
-        type: 'workspace/operation-failed',
-        workspaceRoot: scopedWorkspaceRoot
-      })
-    }
-  }, [state.workspace?.rootPath])
+        let tree = await window.editorApi.listDirectory('')
+
+        for (const directoryPath of sortDirectoryPaths(directoryPaths)) {
+          if (!hasDirectoryNode(tree, directoryPath)) {
+            continue
+          }
+
+          tree = replaceDirectoryChildren(
+            tree,
+            directoryPath,
+            await window.editorApi.listDirectory(directoryPath)
+          )
+        }
+
+        dispatch({
+          tree,
+          type: 'workspace/tree-refreshed',
+          workspaceRoot: scopedWorkspaceRoot
+        })
+      } catch (error) {
+        dispatch({
+          message: getErrorMessage(error, 'Unable to refresh workspace'),
+          type: 'workspace/operation-failed',
+          workspaceRoot: scopedWorkspaceRoot
+        })
+      }
+    },
+    [state.workspace?.rootPath]
+  )
 
   const saveCurrentFile = useCallback(
     async (serializedMarkdown?: string): Promise<void> => {
@@ -1297,6 +1357,9 @@ export const App = (): React.JSX.Element => {
         onOpenWorkspace={() => {
           void openWorkspace()
         }}
+        onRefreshTree={(directoryPaths) =>
+          refreshWorkspaceTree(state.workspace?.rootPath, directoryPaths)
+        }
         onRenameEntry={(entryName) => {
           void renameSelectedEntry(entryName)
         }}

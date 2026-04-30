@@ -107,12 +107,17 @@ const ExplorerTreeNode = ({
   onInlineEditorChange,
   onInlineEditorSubmit,
   onOpenEntryMenu,
+  onDirectoryExpandedChange,
   onSelectEntry,
   onSelectFile,
+  expandedDirectoryPaths,
+  locateFilePath,
+  locateFileRequestId,
   selectedEntryPath,
   selectedFilePath
 }: ExplorerTreeNodeProps): React.JSX.Element => {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const rowButtonRef = useRef<HTMLButtonElement | null>(null)
+  const isExpanded = expandedDirectoryPaths?.has(node.path) ?? false
   const isRenamingEntry =
     inlineEditor?.type === 'rename' && inlineEditor.targetEntryPath === node.path
   const isSelected =
@@ -120,7 +125,7 @@ const ExplorerTreeNode = ({
     (node.type === 'file' && selectedFilePath === node.path)
   const rowStyle = { '--depth': depth } as CSSProperties
   const toggleExpanded = (): void => {
-    setIsExpanded((currentValue) => !currentValue)
+    onDirectoryExpandedChange?.(node.path, !isExpanded)
   }
   const openContextMenu = (event: MouseEvent): void => {
     if (!onOpenEntryMenu) {
@@ -134,6 +139,21 @@ const ExplorerTreeNode = ({
       entry: node
     })
   }
+
+  useEffect(() => {
+    if (node.type !== 'file' || locateFilePath !== node.path) {
+      return
+    }
+
+    if (typeof rowButtonRef.current?.scrollIntoView !== 'function') {
+      return
+    }
+
+    rowButtonRef.current.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest'
+    })
+  }, [locateFilePath, locateFileRequestId, node.path, node.type])
 
   if (node.type === 'directory') {
     const isCreatingInsideDirectory =
@@ -202,9 +222,13 @@ const ExplorerTreeNode = ({
                 onInlineEditorCancel={onInlineEditorCancel}
                 onInlineEditorChange={onInlineEditorChange}
                 onInlineEditorSubmit={onInlineEditorSubmit}
+                onDirectoryExpandedChange={onDirectoryExpandedChange}
                 onOpenEntryMenu={onOpenEntryMenu}
                 onSelectEntry={onSelectEntry}
                 onSelectFile={onSelectFile}
+                expandedDirectoryPaths={expandedDirectoryPaths}
+                locateFilePath={locateFilePath}
+                locateFileRequestId={locateFileRequestId}
                 selectedEntryPath={selectedEntryPath}
                 selectedFilePath={selectedFilePath}
               />
@@ -239,6 +263,7 @@ const ExplorerTreeNode = ({
               onSelectEntry(node.path)
               onSelectFile(node.path)
             }}
+            ref={rowButtonRef}
             type="button"
           >
             {node.name}
@@ -250,8 +275,12 @@ const ExplorerTreeNode = ({
 }
 
 export const ExplorerTree = ({
+  expandedDirectoryPaths,
   inlineEditor,
+  locateFilePath,
+  locateFileRequestId,
   nodes,
+  onDirectoryExpandedChange,
   onInlineEditorCancel,
   onInlineEditorChange,
   onInlineEditorSubmit,
@@ -260,36 +289,67 @@ export const ExplorerTree = ({
   onSelectFile,
   selectedEntryPath,
   selectedFilePath
-}: ExplorerTreeRootProps): React.JSX.Element => (
-  <ul className="explorer-tree explorer-tree-root">
-    {inlineEditor &&
-    inlineEditor.type !== 'rename' &&
-    inlineEditor.targetDirectoryPath === null ? (
-      <li>
-        <ExplorerInlineEditorRow
+}: ExplorerTreeRootProps): React.JSX.Element => {
+  const [uncontrolledExpandedDirectoryPaths, setUncontrolledExpandedDirectoryPaths] =
+    useState<ReadonlySet<string>>(() => new Set())
+  const effectiveExpandedDirectoryPaths =
+    expandedDirectoryPaths ?? uncontrolledExpandedDirectoryPaths
+  const changeDirectoryExpansion = (
+    directoryPath: string,
+    isExpanded: boolean
+  ): void => {
+    if (!expandedDirectoryPaths) {
+      setUncontrolledExpandedDirectoryPaths((currentPaths) => {
+        const nextPaths = new Set(currentPaths)
+
+        if (isExpanded) {
+          nextPaths.add(directoryPath)
+        } else {
+          nextPaths.delete(directoryPath)
+        }
+
+        return nextPaths
+      })
+    }
+
+    onDirectoryExpandedChange?.(directoryPath, isExpanded)
+  }
+
+  return (
+    <ul className="explorer-tree explorer-tree-root">
+      {inlineEditor &&
+      inlineEditor.type !== 'rename' &&
+      inlineEditor.targetDirectoryPath === null ? (
+        <li>
+          <ExplorerInlineEditorRow
+            depth={0}
+            editor={inlineEditor}
+            onCancel={onInlineEditorCancel}
+            onChange={onInlineEditorChange}
+            onSubmit={onInlineEditorSubmit}
+          />
+        </li>
+      ) : null}
+      {nodes.map((node) => (
+        <ExplorerTreeNode
           depth={0}
-          editor={inlineEditor}
-          onCancel={onInlineEditorCancel}
-          onChange={onInlineEditorChange}
-          onSubmit={onInlineEditorSubmit}
+          expandedDirectoryPaths={effectiveExpandedDirectoryPaths}
+          inlineEditor={inlineEditor}
+          key={node.path}
+          locateFilePath={locateFilePath}
+          locateFileRequestId={locateFileRequestId}
+          node={node}
+          onDirectoryExpandedChange={changeDirectoryExpansion}
+          onInlineEditorCancel={onInlineEditorCancel}
+          onInlineEditorChange={onInlineEditorChange}
+          onInlineEditorSubmit={onInlineEditorSubmit}
+          onOpenEntryMenu={onOpenEntryMenu}
+          onSelectEntry={onSelectEntry}
+          onSelectFile={onSelectFile}
+          selectedEntryPath={selectedEntryPath}
+          selectedFilePath={selectedFilePath}
         />
-      </li>
-    ) : null}
-    {nodes.map((node) => (
-      <ExplorerTreeNode
-        depth={0}
-        inlineEditor={inlineEditor}
-        key={node.path}
-        node={node}
-        onInlineEditorCancel={onInlineEditorCancel}
-        onInlineEditorChange={onInlineEditorChange}
-        onInlineEditorSubmit={onInlineEditorSubmit}
-        onOpenEntryMenu={onOpenEntryMenu}
-        onSelectEntry={onSelectEntry}
-        onSelectFile={onSelectFile}
-        selectedEntryPath={selectedEntryPath}
-        selectedFilePath={selectedFilePath}
-      />
-    ))}
-  </ul>
-)
+      ))}
+    </ul>
+  )
+}

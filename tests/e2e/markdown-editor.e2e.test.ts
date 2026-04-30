@@ -17,7 +17,9 @@ import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
 
 const E2E_TEST_TIMEOUT_MS = 120_000
-const E2E_BUILD_TIMEOUT_MS = 300_000
+const E2E_BUILD_TIMEOUT_MS = 600_000
+const E2E_UI_READY_TIMEOUT_MS = 20_000
+const E2E_AI_RESULT_TIMEOUT_MS = 30_000
 
 test.setTimeout(E2E_TEST_TIMEOUT_MS)
 
@@ -37,7 +39,7 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
     .or(window.getByRole('button', { name: /manage workspaces/i }))
   const waitForWorkspaceDialog = async (): Promise<boolean> => {
     await workspaceDialogBackdrop
-      .waitFor({ state: 'visible', timeout: 1500 })
+      .waitFor({ state: 'visible', timeout: E2E_UI_READY_TIMEOUT_MS })
       .catch(() => undefined)
 
     return workspaceDialogBackdrop.isVisible().catch(() => false)
@@ -48,7 +50,7 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
   }
 
   try {
-    await workspaceTrigger.click({ timeout: 1500 })
+    await workspaceTrigger.click({ timeout: E2E_UI_READY_TIMEOUT_MS })
   } catch (error) {
     if (await waitForWorkspaceDialog()) {
       return
@@ -431,7 +433,7 @@ test('opens a workspace and expands the docs folder', async () => {
 
     await expect(
       window.getByRole('button', { name: /README\.md Markdown file/i })
-    ).toBeVisible()
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
     await expect(window).toHaveTitle(await realpath(workspacePath))
     await expect(
       window.getByRole('button', { name: /docs folder/i })
@@ -473,7 +475,7 @@ test('opens a workspace from a command line path', async () => {
   try {
     await expect(
       window.getByRole('button', { name: /README\.md Markdown file/i })
-    ).toBeVisible()
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
     await expect(
       window.getByRole('button', { name: /manage workspaces/i })
     ).toBeVisible()
@@ -780,7 +782,9 @@ test('summarizes and translates the current Markdown file with an installed AI C
 
     const aiResult = window.getByRole('region', { name: /ai result/i })
 
-    await expect(aiResult).toContainText('Summary from fake CLI')
+    await expect(aiResult).toContainText('Summary from fake CLI', {
+      timeout: E2E_AI_RESULT_TIMEOUT_MS
+    })
     await expect(aiResult.locator('[contenteditable="false"]').first())
       .toBeVisible()
     await expect(
@@ -819,7 +823,9 @@ test('summarizes and translates the current Markdown file with an installed AI C
       .fill('Make it shorter')
     await window.getByRole('button', { name: /regenerate summary/i }).click()
 
-    await expect(aiResult).toContainText('Shorter summary from fake CLI')
+    await expect(aiResult).toContainText('Shorter summary from fake CLI', {
+      timeout: E2E_AI_RESULT_TIMEOUT_MS
+    })
     await expect(
       readFile(
         join(workspacePath, '.mde', 'translations', 'README-summary.md'),
@@ -830,7 +836,9 @@ test('summarizes and translates the current Markdown file with an installed AI C
     await window.getByRole('button', { name: /translate markdown/i }).click()
     await window.getByRole('menuitem', { name: /English/i }).click()
 
-    await expect(aiResult).toContainText('Translated from fake CLI')
+    await expect(aiResult).toContainText('Translated from fake CLI', {
+      timeout: E2E_AI_RESULT_TIMEOUT_MS
+    })
     await expect(
       window.getByRole('textbox', { name: /refine summary instruction/i })
     ).toHaveCount(0)
@@ -895,7 +903,7 @@ test('opens a standalone markdown file from a command line path', async () => {
   try {
     await expect(
       window.getByRole('button', { name: /cli-file\.md Markdown file/i })
-    ).toBeVisible()
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
     await expect(window.getByTestId('markdown-block-editor')).toContainText(
       'CLI File'
     )

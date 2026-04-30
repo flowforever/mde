@@ -57,6 +57,7 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
 import { App } from '../../src/renderer/src/app/App'
 import { APP_THEME_STORAGE_KEY } from '../../src/renderer/src/theme/appThemes'
 import type { AiApi, AiGenerationResult } from '../../src/shared/ai'
+import type { TreeNode } from '../../src/shared/fileTree'
 import type { UpdateApi } from '../../src/shared/update'
 import type { EditorApi } from '../../src/shared/workspace'
 
@@ -470,6 +471,111 @@ describe('App shell', () => {
     expect(
       screen.queryByRole('dialog', { name: /workspace manager/i })
     ).not.toBeInTheDocument()
+  })
+
+  it('refreshes the root, expanded folders, and current file ancestors from explorer refresh', async () => {
+    const user = userEvent.setup()
+    const nestedChildren: readonly TreeNode[] = [
+      { name: 'deep.md', path: 'docs/nested/deep.md', type: 'file' }
+    ]
+    const docsChildren: readonly TreeNode[] = [
+      {
+        children: nestedChildren,
+        name: 'nested',
+        path: 'docs/nested',
+        type: 'directory'
+      },
+      { name: 'intro.md', path: 'docs/intro.md', type: 'file' }
+    ]
+    const rootTree: readonly TreeNode[] = [
+      {
+        children: docsChildren,
+        name: 'docs',
+        path: 'docs',
+        type: 'directory'
+      }
+    ]
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn((directoryPath: string): Promise<readonly TreeNode[]> => {
+        if (directoryPath === 'docs') {
+          return Promise.resolve(docsChildren)
+        }
+
+        if (directoryPath === 'docs/nested') {
+          return Promise.resolve(nestedChildren)
+        }
+
+        return Promise.resolve(rootTree)
+      }),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree: rootTree,
+        type: 'workspace'
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Deep',
+        path: 'docs/nested/deep.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      'mde.activeWorkspace',
+      JSON.stringify({
+        name: 'workspace',
+        rootPath: '/workspace',
+        type: 'workspace'
+      })
+    )
+    localStorage.setItem(
+      'mde.workspaceFileHistory',
+      JSON.stringify([
+        {
+          lastOpenedFilePath: 'docs/nested/deep.md',
+          recentFilePaths: ['docs/nested/deep.md'],
+          workspaceRoot: '/workspace'
+        }
+      ])
+    )
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+        'docs/nested/deep.md',
+        '/workspace'
+      )
+    })
+    await user.click(screen.getByRole('button', { name: /expand docs/i }))
+
+    await waitFor(() => {
+      expect(editorApi.listDirectory).toHaveBeenCalledWith('docs')
+    })
+    editorApi.listDirectory.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /refresh explorer/i }))
+
+    await waitFor(() => {
+      expect(
+        editorApi.listDirectory.mock.calls.map(([directoryPath]) => directoryPath)
+      ).toEqual(['', 'docs', 'docs/nested'])
+    })
   })
 
   it('searches and forgets remembered workspace resources in the popup', async () => {
