@@ -1,4 +1,4 @@
-# MDE Multi Instance - READY
+# MDE Multi Instance
 
 MDE 应该要能支持多开.
 
