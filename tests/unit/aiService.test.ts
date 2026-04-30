@@ -230,6 +230,98 @@ describe('aiService', () => {
     30_000
   )
 
+  it('does not pass removed Codex approval flags when generating translations', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-service-'))
+    const binPath = await mkdtemp(join(tmpdir(), 'mde-ai-codex-args-'))
+    const fakeCodexPath = join(binPath, 'codex')
+    const argsPath = join(binPath, 'args.txt')
+    const previousArgsPath = process.env.MDE_FAKE_CODEX_ARGS
+
+    await writeFile(
+      fakeCodexPath,
+      [
+        '#!/bin/sh',
+        'printf "%s\\n" "$@" > "$MDE_FAKE_CODEX_ARGS"',
+        'printf "%s\\n" "# English" "" "Translated without removed flags."',
+        ''
+      ].join('\n'),
+      'utf8'
+    )
+    await chmod(fakeCodexPath, 0o755)
+    await writeFile(join(workspacePath, 'README.md'), '# Readme')
+
+    const service = createAiService({
+      locateCommand: locateCommands({ codex: fakeCodexPath })
+    })
+
+    process.env.MDE_FAKE_CODEX_ARGS = argsPath
+
+    try {
+      await expect(
+        service.translateMarkdown(workspacePath, 'README.md', '# Readme', 'English')
+      ).resolves.toMatchObject({
+        contents: '# English\n\nTranslated without removed flags.',
+        tool: { id: 'codex', name: 'Codex' }
+      })
+
+      await expect(readFile(argsPath, 'utf8')).resolves.not.toContain(
+        '--ask-for-approval'
+      )
+    } finally {
+      if (previousArgsPath === undefined) {
+        delete process.env.MDE_FAKE_CODEX_ARGS
+      } else {
+        process.env.MDE_FAKE_CODEX_ARGS = previousArgsPath
+      }
+    }
+  })
+
+  it('does not pass removed Codex approval flags when generating summaries', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-service-'))
+    const binPath = await mkdtemp(join(tmpdir(), 'mde-ai-codex-args-'))
+    const fakeCodexPath = join(binPath, 'codex')
+    const argsPath = join(binPath, 'summary-args.txt')
+    const previousArgsPath = process.env.MDE_FAKE_CODEX_ARGS
+
+    await writeFile(
+      fakeCodexPath,
+      [
+        '#!/bin/sh',
+        'printf "%s\\n" "$@" > "$MDE_FAKE_CODEX_ARGS"',
+        'printf "%s\\n" "## Summary" "" "- Summarized without removed flags."',
+        ''
+      ].join('\n'),
+      'utf8'
+    )
+    await chmod(fakeCodexPath, 0o755)
+    await writeFile(join(workspacePath, 'README.md'), '# Readme')
+
+    const service = createAiService({
+      locateCommand: locateCommands({ codex: fakeCodexPath })
+    })
+
+    process.env.MDE_FAKE_CODEX_ARGS = argsPath
+
+    try {
+      await expect(
+        service.summarizeMarkdown(workspacePath, 'README.md', '# Readme')
+      ).resolves.toMatchObject({
+        contents: '## Summary\n\n- Summarized without removed flags.',
+        tool: { id: 'codex', name: 'Codex' }
+      })
+
+      await expect(readFile(argsPath, 'utf8')).resolves.not.toContain(
+        '--ask-for-approval'
+      )
+    } finally {
+      if (previousArgsPath === undefined) {
+        delete process.env.MDE_FAKE_CODEX_ARGS
+      } else {
+        process.env.MDE_FAKE_CODEX_ARGS = previousArgsPath
+      }
+    }
+  })
+
   it('regenerates summaries when the refinement instruction changes', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-service-'))
     const promptResults = [

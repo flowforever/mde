@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -142,6 +142,76 @@ describe('aiHandlers integration', () => {
       modelName: 'gpt-5.4',
       toolId: 'codex'
     })
+  })
+
+  it('runs Codex through IPC without removed approval flags', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-ipc-'))
+    const binPath = await mkdtemp(join(tmpdir(), 'mde-ai-ipc-codex-'))
+    const fakeCodexPath = join(binPath, 'codex')
+    const argsPath = join(binPath, 'args.txt')
+    const previousArgsPath = process.env.MDE_FAKE_CODEX_ARGS
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const workspaceSession = registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      testWorkspacePath: workspacePath,
+      workspaceService: createWorkspaceService()
+    })
+
+    await writeFile(join(workspacePath, 'README.md'), '# Readme')
+    await writeFile(
+      fakeCodexPath,
+      [
+        '#!/bin/sh',
+        'printf "%s\\n" "$@" > "$MDE_FAKE_CODEX_ARGS"',
+        'printf "%s\\n" "# English" "" "Translated through IPC without removed flags."',
+        ''
+      ].join('\n'),
+      'utf8'
+    )
+    await chmod(fakeCodexPath, 0o755)
+    process.env.MDE_FAKE_CODEX_ARGS = argsPath
+
+    registerAiHandlers({
+      aiService: createAiService({
+        locateCommand: (tool) =>
+          Promise.resolve(tool.id === 'codex' ? fakeCodexPath : null),
+        resolveShellPath: () => Promise.resolve(null)
+      }),
+      getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
+      ipcMain
+    })
+
+    try {
+      const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.(
+        {}
+      )) as {
+        rootPath: string
+      }
+      const result = (await handlers
+        .get(AI_CHANNELS.translateMarkdown)
+        ?.({}, 'README.md', '# Readme', 'English', workspace.rootPath)) as {
+        contents: string
+      }
+
+      expect(result.contents).toBe(
+        '# English\n\nTranslated through IPC without removed flags.'
+      )
+      await expect(readFile(argsPath, 'utf8')).resolves.not.toContain(
+        '--ask-for-approval'
+      )
+    } finally {
+      if (previousArgsPath === undefined) {
+        delete process.env.MDE_FAKE_CODEX_ARGS
+      } else {
+        process.env.MDE_FAKE_CODEX_ARGS = previousArgsPath
+      }
+    }
   })
 
   it('rejects stale AI requests when the active workspace changes', async () => {

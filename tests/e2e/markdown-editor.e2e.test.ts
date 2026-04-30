@@ -809,6 +809,12 @@ test('summarizes and translates the current Markdown file with an installed AI C
     [
       '#!/bin/sh',
       'input="$(cat)"',
+      'for arg in "$@"; do',
+      '  if [ "$arg" = "--ask-for-approval" ]; then',
+      '    echo "error: unexpected argument \'--ask-for-approval\' found" >&2',
+      '    exit 2',
+      '  fi',
+      'done',
       'case "$input" in',
       '  *"Make it shorter"*) printf "%s\\n" "## Summary" "" "- Shorter summary from fake CLI." ;;',
       '  *Translate*) printf "%s\\n" "# English" "" "Translated from fake CLI." ;;',

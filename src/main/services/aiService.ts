@@ -456,8 +456,6 @@ const getToolArgs = (
         '--ignore-rules',
         '--sandbox',
         'read-only',
-        '--ask-for-approval',
-        'never',
         '-C',
         workspacePath,
         '-'
