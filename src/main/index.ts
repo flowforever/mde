@@ -14,7 +14,9 @@ import {
 } from './ipc/registerWorkspaceHandlers'
 import { getLaunchPathFromArgv } from './launchArgs'
 import { WORKSPACE_CHANNELS } from './ipc/channels'
+import { registerAiHandlers } from './ipc/registerAiHandlers'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
+import { createAiService } from './services/aiService'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
 import {
@@ -231,6 +233,11 @@ const bootstrap = async (): Promise<void> => {
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain,
     markdownFileService: createMarkdownFileService()
+  })
+  registerAiHandlers({
+    aiService: createAiService(),
+    getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
+    ipcMain
   })
   setMainWindow(await createMainWindow(BrowserWindow))
 

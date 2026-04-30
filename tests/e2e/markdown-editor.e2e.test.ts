@@ -1,4 +1,14 @@
-import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  stat,
+  writeFile
+} from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
@@ -307,6 +317,9 @@ test('follows system appearance using the remembered light and dark themes', asy
 
     const appShell = window.locator('.app-shell')
 
+    await window.waitForFunction(
+      () => document.querySelector('.app-shell')?.getAttribute('data-theme') === 'moss'
+    )
     await expect(appShell).toHaveAttribute('data-theme', 'moss')
 
     await window.emulateMedia({ colorScheme: 'light' })
@@ -649,7 +662,7 @@ test('toggles the editor between centered and full-width layouts', async () => {
       (element) => element.getBoundingClientRect().width
     )
 
-    expect(actionBarWidth).toBeLessThan(80)
+    expect(actionBarWidth).toBeLessThan(160)
     expect(actionBarWidth).toBeLessThan(centeredWidth)
     await fullWidthButton.click()
     await expect(
@@ -752,6 +765,107 @@ test('renders Mermaid flowcharts and saves pasted images beside the Markdown fil
     await expect
       .poll(async () => readFile(diagramPath, 'utf8'), { timeout: 10_000 })
       .toContain('.mde/assets/image-')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('summarizes and translates the current Markdown file with an installed AI CLI', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const fakeBinPath = await mkdtemp(join(tmpdir(), 'mde-fake-ai-bin-'))
+  const fakeCodexPath = join(fakeBinPath, 'codex')
+
+  await writeFile(
+    fakeCodexPath,
+    [
+      '#!/bin/sh',
+      'input="$(cat)"',
+      'case "$input" in',
+      '  *"Make it shorter"*) printf "%s\\n" "## Summary" "" "- Shorter summary from fake CLI." ;;',
+      '  *Translate*) printf "%s\\n" "# English" "" "Translated from fake CLI." ;;',
+      '  *) printf "%s\\n" "## Summary" ""; i=1; while [ "$i" -le 80 ]; do printf "%s\\n" "- Summary from fake CLI line $i."; i=$((i + 1)); done ;;',
+      'esac'
+    ].join('\n')
+  )
+  await chmod(fakeCodexPath, 0o755)
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`],
+    env: {
+      PATH: `${fakeBinPath}:${process.env.PATH ?? ''}`
+    }
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await expect(window.getByTestId('markdown-block-editor')).toBeVisible()
+
+    await window.getByRole('button', { name: /summarize markdown/i }).click()
+
+    const aiResult = window.getByRole('region', { name: /ai result/i })
+
+    await expect(aiResult).toContainText('Summary from fake CLI')
+    await expect(aiResult.locator('[contenteditable="false"]').first())
+      .toBeVisible()
+    await expect(
+      window.getByRole('textbox', { name: /refine summary instruction/i })
+    ).toBeVisible()
+    const refineBar = window.locator('.ai-summary-refine-bar')
+    const resultScroll = aiResult.locator('.ai-result-editor-scroll')
+    const editorPane = window.locator('.editor-pane')
+    const initialRefineBarTop = await refineBar.evaluate((element) =>
+      Math.round(element.getBoundingClientRect().top)
+    )
+
+    await resultScroll.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+
+    expect(await resultScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+    expect(await editorPane.evaluate((element) => element.scrollTop)).toBe(0)
+    expect(
+      await refineBar.evaluate((element) =>
+        Math.round(element.getBoundingClientRect().top)
+      )
+    ).toBe(initialRefineBarTop)
+    await expect(
+      window.getByRole('textbox', { name: /refine summary instruction/i })
+    ).toBeInViewport()
+    await expect(
+      readFile(
+        join(workspacePath, '.mde', 'translations', 'README-summary.md'),
+        'utf8'
+      )
+    ).resolves.toContain('Summary from fake CLI')
+
+    await window
+      .getByRole('textbox', { name: /refine summary instruction/i })
+      .fill('Make it shorter')
+    await window.getByRole('button', { name: /regenerate summary/i }).click()
+
+    await expect(aiResult).toContainText('Shorter summary from fake CLI')
+    await expect(
+      readFile(
+        join(workspacePath, '.mde', 'translations', 'README-summary.md'),
+        'utf8'
+      )
+    ).resolves.toContain('Shorter summary from fake CLI')
+
+    await window.getByRole('button', { name: /translate markdown/i }).click()
+    await window.getByRole('menuitem', { name: /English/i }).click()
+
+    await expect(aiResult).toContainText('Translated from fake CLI')
+    await expect(
+      window.getByRole('textbox', { name: /refine summary instruction/i })
+    ).toHaveCount(0)
+    await expect(
+      readFile(
+        join(workspacePath, '.mde', 'translations', 'README.English.md'),
+        'utf8'
+      )
+    ).resolves.toContain('Translated from fake CLI')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

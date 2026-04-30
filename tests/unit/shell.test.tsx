@@ -14,6 +14,7 @@ interface MockMarkdownBlockEditorProps {
   readonly colorScheme: 'dark' | 'light'
   readonly errorMessage: string | null
   readonly isDirty: boolean
+  readonly isReadOnly?: boolean
   readonly isSaving: boolean
   readonly markdown: string
   readonly onMarkdownChange: (contents: string) => void
@@ -28,12 +29,18 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
   const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
     <section aria-label="Mock editor">
       <span>{props.path}</span>
+      <span>{props.markdown}</span>
       <span data-testid="mock-editor-color-scheme">{props.colorScheme}</span>
+      {props.isReadOnly ? <span data-testid="mock-editor-readonly">read-only</span> : null}
       {props.isDirty ? <span>Unsaved changes</span> : null}
       {props.isSaving ? <span>Saving...</span> : null}
       {props.errorMessage ? <p role="alert">{props.errorMessage}</p> : null}
       <button
         onClick={() => {
+          if (props.isReadOnly) {
+            return
+          }
+
           mockEditorState.changeIndex += 1
           props.onMarkdownChange(`# Changed ${mockEditorState.changeIndex}`)
         }}
@@ -49,8 +56,28 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
 
 import { App } from '../../src/renderer/src/app/App'
 import { APP_THEME_STORAGE_KEY } from '../../src/renderer/src/theme/appThemes'
+import type { AiApi, AiGenerationResult } from '../../src/shared/ai'
 import type { UpdateApi } from '../../src/shared/update'
 import type { EditorApi } from '../../src/shared/workspace'
+
+const createDeferred = <Value,>(): {
+  readonly promise: Promise<Value>
+  readonly reject: (reason?: unknown) => void
+  readonly resolve: (value: Value) => void
+} => {
+  let resolveDeferred: (value: Value) => void = () => undefined
+  let rejectDeferred: (reason?: unknown) => void = () => undefined
+  const promise = new Promise<Value>((resolve, reject) => {
+    resolveDeferred = resolve
+    rejectDeferred = reject
+  })
+
+  return {
+    promise,
+    reject: rejectDeferred,
+    resolve: resolveDeferred
+  }
+}
 
 const mockSystemThemePreference = (initialMatches: boolean) => {
   const listeners = new Set<(event: MediaQueryListEvent) => void>()
@@ -107,6 +134,7 @@ describe('App shell', () => {
     mockEditorState.changeIndex = 0
     localStorage.clear()
     document.title = 'MDE'
+    Reflect.deleteProperty(window, 'aiApi')
     Reflect.deleteProperty(window, 'editorApi')
     Reflect.deleteProperty(window, 'updateApi')
   })
@@ -709,6 +737,263 @@ describe('App shell', () => {
         name: /use centered editor view/i
       })
     ).toBeVisible()
+  })
+
+  it('shows AI actions for detected CLIs and renders read-only generated results', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
+    } satisfies EditorApi
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: '/fake/codex', id: 'codex', name: 'Codex' }]
+      }),
+      summarizeMarkdown: vi
+        .fn()
+        .mockResolvedValueOnce({
+          cached: false,
+          contents: '## Summary\n\n- Original summarized.',
+          kind: 'summary',
+          path: '.mde/translations/README-summary.md',
+          tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
+        })
+        .mockResolvedValueOnce({
+          cached: false,
+          contents: '## Summary\n\n- Shorter original summary.',
+          kind: 'summary',
+          path: '.mde/translations/README-summary.md',
+          tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
+        }),
+      translateMarkdown: vi.fn().mockResolvedValue({
+        cached: false,
+        contents: '# English\n\nOriginal translated.',
+        kind: 'translation',
+        language: 'English',
+        path: '.mde/translations/README.English.md',
+        tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
+      })
+    } satisfies AiApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    Object.defineProperty(window, 'aiApi', {
+      configurable: true,
+      value: aiApi
+    })
+
+    render(<App />)
+
+    const summaryButton = await screen.findByRole('button', {
+      name: /summarize markdown/i
+    })
+
+    await user.click(summaryButton)
+
+    expect(aiApi.summarizeMarkdown).toHaveBeenCalledWith(
+      'README.md',
+      '# Original',
+      '/workspace',
+      undefined
+    )
+    const summaryResult = await screen.findByRole('region', {
+      name: /ai result/i
+    })
+
+    expect(summaryResult).toHaveTextContent('Original summarized')
+    expect(within(summaryResult).getByTestId('mock-editor-readonly')).toBeVisible()
+    expect(
+      screen.getByRole('textbox', { name: /refine summary instruction/i })
+    ).toBeVisible()
+
+    await user.type(
+      screen.getByRole('textbox', { name: /refine summary instruction/i }),
+      'Make it shorter'
+    )
+    await user.click(screen.getByRole('button', { name: /regenerate summary/i }))
+
+    expect(aiApi.summarizeMarkdown).toHaveBeenLastCalledWith(
+      'README.md',
+      '# Original',
+      '/workspace',
+      'Make it shorter'
+    )
+    expect(
+      await screen.findByRole('region', { name: /ai result/i })
+    ).toHaveTextContent('Shorter original summary')
+
+    await user.click(
+      screen.getByRole('button', { name: /translate markdown/i })
+    )
+    await user.click(screen.getByRole('menuitem', { name: /English/i }))
+
+    expect(aiApi.translateMarkdown).toHaveBeenCalledWith(
+      'README.md',
+      '# Original',
+      'English',
+      '/workspace'
+    )
+    expect(
+      await screen.findByRole('region', { name: /ai result/i })
+    ).toHaveTextContent('Original translated')
+    expect(
+      screen.queryByRole('textbox', { name: /refine summary instruction/i })
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: /translate markdown/i })
+    )
+    await user.type(
+      screen.getByRole('textbox', { name: /custom translation language/i }),
+      'Japanese'
+    )
+    await user.click(
+      screen.getByRole('button', { name: /add translation language/i })
+    )
+
+    expect(aiApi.translateMarkdown).toHaveBeenLastCalledWith(
+      'README.md',
+      '# Original',
+      'Japanese',
+      '/workspace'
+    )
+    expect(localStorage.getItem('mde.customTranslationLanguages')).toContain(
+      'Japanese'
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: /translate markdown/i })
+    )
+    await user.click(
+      screen.getByRole('button', { name: /remove custom language Japanese/i })
+    )
+
+    expect(localStorage.getItem('mde.customTranslationLanguages')).not.toContain(
+      'Japanese'
+    )
+  })
+
+  it('keeps AI button state scoped to the active Markdown file', async () => {
+    const user = userEvent.setup()
+    const translation = createDeferred<AiGenerationResult>()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [
+          { name: 'README.md', path: 'README.md', type: 'file' },
+          { name: 'notes.md', path: 'notes.md', type: 'file' }
+        ],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn((filePath: string) =>
+        Promise.resolve({
+          contents: filePath === 'notes.md' ? '# Notes' : '# Original',
+          path: filePath
+        })
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
+    } satisfies EditorApi
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: '/fake/codex', id: 'codex', name: 'Codex' }]
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn().mockReturnValue(translation.promise)
+    } satisfies AiApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    Object.defineProperty(window, 'aiApi', {
+      configurable: true,
+      value: aiApi
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('# Original')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /translate markdown/i }))
+    await user.click(screen.getByRole('menuitem', { name: /English/i }))
+
+    expect(
+      screen.getByRole('button', { name: /summarize markdown/i })
+    ).toHaveAttribute('aria-busy', 'false')
+    expect(
+      screen.getByRole('button', { name: /translate markdown/i })
+    ).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: /notes\.md Markdown file/i })
+    )
+
+    expect(await screen.findByText('# Notes')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /summarize markdown/i })
+    ).toHaveAttribute('aria-busy', 'false')
+    expect(
+      screen.getByRole('button', { name: /translate markdown/i })
+    ).toHaveAttribute('aria-busy', 'false')
+    expect(screen.queryByTestId('ai-action-spinner')).not.toBeInTheDocument()
+
+    await act(async () => {
+      translation.resolve({
+        cached: false,
+        contents: '# English\n\nOriginal translated.',
+        kind: 'translation',
+        language: 'English',
+        path: '.mde/translations/README.English.md',
+        tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
+      })
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.queryByRole('region', { name: /ai result/i })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('# Notes')).toBeVisible()
   })
 
   it('opens a manual theme selector and persists the selected theme', async () => {

@@ -6,6 +6,7 @@ declare const require: (moduleName: 'electron') => Pick<
 >
 
 import { createEditorApi } from './editorApi'
+import { createAiApi } from './aiApi'
 import { createUpdateApi } from './updateApi'
 
 const { contextBridge, ipcRenderer } = require('electron')
@@ -15,4 +16,5 @@ contextBridge.exposeInMainWorld('markdownEditorShell', {
 })
 
 contextBridge.exposeInMainWorld('editorApi', createEditorApi(ipcRenderer))
+contextBridge.exposeInMainWorld('aiApi', createAiApi(ipcRenderer))
 contextBridge.exposeInMainWorld('updateApi', createUpdateApi(ipcRenderer))

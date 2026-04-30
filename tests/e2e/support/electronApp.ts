@@ -24,6 +24,7 @@ interface LaunchedElectronApp {
 
 interface LaunchElectronAppOptions {
   readonly args?: readonly string[]
+  readonly env?: NodeJS.ProcessEnv
 }
 
 export const launchElectronApp = async (
@@ -37,6 +38,7 @@ export const launchElectronApp = async (
     args: ['out/main/index.js', ...options.args ?? []],
     env: {
       ...process.env,
+      ...options.env,
       [CAPTURE_STARTUP_DIAGNOSTICS_ENV]: '1',
       [DISABLE_SINGLE_INSTANCE_ENV]: '1'
     }

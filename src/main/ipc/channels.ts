@@ -19,6 +19,12 @@ export const FILE_CHANNELS = Object.freeze({
   writeMarkdownFile: 'file:write-markdown'
 })
 
+export const AI_CHANNELS = Object.freeze({
+  detectTools: 'ai:detect-tools',
+  summarizeMarkdown: 'ai:summarize-markdown',
+  translateMarkdown: 'ai:translate-markdown'
+})
+
 export const UPDATE_CHANNELS = Object.freeze({
   checkForUpdates: 'update:check-for-updates',
   downloadAndOpen: 'update:download-and-open',

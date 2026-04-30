@@ -28,6 +28,7 @@ interface MarkdownBlockEditorProps {
   readonly draftMarkdown: string
   readonly errorMessage: string | null
   readonly isDirty: boolean
+  readonly isReadOnly?: boolean
   readonly isSaving: boolean
   readonly markdown: string
   readonly onImageUpload: (file: File) => Promise<string>
@@ -53,6 +54,7 @@ export const MarkdownBlockEditor = forwardRef<
     errorMessage,
     draftMarkdown,
     isDirty,
+    isReadOnly = false,
     isSaving,
     markdown,
     onImageUpload,
@@ -151,7 +153,7 @@ export const MarkdownBlockEditor = forwardRef<
   }, [markdown, path, workspaceRoot])
 
   const saveMarkdown = useCallback(async (): Promise<void> => {
-    if (isSaving || !hasLocalChangesRef.current) {
+    if (isReadOnly || isSaving || !hasLocalChangesRef.current) {
       return
     }
 
@@ -171,7 +173,7 @@ export const MarkdownBlockEditor = forwardRef<
         getErrorMessage(error, 'Unable to serialize Markdown')
       )
     }
-  }, [isSaving, markdown, onSaveRequest, serializeMarkdown])
+  }, [isReadOnly, isSaving, markdown, onSaveRequest, serializeMarkdown])
 
   const saveMarkdownOnBlur = useCallback(
     (event: ReactFocusEvent<HTMLDivElement>): void => {
@@ -232,18 +234,20 @@ export const MarkdownBlockEditor = forwardRef<
           {errorMessage}
         </p>
       ) : null}
-      <MermaidFlowchartPanel
-        colorScheme={colorScheme}
-        markdown={draftMarkdown}
-        onMarkdownChange={onMarkdownChange}
-      />
+      {!isReadOnly ? (
+        <MermaidFlowchartPanel
+          colorScheme={colorScheme}
+          markdown={draftMarkdown}
+          onMarkdownChange={onMarkdownChange}
+        />
+      ) : null}
       <BlockNoteView
         className="markdown-editor-surface"
         data-testid="blocknote-view"
-        editable
+        editable={!isReadOnly}
         editor={editor}
         onChange={(changedEditor) => {
-          if (isHydratingRef.current) {
+          if (isReadOnly || isHydratingRef.current) {
             return
           }
 

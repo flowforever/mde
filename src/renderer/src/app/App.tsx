@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { AlignHorizontalSpaceAround, StretchHorizontal } from 'lucide-react'
 
+import type { AiApi, AiGenerationResult, AiTool } from '../../../shared/ai'
 import type { EditorApi, Workspace } from '../../../shared/workspace'
 import type {
   AvailableUpdate,
@@ -58,9 +59,17 @@ import {
   writeWorkspaceFileHistory
 } from '../workspaces/workspaceFileHistory'
 import type { TreeNode } from '../../../shared/fileTree'
+import { AiActionMenu, type AiActionBusyState } from '../ai/AiActionMenu'
+import { AiResultPanel } from '../ai/AiResultPanel'
+import {
+  forgetCustomAiTranslationLanguage,
+  readCustomAiTranslationLanguages,
+  rememberCustomAiTranslationLanguage
+} from '../ai/aiLanguages'
 
 declare global {
   interface Window {
+    readonly aiApi?: AiApi
     readonly editorApi?: EditorApi
     readonly updateApi?: UpdateApi
   }
@@ -116,9 +125,31 @@ const EXPLORER_WIDTH_MIN = 220
 const EXPLORER_WIDTH_MAX = 440
 const AUTO_SAVE_IDLE_DELAY_MS = 5000
 const SYSTEM_DARK_COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)'
+type ActiveAiActionBusyState = Exclude<AiActionBusyState, 'idle'>
+
+interface ScopedAiGenerationResult {
+  readonly documentKey: string
+  readonly result: AiGenerationResult
+}
+
+interface ScopedAiErrorMessage {
+  readonly documentKey: string
+  readonly message: string
+}
 
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
+
+const createAiDocumentKey = (workspaceRoot: string, filePath: string): string =>
+  `${workspaceRoot}\u0000${filePath}`
+
+const removeAiDocumentEntry = <Value,>(
+  entries: Readonly<Record<string, Value>>,
+  documentKey: string
+): Record<string, Value> =>
+  Object.fromEntries(
+    Object.entries(entries).filter(([candidateKey]) => candidateKey !== documentKey)
+  ) as Record<string, Value>
 
 const getWindowTitle = (workspace: Workspace | null): string => {
   if (!workspace) {
@@ -174,6 +205,18 @@ export const App = (): React.JSX.Element => {
   const [workspaceFileHistory, setWorkspaceFileHistory] = useState(
     readWorkspaceFileHistory
   )
+  const [aiTools, setAiTools] = useState<readonly AiTool[]>([])
+  const [aiResult, setAiResult] = useState<ScopedAiGenerationResult | null>(null)
+  const [aiErrorMessage, setAiErrorMessage] =
+    useState<ScopedAiErrorMessage | null>(null)
+  const [aiBusyStatesByDocument, setAiBusyStatesByDocument] = useState<
+    Record<string, ActiveAiActionBusyState>
+  >({})
+  const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false)
+  const [customAiTranslationLanguages, setCustomAiTranslationLanguages] =
+    useState(readCustomAiTranslationLanguages)
+  const [customAiTranslationLanguageInput, setCustomAiTranslationLanguageInput] =
+    useState('')
   const [availableUpdate, setAvailableUpdate] =
     useState<AvailableUpdate | null>(null)
   const [updateStatus, setUpdateStatus] =
@@ -223,6 +266,45 @@ export const App = (): React.JSX.Element => {
     })
   }, [])
 
+  const clearAiResultState = useCallback((): void => {
+    setAiResult(null)
+    setAiErrorMessage(null)
+    setAiBusyStatesByDocument({})
+    setIsTranslateMenuOpen(false)
+  }, [])
+
+  const closeAiMenus = useCallback((): void => {
+    setIsTranslateMenuOpen(false)
+  }, [])
+
+  const clearAiDocumentResult = useCallback((documentKey: string): void => {
+    setAiResult((currentResult) =>
+      currentResult?.documentKey === documentKey ? null : currentResult
+    )
+  }, [])
+
+  const clearAiDocumentError = useCallback((documentKey: string): void => {
+    setAiErrorMessage((currentError) =>
+      currentError?.documentKey === documentKey ? null : currentError
+    )
+  }, [])
+
+  const setAiDocumentBusyState = useCallback((
+    documentKey: string,
+    busyState: ActiveAiActionBusyState
+  ): void => {
+    setAiBusyStatesByDocument((currentStates) => ({
+      ...currentStates,
+      [documentKey]: busyState
+    }))
+  }, [])
+
+  const clearAiDocumentBusyState = useCallback((documentKey: string): void => {
+    setAiBusyStatesByDocument((currentStates) =>
+      removeAiDocumentEntry(currentStates, documentKey)
+    )
+  }, [])
+
   const rememberOpenedFile = useCallback((
     workspaceRoot: string,
     filePath: string
@@ -233,9 +315,10 @@ export const App = (): React.JSX.Element => {
   }, [updateWorkspaceFileHistory])
 
   const completeWorkspaceOpen = useCallback((workspace: Workspace): void => {
+    clearAiResultState()
     dispatch({ type: 'workspace/opened', workspace })
     rememberOpenedWorkspace(workspace)
-  }, [rememberOpenedWorkspace])
+  }, [clearAiResultState, rememberOpenedWorkspace])
 
   const loadFile = useCallback(async (
     filePath: string,
@@ -253,6 +336,7 @@ export const App = (): React.JSX.Element => {
       return
     }
 
+    closeAiMenus()
     dispatch({ type: 'file/load-started', filePath, workspaceRoot })
 
     try {
@@ -272,7 +356,7 @@ export const App = (): React.JSX.Element => {
         workspaceRoot
       })
     }
-  }, [rememberOpenedFile, state.workspace?.rootPath])
+  }, [closeAiMenus, rememberOpenedFile, state.workspace?.rootPath])
 
   const loadWorkspaceDefaultFile = useCallback(async (
     workspace: Workspace
@@ -306,6 +390,28 @@ export const App = (): React.JSX.Element => {
   useEffect(() => {
     document.title = getWindowTitle(state.workspace)
   }, [state.workspace])
+
+  useEffect(() => {
+    const aiApi = window.aiApi
+
+    if (!aiApi) {
+      return
+    }
+
+    let isCancelled = false
+
+    void aiApi.detectTools().then((result) => {
+      if (!isCancelled) {
+        setAiTools(result.tools)
+      }
+    }).catch((error: unknown) => {
+      console.warn('MDE AI CLI detection failed', error)
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let mediaQueryList: MediaQueryList
@@ -677,6 +783,151 @@ export const App = (): React.JSX.Element => {
     [refreshWorkspaceTree, state.loadedFile?.path, state.workspace?.rootPath]
   )
 
+  const getLatestMarkdownForAi = useCallback(async (): Promise<string> => {
+    const loadedFile = state.loadedFile
+
+    if (!loadedFile) {
+      throw new Error('Open a Markdown file before using AI actions')
+    }
+
+    const contents =
+      (await editorRef.current?.getMarkdown()) ??
+      state.draftMarkdown ??
+      loadedFile.contents
+
+    if (contents !== loadedFile.contents) {
+      await saveCurrentFile(contents)
+    }
+
+    return contents
+  }, [saveCurrentFile, state.draftMarkdown, state.loadedFile])
+
+  const summarizeMarkdown = useCallback(async (
+    instruction?: string
+  ): Promise<void> => {
+    const aiApi = window.aiApi
+    const loadedFile = state.loadedFile
+    const workspaceRoot = state.workspace?.rootPath
+
+    if (!aiApi || !loadedFile || !workspaceRoot) {
+      return
+    }
+
+    const documentKey = createAiDocumentKey(workspaceRoot, loadedFile.path)
+    const trimmedInstruction = instruction?.trim()
+    const normalizedInstruction =
+      trimmedInstruction && trimmedInstruction.length > 0
+        ? trimmedInstruction
+        : undefined
+
+    setAiDocumentBusyState(
+      documentKey,
+      normalizedInstruction ? 'refining-summary' : 'summarizing'
+    )
+    clearAiDocumentError(documentKey)
+
+    if (!normalizedInstruction) {
+      clearAiDocumentResult(documentKey)
+    }
+
+    try {
+      const markdown = await getLatestMarkdownForAi()
+      const result = await aiApi.summarizeMarkdown(
+        loadedFile.path,
+        markdown,
+        workspaceRoot,
+        normalizedInstruction
+      )
+
+      setAiResult({ documentKey, result })
+    } catch (error) {
+      setAiErrorMessage({
+        documentKey,
+        message: getErrorMessage(error, 'Unable to summarize Markdown')
+      })
+    } finally {
+      clearAiDocumentBusyState(documentKey)
+    }
+  }, [
+    clearAiDocumentBusyState,
+    clearAiDocumentError,
+    clearAiDocumentResult,
+    getLatestMarkdownForAi,
+    setAiDocumentBusyState,
+    state.loadedFile,
+    state.workspace?.rootPath
+  ])
+
+  const translateMarkdown = useCallback(async (language: string): Promise<void> => {
+    const aiApi = window.aiApi
+    const loadedFile = state.loadedFile
+    const workspaceRoot = state.workspace?.rootPath
+
+    if (!aiApi || !loadedFile || !workspaceRoot) {
+      return
+    }
+
+    const documentKey = createAiDocumentKey(workspaceRoot, loadedFile.path)
+
+    setIsTranslateMenuOpen(false)
+    setAiDocumentBusyState(documentKey, 'translating')
+    clearAiDocumentError(documentKey)
+    clearAiDocumentResult(documentKey)
+
+    try {
+      const markdown = await getLatestMarkdownForAi()
+      const result = await aiApi.translateMarkdown(
+        loadedFile.path,
+        markdown,
+        language,
+        workspaceRoot
+      )
+
+      setAiResult({ documentKey, result })
+    } catch (error) {
+      setAiErrorMessage({
+        documentKey,
+        message: getErrorMessage(error, 'Unable to translate Markdown')
+      })
+    } finally {
+      clearAiDocumentBusyState(documentKey)
+    }
+  }, [
+    clearAiDocumentBusyState,
+    clearAiDocumentError,
+    clearAiDocumentResult,
+    getLatestMarkdownForAi,
+    setAiDocumentBusyState,
+    state.loadedFile,
+    state.workspace?.rootPath
+  ])
+
+  const rememberCustomTranslationLanguage = useCallback((): void => {
+    setCustomAiTranslationLanguages((currentLanguages) => {
+      const nextLanguages = rememberCustomAiTranslationLanguage(
+        globalThis.localStorage,
+        currentLanguages,
+        customAiTranslationLanguageInput
+      )
+
+      return nextLanguages
+    })
+    setCustomAiTranslationLanguageInput('')
+  }, [customAiTranslationLanguageInput])
+
+  const forgetCustomTranslationLanguage = useCallback(
+    (language: string): void => {
+      setCustomAiTranslationLanguages((currentLanguages) =>
+        forgetCustomAiTranslationLanguage(
+          globalThis.localStorage,
+          currentLanguages,
+          language
+        )
+      )
+    },
+    []
+  )
+
   useEffect(() => {
     const loadedFilePath = state.loadedFile?.path
     const workspaceRoot = state.workspace?.rootPath
@@ -930,6 +1181,22 @@ export const App = (): React.JSX.Element => {
   const editorViewToggleLabel = isEditorFullWidth
     ? 'Use centered editor view'
     : 'Use full-width editor view'
+  const currentAiDocumentKey =
+    state.workspace && state.loadedFile
+      ? createAiDocumentKey(state.workspace.rootPath, state.loadedFile.path)
+      : null
+  const currentAiBusyState: AiActionBusyState = currentAiDocumentKey
+    ? (aiBusyStatesByDocument[currentAiDocumentKey] ?? 'idle')
+    : 'idle'
+  const currentAiResult =
+    currentAiDocumentKey && aiResult?.documentKey === currentAiDocumentKey
+      ? aiResult.result
+      : null
+  const currentAiErrorMessage =
+    currentAiDocumentKey && aiErrorMessage?.documentKey === currentAiDocumentKey
+      ? aiErrorMessage.message
+      : null
+  const shouldShowAiActions = aiTools.length > 0 && Boolean(state.loadedFile)
   const recentFilePaths = state.workspace
     ? getWorkspaceRecentFiles(workspaceFileHistory, state.workspace.rootPath)
     : []
@@ -1029,13 +1296,34 @@ export const App = (): React.JSX.Element => {
       <section
         className={[
           'editor-pane',
-          isEditorFullWidth ? 'is-editor-full-width' : ''
+          isEditorFullWidth ? 'is-editor-full-width' : '',
+          currentAiResult ? 'is-ai-result-active' : ''
         ]
           .filter(Boolean)
           .join(' ')}
         aria-label="Editor"
       >
         <div className="editor-action-bar" aria-label="Editor actions">
+          {shouldShowAiActions ? (
+            <AiActionMenu
+              busyState={currentAiBusyState}
+              customLanguageInput={customAiTranslationLanguageInput}
+              customLanguages={customAiTranslationLanguages}
+              isTranslateMenuOpen={isTranslateMenuOpen}
+              onAddCustomLanguage={rememberCustomTranslationLanguage}
+              onCustomLanguageInputChange={setCustomAiTranslationLanguageInput}
+              onForgetCustomLanguage={forgetCustomTranslationLanguage}
+              onSummarize={() => {
+                void summarizeMarkdown()
+              }}
+              onToggleTranslateMenu={() => {
+                setIsTranslateMenuOpen((currentValue) => !currentValue)
+              }}
+              onTranslate={(language) => {
+                void translateMarkdown(language)
+              }}
+            />
+          ) : null}
           <button
             aria-label={editorViewToggleLabel}
             aria-pressed={isEditorFullWidth}
@@ -1068,7 +1356,27 @@ export const App = (): React.JSX.Element => {
             )}
           </button>
         </div>
-        {state.loadedFile ? (
+        {currentAiErrorMessage ? (
+          <p className="ai-result-error" role="alert">
+            {currentAiErrorMessage}
+          </p>
+        ) : null}
+        {currentAiResult ? (
+          <AiResultPanel
+            colorScheme={resolvedTheme.family}
+            isRegeneratingSummary={currentAiBusyState === 'refining-summary'}
+            onClose={() => {
+              if (currentAiDocumentKey) {
+                clearAiDocumentResult(currentAiDocumentKey)
+              }
+            }}
+            onRegenerateSummary={(instruction) => {
+              void summarizeMarkdown(instruction)
+            }}
+            result={currentAiResult}
+            workspaceRoot={state.workspace?.rootPath ?? ''}
+          />
+        ) : state.loadedFile ? (
           <MarkdownBlockEditor
             key={`${state.workspace?.rootPath ?? ''}:${state.loadedFile.path}`}
             draftMarkdown={state.draftMarkdown ?? state.loadedFile.contents}

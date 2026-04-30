@@ -36,18 +36,25 @@ vi.mock('@blocknote/mantine', () => ({
   BlockNoteView: ({
     className,
     'data-testid': testId,
+    editable,
     editor,
     onChange,
     theme
   }: {
     readonly className?: string
     readonly 'data-testid'?: string
+    readonly editable?: boolean
     readonly editor: unknown
     readonly onChange: (editor: unknown) => void
     readonly theme: 'dark' | 'light'
   }) => (
     <div className={className} data-testid={testId} data-theme={theme} tabIndex={0}>
-      <div contentEditable suppressContentEditableWarning tabIndex={0} />
+      <div
+        contentEditable={editable !== false}
+        data-testid="mock-contenteditable"
+        suppressContentEditableWarning
+        tabIndex={0}
+      />
       <button
         onClick={() => {
           onChange(editor)
@@ -92,6 +99,39 @@ describe('MarkdownBlockEditor accessibility', () => {
     expect(
       screen.queryByRole('button', { name: /save README\.md/i })
     ).not.toBeInTheDocument()
+  })
+
+  it('renders read-only markdown without propagating editor changes', async () => {
+    const user = userEvent.setup()
+    const onMarkdownChange = vi.fn()
+    const onSaveRequest = vi.fn()
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="## Summary"
+        errorMessage={null}
+        isDirty={false}
+        isReadOnly
+        isSaving={false}
+        markdown="## Summary"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={onMarkdownChange}
+        onSaveRequest={onSaveRequest}
+        path=".mde/translations/README-summary.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    expect(screen.getByTestId('mock-contenteditable')).toHaveAttribute(
+      'contenteditable',
+      'false'
+    )
+
+    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
+
+    expect(onMarkdownChange).not.toHaveBeenCalled()
+    expect(onSaveRequest).not.toHaveBeenCalled()
   })
 
   it('shows visible dirty state text for unsaved changes', () => {
