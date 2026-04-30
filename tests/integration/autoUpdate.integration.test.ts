@@ -24,6 +24,7 @@ const createIpcMain = () => {
 describe('auto update IPC integration', () => {
   it('falls back to the public releases feed when macOS update IPC hits a GitHub REST rate limit', async () => {
     const { handlers, ipcMain } = createIpcMain()
+    const expectedUpdateArch = process.arch === 'arm64' ? 'arm64' : 'x64'
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(
@@ -73,7 +74,7 @@ describe('auto update IPC integration', () => {
     expect(result).toMatchObject({
       currentVersion: '1.2.16',
       update: {
-        assetName: 'MDE-1.2.17-mac-x64.dmg',
+        assetName: `MDE-1.2.17-mac-${expectedUpdateArch}.dmg`,
         latestVersion: '1.2.17',
         releaseUrl: 'https://github.com/flowforever/mde/releases/tag/v1.2.17'
       },
