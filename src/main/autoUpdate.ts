@@ -14,7 +14,7 @@ import type {
 
 export const DISABLE_AUTO_UPDATE_ENV = 'MDE_DISABLE_AUTO_UPDATE'
 export const GITHUB_LATEST_RELEASE_URL =
-  'https://api.github.com/repos/flowforever/mde/releases/latest'
+  'https://api.github.com/repos/flowforever/mde/releases?per_page=20'
 
 interface AutoUpdateEnvironment {
   readonly [DISABLE_AUTO_UPDATE_ENV]?: string
@@ -25,6 +25,7 @@ interface AutoUpdateApp {
   readonly whenReady?: () => Promise<unknown>
   readonly getPath: (name: 'userData') => string
   readonly getVersion: () => string
+  readonly quit?: () => void
 }
 
 interface AutoUpdateClient {
@@ -126,6 +127,23 @@ const parseSemver = (version: string): readonly [number, number, number] | null 
   }
 
   return [Number(match[1]), Number(match[2]), Number(match[3])]
+}
+
+const compareSemver = (leftVersion: string, rightVersion: string): number => {
+  const left = parseSemver(leftVersion)
+  const right = parseSemver(rightVersion)
+
+  if (!left || !right) {
+    return 0
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] - right[index]
+    }
+  }
+
+  return 0
 }
 
 const isVersionNewer = (latestVersion: string, currentVersion: string): boolean => {
@@ -244,13 +262,33 @@ const fetchLatestRelease = async (
     throw new Error(`GitHub release check failed with status ${response.status}`)
   }
 
-  const release = (await response.json()) as unknown
+  const releaseResponse = (await response.json()) as unknown
 
-  if (!isObjectRecord(release)) {
+  if (Array.isArray(releaseResponse)) {
+    const release = releaseResponse
+      .filter(isObjectRecord)
+      .filter((candidate) => candidate.draft !== true)
+      .filter((candidate) => candidate.prerelease !== true)
+      .filter((candidate) => parseSemver(getOptionalString(candidate, 'tag_name')))
+      .toSorted((left, right) =>
+        compareSemver(
+          getOptionalString(right, 'tag_name'),
+          getOptionalString(left, 'tag_name')
+        )
+      )[0]
+
+    if (!release) {
+      throw new Error('GitHub release response is invalid')
+    }
+
+    return release
+  }
+
+  if (!isObjectRecord(releaseResponse)) {
     throw new Error('GitHub release response is invalid')
   }
 
-  return release
+  return releaseResponse
 }
 
 const createManualUpdateFromRelease = (
@@ -466,6 +504,8 @@ export const createGitHubManualUpdateService = ({
       if (openError) {
         throw new Error(`Unable to open downloaded installer: ${openError}`)
       }
+
+      app.quit?.()
 
       return {
         filePath,

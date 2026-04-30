@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -172,6 +172,56 @@ describe('aiService', () => {
     expect(promptRuns).toEqual([
       { modelName: 'claude-sonnet-4-6', toolId: 'claude' }
     ])
+  })
+
+  it('runs AI CLIs with the resolved shell PATH for GUI-launched app environments', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-service-'))
+    const binPath = await mkdtemp(join(tmpdir(), 'mde-ai-bin-'))
+    const shellPath = await mkdtemp(join(tmpdir(), 'mde-ai-shell-path-'))
+    const fakeInterpreterPath = join(shellPath, 'mde-test-node')
+    const fakeCodexPath = join(binPath, 'codex')
+    const previousPath = process.env.PATH
+    const shellQuote = (value: string): string => `'${value.replace(/'/gu, "'\\''")}'`
+
+    await writeFile(
+      fakeInterpreterPath,
+      `#!/bin/sh\nexec ${shellQuote(process.execPath)} "$@"\n`,
+      'utf8'
+    )
+    await chmod(fakeInterpreterPath, 0o755)
+    await writeFile(
+      fakeCodexPath,
+      [
+        '#!/usr/bin/env mde-test-node',
+        "process.stdin.resume()",
+        "process.stdin.on('data', () => {})",
+        "process.stdin.on('end', () => {",
+        "  process.stdout.write('## Summary\\n\\n- Generated from GUI-safe PATH.')",
+        '})',
+        ''
+      ].join('\n'),
+      'utf8'
+    )
+    await chmod(fakeCodexPath, 0o755)
+    await writeFile(join(workspacePath, 'README.md'), '# Readme')
+
+    process.env.PATH = ['/usr/bin', '/bin'].join(delimiter)
+
+    try {
+      const service = createAiService({
+        locateCommand: locateCommands({ codex: fakeCodexPath }),
+        resolveShellPath: () => Promise.resolve(shellPath)
+      })
+
+      await expect(
+        service.summarizeMarkdown(workspacePath, 'README.md', '# Readme')
+      ).resolves.toMatchObject({
+        contents: '## Summary\n\n- Generated from GUI-safe PATH.',
+        tool: { id: 'codex', name: 'Codex' }
+      })
+    } finally {
+      process.env.PATH = previousPath
+    }
   })
 
   it('regenerates summaries when the refinement instruction changes', async () => {

@@ -35,10 +35,26 @@ const releaseResponse = {
   published_at: '2026-04-29T09:11:32.622Z'
 }
 
+const createReleaseResponse = (version: string) => ({
+  ...releaseResponse,
+  html_url: `https://github.com/flowforever/mde/releases/tag/v${version}`,
+  name: `MDE ${version}`,
+  tag_name: `v${version}`,
+  assets: releaseResponse.assets.map((asset) => ({
+    ...asset,
+    browser_download_url: asset.browser_download_url.replace(
+      /v1\.2\.0\/MDE-1\.2\.0/u,
+      `v${version}/MDE-${version}`
+    ),
+    name: asset.name.replace('1.2.0', version)
+  }))
+})
+
 const createApp = (userDataPath: string, version = '1.1.1') => ({
   getPath: vi.fn(() => userDataPath),
   getVersion: vi.fn(() => version),
-  isPackaged: true
+  isPackaged: true,
+  quit: vi.fn()
 })
 
 const createIpcMain = () => {
@@ -206,8 +222,40 @@ describe('manual update', () => {
     expect(result.update?.latestVersion).toBe('1.2.0')
   })
 
+  it('selects the highest newer semver release from the releases feed', async () => {
+    const service = createGitHubManualUpdateService({
+      app: createApp(await mkdtemp(join(tmpdir(), 'mde-update-feed-')), '1.2.2'),
+      arch: 'x64',
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            createReleaseResponse('1.2.9'),
+            createReleaseResponse('1.2.11'),
+            createReleaseResponse('1.2.8')
+          ]),
+          {
+            headers: { 'content-type': 'application/json' },
+            status: 200
+          }
+        )
+      ),
+      platform: 'darwin',
+      shell: {
+        openPath: vi.fn()
+      }
+    })
+
+    const result = await service.checkForUpdates()
+
+    expect(result.currentVersion).toBe('1.2.2')
+    expect(result.updateAvailable).toBe(true)
+    expect(result.update?.assetName).toBe('MDE-1.2.11-mac-x64.dmg')
+    expect(result.update?.latestVersion).toBe('1.2.11')
+  })
+
   it('downloads the selected DMG, reports progress, and opens it', async () => {
     const userDataPath = await mkdtemp(join(tmpdir(), 'mde-update-download-'))
+    const app = createApp(userDataPath)
     const openPath = vi.fn().mockResolvedValue('')
     const progress = vi.fn()
     const fetch = vi
@@ -225,7 +273,7 @@ describe('manual update', () => {
         })
       )
     const service = createGitHubManualUpdateService({
-      app: createApp(userDataPath),
+      app,
       arch: 'arm64',
       fetch,
       platform: 'darwin',
@@ -249,6 +297,7 @@ describe('manual update', () => {
     expect(openPath).toHaveBeenCalledWith(
       join(userDataPath, 'updates', 'MDE-1.2.0-mac-arm64.dmg')
     )
+    expect(app.quit).toHaveBeenCalledTimes(1)
   })
 
   it('cleans up and reports download failures', async () => {
@@ -266,8 +315,9 @@ describe('manual update', () => {
           status: 404
         })
       )
+    const app = createApp(userDataPath)
     const service = createGitHubManualUpdateService({
-      app: createApp(userDataPath),
+      app,
       arch: 'arm64',
       fetch,
       platform: 'darwin',
@@ -297,8 +347,9 @@ describe('manual update', () => {
           status: 200
         })
       )
+    const app = createApp(userDataPath)
     const service = createGitHubManualUpdateService({
-      app: createApp(userDataPath),
+      app,
       arch: 'arm64',
       fetch,
       platform: 'darwin',
@@ -310,6 +361,7 @@ describe('manual update', () => {
     await expect(service.downloadAndOpenUpdate()).rejects.toThrow(
       /unable to open downloaded installer/i
     )
+    expect(app.quit).not.toHaveBeenCalled()
   })
 })
 

@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, relative, sep } from 'node:path'
+import { basename, delimiter, dirname, extname, join, relative, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 import type {
@@ -39,10 +39,14 @@ interface RunPromptOptions {
   readonly workspacePath: string
 }
 
+type RunPrompt = (options: RunPromptOptions) => Promise<string>
+type ResolveShellPath = () => Promise<string | null>
+
 interface CreateAiServiceOptions {
   readonly locateCommand?: (tool: SupportedAiTool) => Promise<string | null>
   readonly now?: () => Date
-  readonly runPrompt?: (options: RunPromptOptions) => Promise<string>
+  readonly resolveShellPath?: ResolveShellPath
+  readonly runPrompt?: RunPrompt
 }
 
 export interface AiService {
@@ -97,6 +101,69 @@ const normalizeSummaryInstruction = (instruction?: string): string =>
   instruction?.trim() ?? ''
 
 const normalizeModelName = (modelName?: string): string => modelName?.trim() ?? ''
+
+const splitPathValue = (value?: string | null): readonly string[] =>
+  (value ?? '')
+    .split(delimiter)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+
+const mergePathValues = (...pathValues: readonly (string | null | undefined)[]): string =>
+  pathValues
+    .flatMap(splitPathValue)
+    .reduce<readonly string[]>(
+      (entries, entry) => (entries.includes(entry) ? entries : [...entries, entry]),
+      []
+    )
+    .join(delimiter)
+
+const getShellCandidates = (): readonly string[] => {
+  if (process.platform === 'win32') {
+    return []
+  }
+
+  return [process.env.SHELL, '/bin/zsh', '/bin/bash']
+    .map((shellPath) => shellPath?.trim() ?? '')
+    .filter((shellPath, index, shellPaths) =>
+      shellPath.length > 0 && shellPaths.indexOf(shellPath) === index
+    )
+}
+
+const defaultResolveShellPath = async (): Promise<string | null> => {
+  for (const shellPath of getShellCandidates()) {
+    try {
+      const { stdout } = await execFileAsync(
+        shellPath,
+        ['-lc', 'printf %s "$PATH"'],
+        { timeout: 3000 }
+      )
+      const resolvedPath = stdout.trim()
+
+      if (resolvedPath.length > 0) {
+        return resolvedPath
+      }
+    } catch {
+      // Try the next common login shell.
+    }
+  }
+
+  return null
+}
+
+const createAiCliEnvironment = async (
+  resolveShellPath: ResolveShellPath
+): Promise<NodeJS.ProcessEnv> => {
+  const shellPath = await resolveShellPath()
+  const mergedPath = mergePathValues(
+    shellPath,
+    process.env.PATH ?? process.env.Path,
+    dirname(process.execPath)
+  )
+
+  return process.platform === 'win32'
+    ? { ...process.env, PATH: mergedPath, Path: mergedPath }
+    : { ...process.env, PATH: mergedPath }
+}
 
 const assertMarkdownFilePath = (filePath: string): void => {
   if (filePath.trim().length === 0 || filePath === '.') {
@@ -411,77 +478,91 @@ const getToolArgs = (
       ]
 }
 
-const defaultRunPrompt = ({
-  modelName,
-  prompt,
-  tool,
-  workspacePath
-}: RunPromptOptions): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const child = spawn(tool.commandPath, getToolArgs(tool, workspacePath, modelName), {
-      cwd: workspacePath,
-      env: process.env,
-      stdio: ['pipe', 'pipe', 'pipe']
-    })
-    let stdout = ''
-    let stderr = ''
-    let isSettled = false
-    const settle = (): boolean => {
-      if (isSettled) {
-        return false
-      }
+const createDefaultRunPrompt = (
+  resolveShellPath: ResolveShellPath = defaultResolveShellPath
+): RunPrompt => {
+  let shellPathPromise: Promise<string | null> | null = null
+  const resolveCachedShellPath = (): Promise<string | null> => {
+    shellPathPromise = shellPathPromise ?? resolveShellPath()
 
-      isSettled = true
-      clearTimeout(timeoutId)
+    return shellPathPromise
+  }
 
-      return true
-    }
-    const fail = (error: Error): void => {
-      if (settle()) {
-        reject(error)
-      }
-    }
-    const succeed = (output: string): void => {
-      if (settle()) {
-        resolve(output)
-      }
-    }
-    const timeoutId = setTimeout(() => {
-      child.kill('SIGTERM')
-      fail(new Error('AI CLI timed out'))
-    }, AI_CLI_TIMEOUT_MS)
+  return async ({
+    modelName,
+    prompt,
+    tool,
+    workspacePath
+  }: RunPromptOptions): Promise<string> => {
+    const env = await createAiCliEnvironment(resolveCachedShellPath)
 
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString()
-    })
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString()
-    })
-    child.on('error', (error) => {
-      fail(error)
-    })
-    child.on('close', (code) => {
-      if (code !== 0) {
-        fail(
-          new Error(
-            trimTrailingLineBreaks(stderr) ||
-              `${tool.name} exited with code ${code ?? 'unknown'}`
+    return new Promise((resolve, reject) => {
+      const child = spawn(tool.commandPath, getToolArgs(tool, workspacePath, modelName), {
+        cwd: workspacePath,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+      let stdout = ''
+      let stderr = ''
+      let isSettled = false
+      const settle = (): boolean => {
+        if (isSettled) {
+          return false
+        }
+
+        isSettled = true
+        clearTimeout(timeoutId)
+
+        return true
+      }
+      const fail = (error: Error): void => {
+        if (settle()) {
+          reject(error)
+        }
+      }
+      const succeed = (output: string): void => {
+        if (settle()) {
+          resolve(output)
+        }
+      }
+      const timeoutId = setTimeout(() => {
+        child.kill('SIGTERM')
+        fail(new Error('AI CLI timed out'))
+      }, AI_CLI_TIMEOUT_MS)
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString()
+      })
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString()
+      })
+      child.on('error', (error) => {
+        fail(error)
+      })
+      child.on('close', (code) => {
+        if (code !== 0) {
+          fail(
+            new Error(
+              trimTrailingLineBreaks(stderr) ||
+                `${tool.name} exited with code ${code ?? 'unknown'}`
+            )
           )
-        )
-        return
-      }
+          return
+        }
 
-      const output = trimTrailingLineBreaks(stdout)
+        const output = trimTrailingLineBreaks(stdout)
 
-      if (output.length === 0) {
-        fail(new Error(`${tool.name} returned an empty response`))
-        return
-      }
+        if (output.length === 0) {
+          fail(new Error(`${tool.name} returned an empty response`))
+          return
+        }
 
-      succeed(output)
+        succeed(output)
+      })
+      child.stdin.end(prompt)
     })
-    child.stdin.end(prompt)
-  })
+  }
+}
 
 const createTranslatePrompt = (markdown: string, language: string): string =>
   [
@@ -538,7 +619,8 @@ const selectToolsForGeneration = (
 export const createAiService = ({
   locateCommand = defaultLocateCommand,
   now = () => new Date(),
-  runPrompt = defaultRunPrompt
+  resolveShellPath = defaultResolveShellPath,
+  runPrompt = createDefaultRunPrompt(resolveShellPath)
 }: CreateAiServiceOptions = {}): AiService => {
   const detectTools = async (): Promise<readonly AiTool[]> => {
     const detectedTools = await Promise.all(
