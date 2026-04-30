@@ -1,5 +1,6 @@
 import type { IpcMain } from 'electron'
 
+import type { AiGenerationOptions, AiToolId } from '../../shared/ai'
 import type { AiService } from '../services/aiService'
 import { AI_CHANNELS } from './channels'
 
@@ -32,6 +33,42 @@ const assertOptionalStringInput = (
   return value
 }
 
+const isAiToolId = (value: unknown): value is AiToolId =>
+  value === 'codex' || value === 'claude'
+
+const assertOptionalAiGenerationOptions = (
+  value: unknown
+): AiGenerationOptions | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('AI generation options must be an object')
+  }
+
+  const candidate = value as Record<string, unknown>
+
+  if (
+    candidate.toolId !== undefined &&
+    !isAiToolId(candidate.toolId)
+  ) {
+    throw new Error('AI tool id must be codex or claude')
+  }
+
+  if (
+    candidate.modelName !== undefined &&
+    typeof candidate.modelName !== 'string'
+  ) {
+    throw new Error('AI model name must be a string')
+  }
+
+  return {
+    ...(candidate.modelName ? { modelName: candidate.modelName } : {}),
+    ...(candidate.toolId ? { toolId: candidate.toolId } : {})
+  }
+}
+
 const getRequiredWorkspaceRoot = (
   getActiveWorkspaceRoot: () => string | null,
   expectedWorkspaceRoot: string
@@ -60,7 +97,14 @@ export const registerAiHandlers = ({
 
   ipcMain.handle(
     AI_CHANNELS.summarizeMarkdown,
-    async (_event, markdownFilePath, markdown, workspaceRoot, instruction) =>
+    async (
+      _event,
+      markdownFilePath,
+      markdown,
+      workspaceRoot,
+      instruction,
+      options
+    ) =>
       aiService.summarizeMarkdown(
         getRequiredWorkspaceRoot(
           getActiveWorkspaceRoot,
@@ -68,13 +112,14 @@ export const registerAiHandlers = ({
         ),
         assertStringInput(markdownFilePath, 'Markdown file path'),
         assertStringInput(markdown, 'Markdown'),
-        assertOptionalStringInput(instruction, 'Summary instruction')
+        assertOptionalStringInput(instruction, 'Summary instruction'),
+        assertOptionalAiGenerationOptions(options)
       )
   )
 
   ipcMain.handle(
     AI_CHANNELS.translateMarkdown,
-    async (_event, markdownFilePath, markdown, language, workspaceRoot) =>
+    async (_event, markdownFilePath, markdown, language, workspaceRoot, options) =>
       aiService.translateMarkdown(
         getRequiredWorkspaceRoot(
           getActiveWorkspaceRoot,
@@ -82,7 +127,8 @@ export const registerAiHandlers = ({
         ),
         assertStringInput(markdownFilePath, 'Markdown file path'),
         assertStringInput(markdown, 'Markdown'),
-        assertStringInput(language, 'Language')
+        assertStringInput(language, 'Language'),
+        assertOptionalAiGenerationOptions(options)
       )
   )
 }

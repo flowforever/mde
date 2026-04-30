@@ -5,6 +5,7 @@ import type {
   PointerEvent as ReactPointerEvent
 } from 'react'
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   Check,
@@ -15,10 +16,12 @@ import {
   FolderOpen,
   FolderPlus,
   Monitor,
-  Palette,
+  Paintbrush,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
+  RefreshCw,
+  Settings,
   Trash2,
   X
 } from 'lucide-react'
@@ -31,6 +34,12 @@ import {
   writeHiddenExplorerEntries
 } from './hiddenExplorerEntries'
 import type { AppState } from '../app/appTypes'
+import type { AiTool, AiToolId } from '../../../shared/ai'
+import type { UpdateCheckResult } from '../../../shared/update'
+import {
+  getEffectiveAiToolId,
+  type AiCliSettings
+} from '../ai/aiSettings'
 import {
   APP_THEMES,
   getAppThemeRows,
@@ -45,7 +54,12 @@ import type { RecentWorkspace } from '../workspaces/recentWorkspaces'
 import type { TreeNode } from '../../../shared/fileTree'
 
 interface ExplorerPaneProps {
+  readonly aiSettings?: AiCliSettings
+  readonly aiTools?: readonly AiTool[]
+  readonly appVersion?: string
   readonly isCollapsed?: boolean
+  readonly onAiSettingsChange?: (settings: AiCliSettings) => void
+  readonly onCheckForUpdates?: () => Promise<UpdateCheckResult>
   readonly onCreateFile: (filePath: string) => void
   readonly onCreateFolder: (folderPath: string) => void
   readonly onDeleteEntry: () => void
@@ -69,6 +83,7 @@ interface ExplorerPaneProps {
 }
 
 type PendingExplorerAction = 'create-file' | 'create-folder' | 'rename' | null
+type SettingsPanelId = 'ai' | 'theme' | 'updates'
 
 interface EntryContextMenu {
   readonly entry: TreeNode
@@ -77,6 +92,10 @@ interface EntryContextMenu {
 }
 
 const EMPTY_HIDDEN_ENTRY_PATHS: ReadonlySet<string> = new Set()
+const DEFAULT_AI_SETTINGS: AiCliSettings = {
+  modelNames: {},
+  selectedToolId: null
+}
 const EXPLORER_RECENT_FILES_PANEL_STORAGE_KEY =
   'mde.explorerRecentFilesPanel'
 const RECENT_FILES_PANEL_HEIGHT_DEFAULT = 164
@@ -261,7 +280,12 @@ const getThemeForColumn = (
 }
 
 export const ExplorerPane = ({
+  aiSettings = DEFAULT_AI_SETTINGS,
+  aiTools = [],
+  appVersion = '0.0.0',
   isCollapsed = false,
+  onAiSettingsChange = () => undefined,
+  onCheckForUpdates,
   onCreateFile,
   onCreateFolder,
   onDeleteEntry,
@@ -315,7 +339,16 @@ export const ExplorerPane = ({
   ] = useState<string | null>(null)
   const [isWorkspaceDialogManuallyOpen, setIsWorkspaceDialogManuallyOpen] =
     useState(false)
-  const [isThemeDialogOpen, setIsThemeDialogOpen] = useState(false)
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
+  const [activeSettingsPanel, setActiveSettingsPanel] =
+    useState<SettingsPanelId>('theme')
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
+  const [settingsUpdateMessage, setSettingsUpdateMessage] = useState<string | null>(
+    null
+  )
+  const [settingsUpdateErrorMessage, setSettingsUpdateErrorMessage] = useState<
+    string | null
+  >(null)
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState('')
   const workspaceContentRef = useRef<HTMLDivElement | null>(null)
   const workspaceRoot = state.workspace?.rootPath ?? null
@@ -426,8 +459,9 @@ export const ExplorerPane = ({
     setWorkspaceSearchQuery('')
   }
 
-  const closeThemeDialog = (): void => {
-    setIsThemeDialogOpen(false)
+  const closeSettingsDialog = (): void => {
+    setIsSettingsDialogOpen(false)
+    setSettingsUpdateErrorMessage(null)
   }
 
   const toggleWorkspaceDialog = (): void => {
@@ -439,8 +473,9 @@ export const ExplorerPane = ({
     setIsWorkspaceDialogManuallyOpen(true)
   }
 
-  const openThemeDialog = (): void => {
-    setIsThemeDialogOpen(true)
+  const openSettingsDialog = (panel: SettingsPanelId = 'theme'): void => {
+    setActiveSettingsPanel(panel)
+    setIsSettingsDialogOpen(true)
   }
 
   useEffect(() => {
@@ -571,6 +606,12 @@ export const ExplorerPane = ({
     resolvedTheme.family
   )
   const themeDialogRows = getAppThemeRows()
+  const effectiveAiToolId = getEffectiveAiToolId(aiSettings, aiTools)
+  const selectedAiTool = effectiveAiToolId
+    ? aiTools.find((tool) => tool.id === effectiveAiToolId) ?? null
+    : null
+  const selectedAiModelName =
+    effectiveAiToolId ? aiSettings.modelNames[effectiveAiToolId] ?? '' : ''
   const workspaceTriggerLabel = state.isOpeningWorkspace
     ? 'Opening...'
     : state.workspace?.name ?? 'Open workspace'
@@ -649,19 +690,263 @@ export const ExplorerPane = ({
       isCollapsed: !currentState.isCollapsed
     }))
   }
-  const renderThemeDialog = (): React.JSX.Element | null =>
-    isThemeDialogOpen ? (
-      <div className="workspace-dialog-backdrop" onClick={closeThemeDialog}>
+  const selectAiTool = (toolId: AiToolId): void => {
+    onAiSettingsChange({
+      ...aiSettings,
+      selectedToolId: toolId
+    })
+  }
+  const updateSelectedAiModelName = (modelName: string): void => {
+    if (!effectiveAiToolId) {
+      return
+    }
+
+    onAiSettingsChange({
+      modelNames: {
+        ...aiSettings.modelNames,
+        [effectiveAiToolId]: modelName
+      },
+      selectedToolId: aiSettings.selectedToolId ?? effectiveAiToolId
+    })
+  }
+  const checkForUpdates = async (): Promise<void> => {
+    if (!onCheckForUpdates) {
+      setSettingsUpdateMessage('Update checks are unavailable in this runtime.')
+      setSettingsUpdateErrorMessage(null)
+      return
+    }
+
+    setIsCheckingForUpdates(true)
+    setSettingsUpdateMessage(null)
+    setSettingsUpdateErrorMessage(null)
+
+    try {
+      const result = await onCheckForUpdates()
+
+      setSettingsUpdateMessage(
+        result.updateAvailable && result.update
+          ? `MDE ${result.update.latestVersion} is available.`
+          : result.message ?? 'MDE is up to date.'
+      )
+    } catch (error) {
+      setSettingsUpdateErrorMessage(
+        error instanceof Error ? error.message : 'Unable to check for updates'
+      )
+    } finally {
+      setIsCheckingForUpdates(false)
+    }
+  }
+  const renderThemePanel = (): React.JSX.Element => (
+    <div className="settings-panel-stack">
+      <div className="settings-section-header">
+        <h3>Theme</h3>
+        <p>
+          {isFollowingSystemTheme
+            ? `Choose the ${resolvedTheme.family} theme used by system appearance.`
+            : 'Choose editor appearance.'}
+        </p>
+      </div>
+      <div className="settings-control-row">
+        <div>
+          <span>Follow system appearance</span>
+          <span>Use the current OS light or dark mode.</span>
+        </div>
+        <button
+          aria-checked={isFollowingSystemTheme}
+          aria-label="Follow system appearance"
+          className="theme-system-switch"
+          onClick={() => {
+            onToggleSystemTheme(!isFollowingSystemTheme)
+          }}
+          role="switch"
+          title="Follow system appearance"
+          type="button"
+        >
+          <Monitor aria-hidden="true" focusable="false" size={14} />
+          <span aria-hidden="true" />
+        </button>
+      </div>
+      <div
+        aria-label="Theme colorways"
+        className="theme-colorway-grid"
+        data-column-count={themeDialogColumns.length}
+        role="radiogroup"
+      >
+        {themeDialogRows.map((row) => (
+          <div
+            className="theme-colorway-row"
+            data-theme-row={row.id}
+            key={row.id}
+          >
+            <span className="theme-colorway-label">{row.label}</span>
+            {themeDialogColumns.map((column) => {
+              const theme = getThemeForColumn(row, column.id)
+              const isSelected = resolvedTheme.id === theme.id
+
+              return (
+                <button
+                  aria-checked={isSelected}
+                  aria-label={`${theme.label}: ${theme.description}`}
+                  className={[
+                    'theme-option-button',
+                    isSelected ? 'is-selected' : ''
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  data-theme-column={column.id}
+                  data-theme-id={theme.id}
+                  data-theme-row={row.id}
+                  key={theme.id}
+                  onClick={() => {
+                    onSelectTheme(theme.id)
+                  }}
+                  role="radio"
+                  type="button"
+                >
+                  <span className="theme-option-check" aria-hidden="true">
+                    {isSelected ? (
+                      <Check aria-hidden="true" focusable="false" size={13} />
+                    ) : null}
+                  </span>
+                  <span className="theme-option-copy">
+                    <span>{theme.label}</span>
+                    <span>{theme.description}</span>
+                  </span>
+                  <span className="theme-option-swatches" aria-hidden="true">
+                    {theme.swatches.map((swatch) => (
+                      <span key={swatch} style={{ backgroundColor: swatch }} />
+                    ))}
+                  </span>
+                  <span className="theme-option-preview" aria-hidden="true">
+                    <span />
+                    <span />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+  const renderAiPanel = (): React.JSX.Element => (
+    <div className="settings-panel-stack">
+      <div className="settings-section-header">
+        <h3>AI</h3>
+        <p>Choose the local AI CLI used for summary and translation actions.</p>
+      </div>
+      {aiTools.length > 0 && effectiveAiToolId ? (
+        <>
+          <label className="settings-field">
+            <span>AI CLI</span>
+            <select
+              aria-label="AI CLI"
+              onChange={(event) => {
+                selectAiTool(event.target.value as AiToolId)
+              }}
+              value={effectiveAiToolId}
+            >
+              {aiTools.map((tool) => (
+                <option key={tool.id} value={tool.id}>
+                  {tool.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="settings-field">
+            <span>Default model name</span>
+            <input
+              aria-label="Default model name"
+              onChange={(event) => {
+                updateSelectedAiModelName(event.target.value)
+              }}
+              placeholder={
+                selectedAiTool?.id === 'claude'
+                  ? 'claude-sonnet-4-6'
+                  : 'gpt-5.4'
+              }
+              type="text"
+              value={selectedAiModelName}
+            />
+          </label>
+          <p className="settings-muted-copy">
+            Only installed CLIs are shown. Leave model blank to use the CLI
+            default.
+          </p>
+        </>
+      ) : (
+        <p className="settings-empty-state">
+          No supported AI CLI detected. Install Codex or Claude Code to enable AI
+          actions.
+        </p>
+      )}
+    </div>
+  )
+  const renderUpdatePanel = (): React.JSX.Element => (
+    <div className="settings-panel-stack">
+      <div className="settings-section-header">
+        <h3>Check Update</h3>
+        <p>Review the installed MDE version and check GitHub releases.</p>
+      </div>
+      <dl className="settings-version-list">
+        <div>
+          <dt>Current version</dt>
+          <dd>{appVersion}</dd>
+        </div>
+      </dl>
+      <button
+        aria-label="Check for updates"
+        className="settings-primary-button"
+        disabled={isCheckingForUpdates}
+        onClick={() => {
+          void checkForUpdates()
+        }}
+        type="button"
+      >
+        <RefreshCw
+          aria-hidden="true"
+          className={isCheckingForUpdates ? 'is-spinning' : undefined}
+          focusable="false"
+          size={15}
+        />
+        <span>{isCheckingForUpdates ? 'Checking...' : 'Check for updates'}</span>
+      </button>
+      {settingsUpdateMessage ? (
+        <p className="settings-status-message" role="status">
+          {settingsUpdateMessage}
+        </p>
+      ) : null}
+      {settingsUpdateErrorMessage ? (
+        <p className="settings-error-message" role="alert">
+          {settingsUpdateErrorMessage}
+        </p>
+      ) : null}
+    </div>
+  )
+  const renderSettingsPanel = (): React.JSX.Element => {
+    if (activeSettingsPanel === 'ai') {
+      return renderAiPanel()
+    }
+
+    if (activeSettingsPanel === 'updates') {
+      return renderUpdatePanel()
+    }
+
+    return renderThemePanel()
+  }
+  const renderSettingsDialog = (): React.JSX.Element | null =>
+    isSettingsDialogOpen ? (
+      <div className="workspace-dialog-backdrop" onClick={closeSettingsDialog}>
         <div
-          aria-label="Themes"
+          aria-label="Settings"
           aria-modal="true"
-          className="workspace-dialog theme-dialog"
+          className="workspace-dialog settings-dialog"
           onClick={(event) => {
             event.stopPropagation()
           }}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
-              closeThemeDialog()
+              closeSettingsDialog()
             }
           }}
           role="dialog"
@@ -669,140 +954,93 @@ export const ExplorerPane = ({
           <div className="workspace-dialog-header">
             <div className="workspace-dialog-heading">
               <div className="workspace-dialog-mark" aria-hidden="true">
-                Aa
+                MDE
               </div>
               <div className="workspace-dialog-title-group">
-                <h2 className="workspace-dialog-title">Themes</h2>
+                <h2 className="workspace-dialog-title">Settings</h2>
                 <p className="workspace-dialog-subtitle">
-                  {isFollowingSystemTheme
-                    ? `Choose the ${resolvedTheme.family} theme used by system appearance.`
-                    : 'Choose editor appearance.'}
+                  Configure editor behavior, AI tools, and app updates.
                 </p>
               </div>
             </div>
             <button
-              aria-label="Close themes"
+              aria-label="Close settings"
               className="explorer-icon-button workspace-dialog-close"
-              onClick={closeThemeDialog}
-              title="Close themes"
+              onClick={closeSettingsDialog}
+              title="Close settings"
               type="button"
             >
               <X aria-hidden="true" focusable="false" size={16} />
             </button>
           </div>
-          <div className="theme-dialog-content">
-            <div
-              aria-label="Theme colorways"
-              className="theme-colorway-grid"
-              data-column-count={themeDialogColumns.length}
-              role="radiogroup"
+          <div className="settings-dialog-layout">
+            <nav className="settings-nav" aria-label="Settings sections">
+              <button
+                aria-current={activeSettingsPanel === 'ai' ? 'page' : undefined}
+                onClick={() => {
+                  setActiveSettingsPanel('ai')
+                }}
+                type="button"
+              >
+                <Bot aria-hidden="true" focusable="false" size={16} />
+                <span>AI</span>
+              </button>
+              <button
+                aria-current={
+                  activeSettingsPanel === 'theme' ? 'page' : undefined
+                }
+                onClick={() => {
+                  setActiveSettingsPanel('theme')
+                }}
+                type="button"
+              >
+                <Paintbrush aria-hidden="true" focusable="false" size={16} />
+                <span>Theme</span>
+              </button>
+              <button
+                aria-current={
+                  activeSettingsPanel === 'updates' ? 'page' : undefined
+                }
+                onClick={() => {
+                  setActiveSettingsPanel('updates')
+                }}
+                type="button"
+              >
+                <RefreshCw aria-hidden="true" focusable="false" size={16} />
+                <span>Check Update</span>
+              </button>
+            </nav>
+            <section
+              aria-label={`${activeSettingsPanel} settings`}
+              className="settings-panel"
             >
-              {themeDialogRows.map((row) => (
-                <div
-                  className="theme-colorway-row"
-                  data-theme-row={row.id}
-                  key={row.id}
-                >
-                  <span className="theme-colorway-label">{row.label}</span>
-                  {themeDialogColumns.map((column) => {
-                    const theme = getThemeForColumn(row, column.id)
-                    const isSelected = resolvedTheme.id === theme.id
-
-                    return (
-                      <button
-                        aria-checked={isSelected}
-                        aria-label={`${theme.label}: ${theme.description}`}
-                        className={[
-                          'theme-option-button',
-                          isSelected ? 'is-selected' : ''
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                        data-theme-column={column.id}
-                        data-theme-id={theme.id}
-                        data-theme-row={row.id}
-                        key={theme.id}
-                        onClick={() => {
-                          onSelectTheme(theme.id)
-                        }}
-                        role="radio"
-                        type="button"
-                      >
-                        <span className="theme-option-check" aria-hidden="true">
-                          {isSelected ? (
-                            <Check
-                              aria-hidden="true"
-                              focusable="false"
-                              size={13}
-                            />
-                          ) : null}
-                        </span>
-                        <span className="theme-option-copy">
-                          <span>{theme.label}</span>
-                          <span>{theme.description}</span>
-                        </span>
-                        <span
-                          className="theme-option-swatches"
-                          aria-hidden="true"
-                        >
-                          {theme.swatches.map((swatch) => (
-                            <span
-                              key={swatch}
-                              style={{ backgroundColor: swatch }}
-                            />
-                          ))}
-                        </span>
-                        <span className="theme-option-preview" aria-hidden="true">
-                          <span />
-                          <span />
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
+              {renderSettingsPanel()}
+            </section>
           </div>
         </div>
       </div>
     ) : null
-  const themeControls = (
-    <div className="explorer-theme-footer" aria-label="Theme controls">
+  const settingsControls = (
+    <div className="explorer-theme-footer" aria-label="Settings controls">
       <button
-        aria-checked={isFollowingSystemTheme}
-        aria-label="Follow system appearance"
-        className="theme-system-switch"
-        onClick={() => {
-          onToggleSystemTheme(!isFollowingSystemTheme)
-        }}
-        role="switch"
-        title="Follow system appearance"
-        type="button"
-      >
-        <Monitor aria-hidden="true" focusable="false" size={14} />
-        <span aria-hidden="true" />
-      </button>
-      <button
-        aria-label="Choose theme"
+        aria-label="Open settings"
         className="theme-selector-button"
-        onClick={openThemeDialog}
-        title={
-          isFollowingSystemTheme
-            ? `Choose system ${resolvedTheme.family} theme`
-            : 'Choose theme'
-        }
+        onClick={() => {
+          openSettingsDialog('theme')
+        }}
+        title="Open settings"
         type="button"
       >
         <span className="theme-selector-icon" aria-hidden="true">
-          <Palette aria-hidden="true" focusable="false" size={15} />
+          <Settings aria-hidden="true" focusable="false" size={15} />
         </span>
         <span className="theme-selector-copy">
+          <span>Settings</span>
           <span>
             {isFollowingSystemTheme
-              ? `System: ${resolvedTheme.label}`
-              : resolvedTheme.label}
+              ? `Theme: System ${resolvedTheme.label}`
+              : `Theme: ${resolvedTheme.label}`}
           </span>
-          <span>{resolvedTheme.family === 'dark' ? 'Dark' : 'Light'}</span>
         </span>
         <span className="theme-selector-swatches" aria-hidden="true">
           {resolvedTheme.swatches.map((swatch) => (
@@ -827,19 +1065,17 @@ export const ExplorerPane = ({
           <PanelLeftOpen aria-hidden="true" focusable="false" size={17} />
         </button>
         <button
-          aria-label="Choose theme"
+          aria-label="Open settings"
           className="explorer-icon-button explorer-collapsed-theme-button"
-          onClick={openThemeDialog}
-          title={
-            isFollowingSystemTheme
-              ? `Choose system ${resolvedTheme.family} theme`
-              : 'Choose theme'
-          }
+          onClick={() => {
+            openSettingsDialog('theme')
+          }}
+          title="Open settings"
           type="button"
         >
-          <Palette aria-hidden="true" focusable="false" size={16} />
+          <Settings aria-hidden="true" focusable="false" size={16} />
         </button>
-        {renderThemeDialog()}
+        {renderSettingsDialog()}
       </aside>
     )
   }
@@ -1292,8 +1528,8 @@ export const ExplorerPane = ({
       ) : (
         <p className="explorer-empty">Open a folder to browse Markdown files.</p>
       )}
-      {themeControls}
-      {renderThemeDialog()}
+      {settingsControls}
+      {renderSettingsDialog()}
     </aside>
   )
 }

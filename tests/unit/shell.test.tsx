@@ -145,12 +145,7 @@ describe('App shell', () => {
     expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'manuscript')
     expect(screen.getByRole('main')).toHaveAttribute('data-theme-family', 'light')
     expect(screen.getByRole('main')).toHaveAttribute('data-panel-family', 'light')
-    expect(
-      screen.getByRole('switch', { name: /follow system appearance/i })
-    ).toBeChecked()
-    expect(
-      screen.getByRole('button', { name: /choose theme/i })
-    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: /open settings/i })).toBeEnabled()
     expect(
       screen.getByRole('dialog', { name: /workspace manager/i })
     ).toBeInTheDocument()
@@ -635,6 +630,47 @@ describe('App shell', () => {
     expect(screen.getByText(/drag MDE to Applications/i)).toBeVisible()
   })
 
+  it('checks for updates from the unified settings panel', async () => {
+    const user = userEvent.setup()
+    const updateApi = {
+      checkForUpdates: vi.fn().mockResolvedValue({
+        currentVersion: '1.2.12',
+        message: 'MDE is up to date.',
+        updateAvailable: false
+      }),
+      downloadAndOpenUpdate: vi.fn(),
+      installWindowsUpdate: vi.fn(),
+      onUpdateAvailable: vi.fn(() => vi.fn()),
+      onUpdateDownloadProgress: vi.fn(() => vi.fn()),
+      onUpdateReady: vi.fn(() => vi.fn())
+    } satisfies UpdateApi
+
+    Object.defineProperty(window, 'updateApi', {
+      configurable: true,
+      value: updateApi
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1)
+    })
+    updateApi.checkForUpdates.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /open settings/i }))
+    await user.click(screen.getByRole('button', { name: /check update/i }))
+
+    expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
+    expect(screen.getByText(/current version/i)).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /check for updates/i }))
+
+    await waitFor(() => {
+      expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1)
+    })
+    expect(screen.getByText(/mde is up to date/i)).toBeVisible()
+  })
+
   it('toggles the editor between centered and full-width views', async () => {
     const user = userEvent.setup()
     const editorApi = {
@@ -819,6 +855,7 @@ describe('App shell', () => {
       'README.md',
       '# Original',
       '/workspace',
+      undefined,
       undefined
     )
     const summaryResult = await screen.findByRole('region', {
@@ -841,7 +878,8 @@ describe('App shell', () => {
       'README.md',
       '# Original',
       '/workspace',
-      'Make it shorter'
+      'Make it shorter',
+      undefined
     )
     expect(
       await screen.findByRole('region', { name: /ai result/i })
@@ -856,7 +894,8 @@ describe('App shell', () => {
       'README.md',
       '# Original',
       'English',
-      '/workspace'
+      '/workspace',
+      undefined
     )
     expect(
       await screen.findByRole('region', { name: /ai result/i })
@@ -880,7 +919,8 @@ describe('App shell', () => {
       'README.md',
       '# Original',
       'Japanese',
-      '/workspace'
+      '/workspace',
+      undefined
     )
     expect(localStorage.getItem('mde.customTranslationLanguages')).toContain(
       'Japanese'
@@ -895,6 +935,97 @@ describe('App shell', () => {
 
     expect(localStorage.getItem('mde.customTranslationLanguages')).not.toContain(
       'Japanese'
+    )
+  })
+
+  it('persists the selected AI CLI and sends it with AI actions', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
+    } satisfies EditorApi
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [
+          { commandPath: '/fake/codex', id: 'codex', name: 'Codex' },
+          { commandPath: '/fake/claude', id: 'claude', name: 'Claude Code' }
+        ]
+      }),
+      summarizeMarkdown: vi.fn().mockResolvedValue({
+        cached: false,
+        contents: '## Summary\n\n- Original summarized.',
+        kind: 'summary',
+        path: '.mde/translations/README-summary.md',
+        tool: { commandPath: '/fake/claude', id: 'claude', name: 'Claude Code' }
+      }),
+      translateMarkdown: vi.fn()
+    } satisfies AiApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    Object.defineProperty(window, 'aiApi', {
+      configurable: true,
+      value: aiApi
+    })
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /summarize markdown/i })
+    await user.click(screen.getByRole('button', { name: /open settings/i }))
+    await user.click(screen.getByRole('button', { name: /^ai$/i }))
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /ai cli/i }),
+      'claude'
+    )
+    await user.type(
+      screen.getByRole('textbox', { name: /default model name/i }),
+      'claude-sonnet-4-6'
+    )
+    await user.click(screen.getByRole('button', { name: /close settings/i }))
+    await user.click(screen.getByRole('button', { name: /summarize markdown/i }))
+
+    expect(localStorage.getItem('mde.aiCliSettings')).toBe(
+      JSON.stringify({
+        modelNames: {
+          claude: 'claude-sonnet-4-6'
+        },
+        selectedToolId: 'claude'
+      })
+    )
+    expect(aiApi.summarizeMarkdown).toHaveBeenCalledWith(
+      'README.md',
+      '# Original',
+      '/workspace',
+      undefined,
+      {
+        modelName: 'claude-sonnet-4-6',
+        toolId: 'claude'
+      }
     )
   })
 
@@ -996,7 +1127,7 @@ describe('App shell', () => {
     expect(screen.getByText('# Notes')).toBeVisible()
   })
 
-  it('opens a manual theme selector and persists the selected theme', async () => {
+  it('opens the theme settings panel and persists the selected theme', async () => {
     const user = userEvent.setup()
 
     localStorage.setItem(
@@ -1011,13 +1142,15 @@ describe('App shell', () => {
     render(<App />)
 
     expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'cedar')
+    await user.click(screen.getByRole('button', { name: /open settings/i }))
+
     expect(
       screen.getByRole('switch', { name: /follow system appearance/i })
     ).not.toBeChecked()
 
-    await user.click(screen.getByRole('button', { name: /choose theme/i }))
-
-    expect(screen.getByRole('dialog', { name: /themes/i })).toBeVisible()
+    expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^theme$/i }))
+      .toHaveAttribute('aria-current', 'page')
     const colorwayPicker = screen.getByRole('radiogroup', {
       name: /theme colorways/i
     })
@@ -1088,9 +1221,9 @@ describe('App shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /choose theme/i }))
+    await user.click(screen.getByRole('button', { name: /open settings/i }))
 
-    expect(screen.getByRole('dialog', { name: /themes/i })).toBeVisible()
+    expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
     const colorwayPicker = screen.getByRole('radiogroup', {
       name: /theme colorways/i
     })

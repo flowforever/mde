@@ -15,8 +15,10 @@ import type { EditorApi, Workspace } from '../../../shared/workspace'
 import type {
   AvailableUpdate,
   UpdateApi,
+  UpdateCheckResult,
   UpdateDownloadProgress
 } from '../../../shared/update'
+import packageJson from '../../../../package.json'
 import { appReducer, createInitialAppState } from './appReducer'
 import {
   MarkdownBlockEditor,
@@ -66,6 +68,12 @@ import {
   readCustomAiTranslationLanguages,
   rememberCustomAiTranslationLanguage
 } from '../ai/aiLanguages'
+import {
+  readAiCliSettings,
+  resolveAiGenerationOptions,
+  writeAiCliSettings,
+  type AiCliSettings
+} from '../ai/aiSettings'
 
 declare global {
   interface Window {
@@ -125,6 +133,7 @@ const EXPLORER_WIDTH_MIN = 220
 const EXPLORER_WIDTH_MAX = 440
 const AUTO_SAVE_IDLE_DELAY_MS = 5000
 const SYSTEM_DARK_COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)'
+const APP_VERSION = packageJson.version
 type ActiveAiActionBusyState = Exclude<AiActionBusyState, 'idle'>
 
 interface ScopedAiGenerationResult {
@@ -206,6 +215,9 @@ export const App = (): React.JSX.Element => {
     readWorkspaceFileHistory
   )
   const [aiTools, setAiTools] = useState<readonly AiTool[]>([])
+  const [aiSettings, setAiSettings] = useState(() =>
+    readAiCliSettings(globalThis.localStorage)
+  )
   const [aiResult, setAiResult] = useState<ScopedAiGenerationResult | null>(null)
   const [aiErrorMessage, setAiErrorMessage] =
     useState<ScopedAiErrorMessage | null>(null)
@@ -264,6 +276,11 @@ export const App = (): React.JSX.Element => {
 
       return nextPreference
     })
+  }, [])
+
+  const updateAiSettings = useCallback((settings: AiCliSettings): void => {
+    writeAiCliSettings(globalThis.localStorage, settings)
+    setAiSettings(settings)
   }, [])
 
   const clearAiResultState = useCallback((): void => {
@@ -413,6 +430,22 @@ export const App = (): React.JSX.Element => {
     }
   }, [])
 
+  const showAvailableUpdate = useCallback((
+    update: AvailableUpdate,
+    status?: UpdateDialogStatus
+  ): void => {
+    setAvailableUpdate(update)
+    setUpdateErrorMessage(null)
+    setUpdateProgress(null)
+    setIsUpdateDismissed(false)
+    setUpdateStatus(
+      status ??
+        (update.installMode === 'restart-to-install'
+          ? 'downloading'
+          : 'available')
+    )
+  }, [])
+
   useEffect(() => {
     let mediaQueryList: MediaQueryList
 
@@ -455,16 +488,7 @@ export const App = (): React.JSX.Element => {
         return
       }
 
-      setAvailableUpdate(update)
-      setUpdateErrorMessage(null)
-      setUpdateProgress(null)
-      setIsUpdateDismissed(false)
-      setUpdateStatus(
-        status ??
-          (update.installMode === 'restart-to-install'
-            ? 'downloading'
-            : 'available')
-      )
+      showAvailableUpdate(update, status)
     }
 
     const unsubscribeProgress = updateApi.onUpdateDownloadProgress(
@@ -498,7 +522,7 @@ export const App = (): React.JSX.Element => {
       unsubscribeAvailable()
       unsubscribeReady()
     }
-  }, [])
+  }, [showAvailableUpdate])
 
   useEffect(() => {
     if (!isResizingExplorer) {
@@ -832,11 +856,13 @@ export const App = (): React.JSX.Element => {
 
     try {
       const markdown = await getLatestMarkdownForAi()
+      const generationOptions = resolveAiGenerationOptions(aiSettings, aiTools)
       const result = await aiApi.summarizeMarkdown(
         loadedFile.path,
         markdown,
         workspaceRoot,
-        normalizedInstruction
+        normalizedInstruction,
+        generationOptions
       )
 
       setAiResult({ documentKey, result })
@@ -853,6 +879,8 @@ export const App = (): React.JSX.Element => {
     clearAiDocumentError,
     clearAiDocumentResult,
     getLatestMarkdownForAi,
+    aiSettings,
+    aiTools,
     setAiDocumentBusyState,
     state.loadedFile,
     state.workspace?.rootPath
@@ -876,11 +904,13 @@ export const App = (): React.JSX.Element => {
 
     try {
       const markdown = await getLatestMarkdownForAi()
+      const generationOptions = resolveAiGenerationOptions(aiSettings, aiTools)
       const result = await aiApi.translateMarkdown(
         loadedFile.path,
         markdown,
         language,
-        workspaceRoot
+        workspaceRoot,
+        generationOptions
       )
 
       setAiResult({ documentKey, result })
@@ -897,6 +927,8 @@ export const App = (): React.JSX.Element => {
     clearAiDocumentError,
     clearAiDocumentResult,
     getLatestMarkdownForAi,
+    aiSettings,
+    aiTools,
     setAiDocumentBusyState,
     state.loadedFile,
     state.workspace?.rootPath
@@ -1139,6 +1171,28 @@ export const App = (): React.JSX.Element => {
     }
   }
 
+  const checkForUpdatesFromSettings = useCallback(async (): Promise<
+    UpdateCheckResult
+  > => {
+    const updateApi = window.updateApi
+
+    if (!updateApi) {
+      return {
+        currentVersion: APP_VERSION,
+        message: 'Update checks are unavailable in this runtime.',
+        updateAvailable: false
+      }
+    }
+
+    const result = await updateApi.checkForUpdates()
+
+    if (result.updateAvailable && result.update) {
+      showAvailableUpdate(result.update)
+    }
+
+    return result
+  }, [showAvailableUpdate])
+
   const installUpdate = async (): Promise<void> => {
     const updateApi = window.updateApi
 
@@ -1218,7 +1272,12 @@ export const App = (): React.JSX.Element => {
       style={appShellStyle}
     >
       <ExplorerPane
+        aiSettings={aiSettings}
+        aiTools={aiTools}
+        appVersion={APP_VERSION}
         isCollapsed={isExplorerCollapsed}
+        onAiSettingsChange={updateAiSettings}
+        onCheckForUpdates={checkForUpdatesFromSettings}
         onCreateFile={(filePath) => {
           void createMarkdownFile(filePath)
         }}

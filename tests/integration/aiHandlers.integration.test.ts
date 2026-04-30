@@ -17,6 +17,10 @@ type RunPrompt = NonNullable<AiServiceOptions['runPrompt']>
 describe('aiHandlers integration', () => {
   const registerHandlers = (workspacePath: string) => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const promptRuns: {
+      readonly modelName?: string
+      readonly toolId: string
+    }[] = []
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
         handlers.set(channel, handler)
@@ -30,7 +34,12 @@ describe('aiHandlers integration', () => {
     })
     const locateCommand: LocateCommand = (tool) =>
       Promise.resolve(tool.id === 'codex' ? '/fake/codex' : null)
-    const runPrompt: RunPrompt = ({ prompt }) => {
+    const runPrompt: RunPrompt = ({ modelName, prompt, tool }) => {
+      promptRuns.push({
+        modelName,
+        toolId: tool.id
+      })
+
       if (prompt.includes('Translate')) {
         return Promise.resolve('# English\n\nTranslated through IPC.')
       }
@@ -51,7 +60,7 @@ describe('aiHandlers integration', () => {
       ipcMain
     })
 
-    return { handlers }
+    return { handlers, promptRuns }
   }
 
   it('generates translation files through the AI IPC handler', async () => {
@@ -111,6 +120,28 @@ describe('aiHandlers integration', () => {
     await expect(readFile(join(workspacePath, refined.path), 'utf8')).resolves.toBe(
       '## Summary\n\n- Shorter summary through IPC.'
     )
+  })
+
+  it('forwards selected AI CLI options through the AI IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-ipc-'))
+
+    await writeFile(join(workspacePath, 'README.md'), '# Readme')
+    const { handlers, promptRuns } = registerHandlers(workspacePath)
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await handlers
+      .get(AI_CHANNELS.summarizeMarkdown)
+      ?.({}, 'README.md', '# Readme', workspace.rootPath, undefined, {
+        modelName: 'gpt-5.4',
+        toolId: 'codex'
+      })
+
+    expect(promptRuns.at(-1)).toEqual({
+      modelName: 'gpt-5.4',
+      toolId: 'codex'
+    })
   })
 
   it('rejects stale AI requests when the active workspace changes', async () => {

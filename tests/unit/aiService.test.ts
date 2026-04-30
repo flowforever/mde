@@ -133,6 +133,47 @@ describe('aiService', () => {
     ).resolves.toBe('## Summary\n\n- Main point.')
   })
 
+  it('uses the selected CLI and model for AI generation', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-service-'))
+    const promptRuns: {
+      readonly modelName?: string
+      readonly toolId: string
+    }[] = []
+    const service = createAiService({
+      locateCommand: locateCommands({
+        claude: '/fake/claude',
+        codex: '/fake/codex'
+      }),
+      runPrompt: ({ modelName, tool }) => {
+        promptRuns.push({ modelName, toolId: tool.id })
+
+        return Promise.resolve('## Summary\n\n- Generated with selected tool.')
+      }
+    })
+
+    await writeFile(join(workspacePath, 'README.md'), '# Readme')
+
+    const result = await service.summarizeMarkdown(
+      workspacePath,
+      'README.md',
+      '# Readme',
+      undefined,
+      {
+        modelName: 'claude-sonnet-4-6',
+        toolId: 'claude'
+      }
+    )
+
+    expect(result).toMatchObject({
+      cached: false,
+      contents: '## Summary\n\n- Generated with selected tool.',
+      tool: { id: 'claude', name: 'Claude Code' }
+    })
+    expect(promptRuns).toEqual([
+      { modelName: 'claude-sonnet-4-6', toolId: 'claude' }
+    ])
+  })
+
   it('regenerates summaries when the refinement instruction changes', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ai-service-'))
     const promptResults = [

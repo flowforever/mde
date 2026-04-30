@@ -102,10 +102,7 @@ test('shows the initial centered workspace popup', async () => {
     await expect(appShell).toHaveAttribute('data-theme', 'manuscript')
     await expect(appShell).toHaveAttribute('data-theme-family', 'light')
     await expect(appShell).toHaveAttribute('data-panel-family', 'light')
-    await expect(
-      window.getByRole('switch', { name: /follow system appearance/i })
-    ).toBeChecked()
-    await expect(window.getByRole('button', { name: /choose theme/i }))
+    await expect(window.getByRole('button', { name: /open settings/i }))
       .toBeEnabled()
     await expect(workspaceDialog).toBeVisible()
     await expect(
@@ -154,7 +151,7 @@ test('shows the initial centered workspace popup', async () => {
   }
 })
 
-test('selects and persists a manual theme from the explorer footer', async () => {
+test('selects and persists a manual theme from settings', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp()
 
   try {
@@ -165,38 +162,14 @@ test('selects and persists a manual theme from the explorer footer', async () =>
     await expect(appShell).toHaveAttribute('data-theme', 'manuscript')
     await window.getByRole('button', { name: /close workspace popup/i }).click()
 
+    await window.getByRole('button', { name: /open settings/i }).click()
+    await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
     await window
       .getByRole('switch', { name: /follow system appearance/i })
       .click()
     await expect(
       window.getByRole('switch', { name: /follow system appearance/i })
     ).not.toBeChecked()
-
-    const themeFooterControlsVerticalOverlap = await window
-      .locator('.explorer-theme-footer')
-      .evaluate((footer) => {
-        const controls = Array.from(footer.children)
-          .filter((child) =>
-            child.matches(
-              '[role="switch"], button[aria-label="Choose theme"]'
-            )
-          )
-          .map((child) => child.getBoundingClientRect())
-
-        if (controls.length !== 2) {
-          return Number.NEGATIVE_INFINITY
-        }
-
-        return (
-          Math.min(controls[0].bottom, controls[1].bottom) -
-          Math.max(controls[0].top, controls[1].top)
-        )
-      })
-
-    expect(themeFooterControlsVerticalOverlap).toBeGreaterThan(28)
-
-    await window.getByRole('button', { name: /choose theme/i }).click()
-    await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
 
     const themePicker = window.locator('.theme-colorway-grid')
     const blueColorway = window.locator('[data-theme-row="blue"]')
@@ -227,10 +200,12 @@ test('selects and persists a manual theme from the explorer footer', async () =>
       'data-theme',
       'blue-hour'
     )
+    await window.getByRole('button', { name: /close workspace popup/i }).click()
+    await window.getByRole('button', { name: /open settings/i }).click()
     await expect(
       window.getByRole('switch', { name: /follow system appearance/i })
     ).not.toBeChecked()
-    await expect(window.getByRole('button', { name: /choose theme/i }))
+    await expect(window.getByRole('button', { name: /open settings/i }))
       .toBeEnabled()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
@@ -257,12 +232,11 @@ test('selects the current system theme family without leaving follow-system mode
     const appShell = window.locator('.app-shell')
 
     await window.getByRole('button', { name: /close workspace popup/i }).click()
+    await window.getByRole('button', { name: /open settings/i }).click()
+    await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
     await expect(
       window.getByRole('switch', { name: /follow system appearance/i })
     ).toBeChecked()
-
-    await window.getByRole('button', { name: /choose theme/i }).click()
-    await expect(window.getByRole('dialog', { name: /themes/i })).toBeVisible()
     await expect(window.getByRole('radiogroup', { name: /theme colorways/i }))
       .toBeVisible()
     await expect(window.locator('.theme-colorway-grid')).toHaveAttribute(

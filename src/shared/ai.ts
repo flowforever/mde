@@ -19,18 +19,25 @@ export interface AiGenerationResult {
   readonly tool: AiTool
 }
 
+export interface AiGenerationOptions {
+  readonly modelName?: string
+  readonly toolId?: AiToolId
+}
+
 export interface AiApi {
   readonly detectTools: () => Promise<AiToolDetectionResult>
   readonly summarizeMarkdown: (
     markdownFilePath: string,
     markdown: string,
     workspaceRoot: string,
-    instruction?: string
+    instruction?: string,
+    options?: AiGenerationOptions
   ) => Promise<AiGenerationResult>
   readonly translateMarkdown: (
     markdownFilePath: string,
     markdown: string,
     language: string,
-    workspaceRoot: string
+    workspaceRoot: string,
+    options?: AiGenerationOptions
   ) => Promise<AiGenerationResult>
 }

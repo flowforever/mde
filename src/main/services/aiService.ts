@@ -4,7 +4,12 @@ import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promi
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { promisify } from 'node:util'
 
-import type { AiGenerationResult, AiTool, AiToolId } from '../../shared/ai'
+import type {
+  AiGenerationOptions,
+  AiGenerationResult,
+  AiTool,
+  AiToolId
+} from '../../shared/ai'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 
 const execFileAsync = promisify(execFile)
@@ -21,12 +26,14 @@ interface AiCacheMetadata {
   readonly instruction?: string
   readonly kind: AiGenerationResult['kind']
   readonly language?: string
+  readonly modelName?: string
   readonly sourceHash: string
   readonly sourcePath: string
   readonly toolId: AiToolId
 }
 
 interface RunPromptOptions {
+  readonly modelName?: string
   readonly prompt: string
   readonly tool: AiTool
   readonly workspacePath: string
@@ -44,13 +51,15 @@ export interface AiService {
     workspacePath: string,
     markdownFilePath: string,
     markdown: string,
-    instruction?: string
+    instruction?: string,
+    options?: AiGenerationOptions
   ) => Promise<AiGenerationResult>
   readonly translateMarkdown: (
     workspacePath: string,
     markdownFilePath: string,
     markdown: string,
-    language: string
+    language: string,
+    options?: AiGenerationOptions
   ) => Promise<AiGenerationResult>
 }
 
@@ -86,6 +95,8 @@ const trimTrailingLineBreaks = (value: string): string =>
 
 const normalizeSummaryInstruction = (instruction?: string): string =>
   instruction?.trim() ?? ''
+
+const normalizeModelName = (modelName?: string): string => modelName?.trim() ?? ''
 
 const assertMarkdownFilePath = (filePath: string): void => {
   if (filePath.trim().length === 0 || filePath === '.') {
@@ -255,6 +266,8 @@ const getCachedResult = async ({
   markdownFilePath,
   metadataPath,
   resultPath,
+  selectedModelName,
+  selectedToolId,
   summaryInstruction,
   tools
 }: {
@@ -264,6 +277,8 @@ const getCachedResult = async ({
   readonly markdownFilePath: string
   readonly metadataPath: string
   readonly resultPath: string
+  readonly selectedModelName?: string
+  readonly selectedToolId?: AiToolId
   readonly summaryInstruction?: string
   readonly tools: readonly AiTool[]
 }): Promise<AiGenerationResult | null> => {
@@ -281,6 +296,14 @@ const getCachedResult = async ({
   }
 
   if (kind === 'translation' && metadata.language !== language) {
+    return null
+  }
+
+  if (selectedToolId && metadata.toolId !== selectedToolId) {
+    return null
+  }
+
+  if ((metadata.modelName ?? '') !== normalizeModelName(selectedModelName)) {
     return null
   }
 
@@ -348,10 +371,20 @@ const defaultLocateCommand = async (
   }
 }
 
-const getToolArgs = (tool: AiTool, workspacePath: string): readonly string[] =>
-  tool.id === 'codex'
+const getToolArgs = (
+  tool: AiTool,
+  workspacePath: string,
+  modelName?: string
+): readonly string[] => {
+  const normalizedModelName = normalizeModelName(modelName)
+  const modelArgs = normalizedModelName
+    ? ['--model', normalizedModelName]
+    : []
+
+  return tool.id === 'codex'
     ? [
         'exec',
+        ...modelArgs,
         '--ephemeral',
         '--ignore-rules',
         '--sandbox',
@@ -363,6 +396,7 @@ const getToolArgs = (tool: AiTool, workspacePath: string): readonly string[] =>
         '-'
       ]
     : [
+        ...modelArgs,
         '--print',
         '--output-format',
         'text',
@@ -375,14 +409,16 @@ const getToolArgs = (tool: AiTool, workspacePath: string): readonly string[] =>
         '--no-session-persistence',
         '--disable-slash-commands'
       ]
+}
 
 const defaultRunPrompt = ({
+  modelName,
   prompt,
   tool,
   workspacePath
 }: RunPromptOptions): Promise<string> =>
   new Promise((resolve, reject) => {
-    const child = spawn(tool.commandPath, getToolArgs(tool, workspacePath), {
+    const child = spawn(tool.commandPath, getToolArgs(tool, workspacePath, modelName), {
       cwd: workspacePath,
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -482,6 +518,23 @@ const createSummaryPrompt = (markdown: string, instruction?: string): string => 
   ].join('\n')
 }
 
+const selectToolsForGeneration = (
+  tools: readonly AiTool[],
+  selectedToolId?: AiToolId
+): readonly AiTool[] => {
+  if (!selectedToolId) {
+    return tools
+  }
+
+  const selectedTool = tools.find((tool) => tool.id === selectedToolId)
+
+  if (!selectedTool) {
+    throw new Error('Selected AI CLI is not installed')
+  }
+
+  return [selectedTool]
+}
+
 export const createAiService = ({
   locateCommand = defaultLocateCommand,
   now = () => new Date(),
@@ -512,6 +565,7 @@ export const createAiService = ({
     markdown,
     markdownFilePath,
     prompt,
+    options,
     workspacePath
   }: {
     readonly kind: AiGenerationResult['kind']
@@ -519,6 +573,7 @@ export const createAiService = ({
     readonly language?: string
     readonly markdown: string
     readonly markdownFilePath: string
+    readonly options?: AiGenerationOptions
     readonly prompt: string
     readonly workspacePath: string
   }): Promise<AiGenerationResult> => {
@@ -537,6 +592,7 @@ export const createAiService = ({
     const resultWorkspacePath = toWorkspaceRelativePath(realWorkspacePath, resultPath)
     const normalizedInstruction =
       kind === 'summary' ? normalizeSummaryInstruction(instruction) : ''
+    const selectedModelName = normalizeModelName(options?.modelName)
     const tools = await detectTools()
     const cachedResult = await getCachedResult({
       kind,
@@ -545,6 +601,8 @@ export const createAiService = ({
       markdownFilePath,
       metadataPath,
       resultPath,
+      selectedModelName,
+      selectedToolId: options?.toolId,
       summaryInstruction: normalizedInstruction,
       tools
     })
@@ -561,10 +619,12 @@ export const createAiService = ({
     }
 
     const failures: string[] = []
+    const generationTools = selectToolsForGeneration(tools, options?.toolId)
 
-    for (const tool of tools) {
+    for (const tool of generationTools) {
       try {
         const contents = await runPrompt({
+          ...(selectedModelName ? { modelName: selectedModelName } : {}),
           prompt,
           tool,
           workspacePath: realWorkspacePath
@@ -576,6 +636,7 @@ export const createAiService = ({
             : {}),
           kind,
           language,
+          ...(selectedModelName ? { modelName: selectedModelName } : {}),
           sourceHash: hashMarkdown(markdown),
           sourcePath: markdownFilePath,
           toolId: tool.id
@@ -602,21 +663,35 @@ export const createAiService = ({
 
   return {
     detectTools,
-    summarizeMarkdown: (workspacePath, markdownFilePath, markdown, instruction) =>
+    summarizeMarkdown: (
+      workspacePath,
+      markdownFilePath,
+      markdown,
+      instruction,
+      options
+    ) =>
       generateMarkdown({
         kind: 'summary',
         instruction,
         markdown,
         markdownFilePath,
+        options,
         prompt: createSummaryPrompt(markdown, instruction),
         workspacePath
       }),
-    translateMarkdown: (workspacePath, markdownFilePath, markdown, language) =>
+    translateMarkdown: (
+      workspacePath,
+      markdownFilePath,
+      markdown,
+      language,
+      options
+    ) =>
       generateMarkdown({
         kind: 'translation',
         language: language.trim(),
         markdown,
         markdownFilePath,
+        options,
         prompt: createTranslatePrompt(markdown, language),
         workspacePath
       })
