@@ -8,6 +8,8 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -28,6 +30,64 @@ test.beforeAll(async ({ browserName }, testInfo) => {
   testInfo.setTimeout(E2E_BUILD_TIMEOUT_MS)
   await buildElectronApp()
 })
+
+const startUpdateFallbackServer = async (): Promise<{
+  close: () => Promise<void>
+  requests: string[]
+  url: string
+}> => {
+  const requests: string[] = []
+  const server = createServer((request, response) => {
+    const requestUrl = request.url ?? '/'
+
+    requests.push(requestUrl)
+
+    if (requestUrl === '/api/releases') {
+      response.writeHead(403, { 'content-type': 'text/plain' })
+      response.end('rate limited')
+      return
+    }
+
+    if (requestUrl === '/releases.atom') {
+      response.writeHead(200, { 'content-type': 'application/atom+xml' })
+      response.end(`<?xml version="1.0" encoding="UTF-8"?>
+        <feed>
+          <entry>
+            <title>MDE 1.2.19</title>
+            <link rel="alternate" href="https://github.com/flowforever/mde/releases/tag/v1.2.19" />
+            <updated>2026-04-30T12:00:00Z</updated>
+            <content type="html">&lt;p&gt;Fallback release feed update.&lt;/p&gt;</content>
+          </entry>
+        </feed>`)
+      return
+    }
+
+    response.writeHead(404, { 'content-type': 'text/plain' })
+    response.end('not found')
+  })
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', resolve)
+  })
+
+  const address = server.address() as AddressInfo
+
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error)
+            return
+          }
+
+          resolve()
+        })
+      }),
+    requests,
+    url: `http://127.0.0.1:${address.port}`
+  }
+}
 
 const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
   const workspaceDialog = window.getByRole('dialog', {
@@ -351,6 +411,68 @@ test('exposes update checks through the preload API in development builds', asyn
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
+  }
+})
+
+test('falls back to the public release feed when GitHub REST update checks are rate limited', async () => {
+  test.skip(process.platform !== 'darwin', 'macOS manual update flow only')
+
+  const updateServer = await startUpdateFallbackServer()
+  const expectedUpdateArch = process.arch === 'arm64' ? 'arm64' : 'x64'
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    env: {
+      MDE_TEST_FORCE_AUTO_UPDATE: '1',
+      MDE_TEST_APP_VERSION: '1.2.18',
+      MDE_TEST_RELEASE_API_URL: `${updateServer.url}/api/releases`,
+      MDE_TEST_RELEASE_FEED_URL: `${updateServer.url}/releases.atom`
+    }
+  })
+
+  try {
+    const updateResult = await window.evaluate(async () => {
+      const updateWindow = globalThis as unknown as Window & {
+        updateApi?: {
+          checkForUpdates: () => Promise<{
+            update?: {
+              assetName?: string
+              latestVersion: string
+              releaseUrl: string
+            }
+            updateAvailable: boolean
+          }>
+        }
+      }
+
+      if (!updateWindow.updateApi) {
+        throw new Error('Update API missing')
+      }
+
+      return updateWindow.updateApi.checkForUpdates()
+    })
+
+    if (!updateResult.updateAvailable) {
+      throw new Error(
+        `Expected update fallback to find a release: ${JSON.stringify({
+          requests: updateServer.requests,
+          updateResult
+        })}`
+      )
+    }
+
+    expect(updateResult).toMatchObject({
+      update: {
+        assetName: `MDE-1.2.19-mac-${expectedUpdateArch}.dmg`,
+        latestVersion: '1.2.19',
+        releaseUrl: 'https://github.com/flowforever/mde/releases/tag/v1.2.19'
+      },
+      updateAvailable: true
+    })
+    expect(updateServer.requests).toContain('/api/releases')
+    expect(updateServer.requests).toContain('/releases.atom')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+    await updateServer.close()
   }
 })
 

@@ -13,11 +13,24 @@ import type {
 } from '../shared/update'
 
 export const DISABLE_AUTO_UPDATE_ENV = 'MDE_DISABLE_AUTO_UPDATE'
+export const APP_VERSION_ENV = 'MDE_TEST_APP_VERSION'
+export const FORCE_AUTO_UPDATE_ENV = 'MDE_TEST_FORCE_AUTO_UPDATE'
+export const RELEASE_API_URL_ENV = 'MDE_TEST_RELEASE_API_URL'
+export const RELEASE_FEED_URL_ENV = 'MDE_TEST_RELEASE_FEED_URL'
 export const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/flowforever/mde/releases?per_page=20'
+export const GITHUB_RELEASES_FEED_URL =
+  'https://github.com/flowforever/mde/releases.atom'
+
+const GITHUB_RELEASE_DOWNLOAD_BASE_URL =
+  'https://github.com/flowforever/mde/releases/download'
 
 interface AutoUpdateEnvironment {
+  readonly [APP_VERSION_ENV]?: string
   readonly [DISABLE_AUTO_UPDATE_ENV]?: string
+  readonly [FORCE_AUTO_UPDATE_ENV]?: string
+  readonly [RELEASE_API_URL_ENV]?: string
+  readonly [RELEASE_FEED_URL_ENV]?: string
 }
 
 interface AutoUpdateApp {
@@ -102,7 +115,9 @@ export const shouldCheckForUpdates = ({
 }: {
   readonly env?: AutoUpdateEnvironment
   readonly isPackaged: boolean
-}): boolean => isPackaged && env[DISABLE_AUTO_UPDATE_ENV] !== '1'
+}): boolean =>
+  (isPackaged || env[FORCE_AUTO_UPDATE_ENV] === '1') &&
+  env[DISABLE_AUTO_UPDATE_ENV] !== '1'
 
 const registerUpdateListener = (
   autoUpdater: AutoUpdateClient,
@@ -194,6 +209,219 @@ const getAssetUrl = (asset: unknown): string | null =>
 const getAssetSize = (asset: unknown): number =>
   isObjectRecord(asset) && typeof asset.size === 'number' ? asset.size : 0
 
+const decodeXmlEntities = (value: string): string =>
+  value.replace(
+    /&(#x[0-9a-f]+|#\d+|amp|apos|gt|lt|quot);/giu,
+    (entity: string, code: string) => {
+      const normalizedCode = code.toLowerCase()
+
+      if (normalizedCode === 'amp') {
+        return '&'
+      }
+
+      if (normalizedCode === 'apos') {
+        return "'"
+      }
+
+      if (normalizedCode === 'gt') {
+        return '>'
+      }
+
+      if (normalizedCode === 'lt') {
+        return '<'
+      }
+
+      if (normalizedCode === 'quot') {
+        return '"'
+      }
+
+      if (normalizedCode.startsWith('#x')) {
+        return String.fromCodePoint(Number.parseInt(normalizedCode.slice(2), 16))
+      }
+
+      if (normalizedCode.startsWith('#')) {
+        return String.fromCodePoint(Number.parseInt(normalizedCode.slice(1), 10))
+      }
+
+      return entity
+    }
+  )
+
+const stripHtmlTags = (value: string): string =>
+  value
+    .replace(/<br\s*\/?>/giu, '\n')
+    .replace(/<\/(div|h[1-6]|li|ol|p|pre|ul)>/giu, '\n')
+    .replace(/<[^>]+>/gu, '')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
+
+const getXmlElementText = (source: string, tagName: string): string => {
+  const match = new RegExp(
+    `<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`,
+    'iu'
+  ).exec(source)
+
+  if (!match) {
+    return ''
+  }
+
+  const text = match[1].trim()
+  const cdataMatch = /^<!\[CDATA\[([\s\S]*)\]\]>$/u.exec(text)
+
+  return decodeXmlEntities(cdataMatch?.[1] ?? text)
+}
+
+const getXmlAttribute = (
+  source: string,
+  attributeName: string
+): string | null => {
+  const match = new RegExp(
+    `${attributeName}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`,
+    'iu'
+  ).exec(source)
+
+  return match ? decodeXmlEntities(match[1] ?? match[2] ?? '') : null
+}
+
+const getAtomReleaseUrl = (entry: string): string => {
+  const linkTags = entry.match(/<link\b[^>]*>/giu) ?? []
+  const alternateLink =
+    linkTags.find((linkTag) => getXmlAttribute(linkTag, 'rel') === 'alternate') ??
+    linkTags[0]
+  const href = alternateLink ? getXmlAttribute(alternateLink, 'href') : null
+
+  if (!href) {
+    throw new Error('GitHub release feed entry is missing a release URL')
+  }
+
+  return href
+}
+
+const getTagNameFromReleaseUrl = (releaseUrl: string): string => {
+  try {
+    const url = new URL(releaseUrl)
+    const tagName = /\/flowforever\/mde\/releases\/tag\/([^/]+)$/u.exec(
+      url.pathname
+    )?.[1]
+
+    if (url.protocol === 'https:' && url.hostname === 'github.com' && tagName) {
+      return decodeURIComponent(tagName)
+    }
+  } catch {
+    // Fall through to the shared invalid-feed error below.
+  }
+
+  throw new Error('GitHub release feed entry has an invalid release URL')
+}
+
+const createFeedDmgAsset = (
+  version: string,
+  arch: 'arm64' | 'x64'
+): Record<string, unknown> => {
+  const tagName = `v${version}`
+  const name = `MDE-${version}-mac-${arch}.dmg`
+
+  return {
+    browser_download_url: `${GITHUB_RELEASE_DOWNLOAD_BASE_URL}/${tagName}/${name}`,
+    name,
+    size: 0
+  }
+}
+
+const createReleaseFromFeedEntry = (
+  entry: string
+): Record<string, unknown> => {
+  const releaseUrl = getAtomReleaseUrl(entry)
+  const tagName = getTagNameFromReleaseUrl(releaseUrl)
+  const version = normalizeVersion(tagName)
+  const releaseTitle = getXmlElementText(entry, 'title') || `MDE ${version}`
+  const releaseNotes = stripHtmlTags(getXmlElementText(entry, 'content'))
+
+  if (!parseSemver(tagName)) {
+    throw new Error('GitHub release feed entry has an invalid tag')
+  }
+
+  return {
+    assets: [
+      createFeedDmgAsset(version, 'x64'),
+      createFeedDmgAsset(version, 'arm64')
+    ],
+    body: releaseNotes,
+    draft: false,
+    html_url: releaseUrl,
+    name: releaseTitle,
+    prerelease: false,
+    published_at: getXmlElementText(entry, 'updated'),
+    tag_name: tagName
+  }
+}
+
+const parseReleaseFeed = (feedText: string): Record<string, unknown> => {
+  const releases = [...feedText.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/giu)]
+    .map((match) => createReleaseFromFeedEntry(match[1]))
+    .filter((release) => parseSemver(getOptionalString(release, 'tag_name')))
+    .toSorted((left, right) =>
+      compareSemver(
+        getOptionalString(right, 'tag_name'),
+        getOptionalString(left, 'tag_name')
+      )
+    )
+
+  if (releases.length === 0) {
+    throw new Error('GitHub release feed response is invalid')
+  }
+
+  return releases[0]
+}
+
+const shouldUseReleaseFeedFallback = (status: number): boolean =>
+  status === 403 || status === 429
+
+const getUpdateApp = (
+  app: AutoUpdateApp,
+  env: AutoUpdateEnvironment
+): AutoUpdateApp => {
+  const appVersion = env[APP_VERSION_ENV]
+
+  if (!appVersion) {
+    return app
+  }
+
+  const updateApp: AutoUpdateApp = {
+    getPath: (name) => app.getPath(name),
+    getVersion: () => appVersion,
+    isPackaged: app.isPackaged
+  }
+
+  if (app.quit) {
+    return {
+      ...updateApp,
+      quit: () => app.quit?.()
+    }
+  }
+
+  return updateApp
+}
+
+const fetchLatestReleaseFromFeed = async (
+  fetchClient: FetchLike,
+  releaseFeedUrl: string
+): Promise<Record<string, unknown>> => {
+  const response = await fetchClient(releaseFeedUrl, {
+    headers: {
+      accept: 'application/atom+xml, application/xml;q=0.9, text/xml;q=0.8'
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(
+      `GitHub release fallback feed failed with status ${response.status}`
+    )
+  }
+
+  return parseReleaseFeed(await response.text())
+}
+
 export const findCompatibleDmgAsset = (
   assets: readonly unknown[],
   arch: string
@@ -250,7 +478,8 @@ const getOptionalString = (
 
 const fetchLatestRelease = async (
   fetchClient: FetchLike,
-  releaseApiUrl: string
+  releaseApiUrl: string,
+  releaseFeedUrl: string
 ): Promise<Record<string, unknown>> => {
   const response = await fetchClient(releaseApiUrl, {
     headers: {
@@ -259,6 +488,10 @@ const fetchLatestRelease = async (
   })
 
   if (!response.ok) {
+    if (shouldUseReleaseFeedFallback(response.status)) {
+      return fetchLatestReleaseFromFeed(fetchClient, releaseFeedUrl)
+    }
+
     throw new Error(`GitHub release check failed with status ${response.status}`)
   }
 
@@ -418,6 +651,7 @@ export const createGitHubManualUpdateService = ({
   fetch: fetchClient = globalThis.fetch,
   platform = process.platform,
   releaseApiUrl = GITHUB_LATEST_RELEASE_URL,
+  releaseFeedUrl = GITHUB_RELEASES_FEED_URL,
   shell
 }: {
   readonly app: AutoUpdateApp
@@ -426,6 +660,7 @@ export const createGitHubManualUpdateService = ({
   readonly fetch?: FetchLike
   readonly platform?: string
   readonly releaseApiUrl?: string
+  readonly releaseFeedUrl?: string
   readonly shell: ShellLike
 }): ManualUpdateService => {
   let selectedUpdate: (AvailableUpdate & { readonly assetUrl: string }) | null =
@@ -445,7 +680,11 @@ export const createGitHubManualUpdateService = ({
       )
     }
 
-    const release = await fetchLatestRelease(fetchClient, releaseApiUrl)
+    const release = await fetchLatestRelease(
+      fetchClient,
+      releaseApiUrl,
+      releaseFeedUrl
+    )
     const tagName = getRequiredString(release, 'tag_name')
     const latestVersion = normalizeVersion(tagName)
 
@@ -755,11 +994,12 @@ export const configureAutoUpdates = ({
     return false
   }
 
+  const updateApp = getUpdateApp(app, env)
   const enabled = shouldCheckForUpdates({ env, isPackaged: app.isPackaged })
 
   if (platform === 'darwin') {
     if (!shell) {
-      registerUnsupportedUpdateHandlers(ipcMain, app)
+      registerUnsupportedUpdateHandlers(ipcMain, updateApp)
       logger.error('MDE macOS update shell integration is unavailable')
       return false
     }
@@ -767,11 +1007,13 @@ export const configureAutoUpdates = ({
     registerManualUpdateHandlers(
       ipcMain,
       createGitHubManualUpdateService({
-        app,
+        app: updateApp,
         arch,
         enabled,
         fetch: fetchClient,
         platform,
+        releaseApiUrl: env[RELEASE_API_URL_ENV] ?? GITHUB_LATEST_RELEASE_URL,
+        releaseFeedUrl: env[RELEASE_FEED_URL_ENV] ?? GITHUB_RELEASES_FEED_URL,
         shell
       })
     )
@@ -781,7 +1023,7 @@ export const configureAutoUpdates = ({
 
   if (platform === 'win32') {
     return configureWindowsUpdates({
-      app,
+      app: updateApp,
       autoUpdater,
       enabled,
       ipcMain,
@@ -789,6 +1031,6 @@ export const configureAutoUpdates = ({
     })
   }
 
-  registerUnsupportedUpdateHandlers(ipcMain, app)
+  registerUnsupportedUpdateHandlers(ipcMain, updateApp)
   return false
 }

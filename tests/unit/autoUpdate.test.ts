@@ -99,6 +99,17 @@ describe('manual update', () => {
     ).toBe(false)
   })
 
+  it('can force update checks in development for end-to-end coverage', () => {
+    expect(
+      shouldCheckForUpdates({
+        env: {
+          MDE_TEST_FORCE_AUTO_UPDATE: '1'
+        },
+        isPackaged: false
+      })
+    ).toBe(true)
+  })
+
   it('selects the current architecture DMG from a trusted GitHub release', () => {
     expect(findCompatibleDmgAsset(releaseResponse.assets, 'arm64')).toEqual({
       name: 'MDE-1.2.0-mac-arm64.dmg',
@@ -252,6 +263,67 @@ describe('manual update', () => {
     expect(result.update?.assetName).toBe('MDE-1.2.11-mac-x64.dmg')
     expect(result.update?.latestVersion).toBe('1.2.11')
   })
+
+  it.each([403, 429])(
+    'falls back to the public releases feed when GitHub REST release checks fail with status %s',
+    async (status) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response('rate limited', {
+            status
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            `<?xml version="1.0" encoding="UTF-8"?>
+          <feed>
+            <entry>
+              <title>MDE 1.2.17</title>
+              <link rel="alternate" href="https://github.com/flowforever/mde/releases/tag/v1.2.17" />
+              <updated>2026-04-30T10:09:05Z</updated>
+              <content type="html">&lt;h2&gt;Bug Fixes&lt;/h2&gt;&lt;p&gt;Update checks no longer fail on API rate limits.&lt;/p&gt;</content>
+            </entry>
+          </feed>`,
+            {
+              headers: { 'content-type': 'application/atom+xml' },
+              status: 200
+            }
+          )
+        )
+      const service = createGitHubManualUpdateService({
+        app: createApp(
+          await mkdtemp(join(tmpdir(), 'mde-update-rate-limit-')),
+          '1.2.16'
+        ),
+        arch: 'x64',
+        fetch,
+        platform: 'darwin',
+        shell: {
+          openPath: vi.fn()
+        }
+      })
+
+      const result = await service.checkForUpdates()
+
+      expect(result.currentVersion).toBe('1.2.16')
+      expect(result.updateAvailable).toBe(true)
+      expect(result.update).toEqual(
+        expect.objectContaining({
+          assetName: 'MDE-1.2.17-mac-x64.dmg',
+          assetSize: 0,
+          latestVersion: '1.2.17',
+          releaseName: 'MDE 1.2.17',
+          releaseUrl: 'https://github.com/flowforever/mde/releases/tag/v1.2.17'
+        })
+      )
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://github.com/flowforever/mde/releases.atom',
+        expect.any(Object)
+      )
+    }
+  )
 
   it('downloads the selected DMG, reports progress, and opens it', async () => {
     const userDataPath = await mkdtemp(join(tmpdir(), 'mde-update-download-'))
