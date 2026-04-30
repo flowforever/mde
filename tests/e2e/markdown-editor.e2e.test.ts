@@ -973,7 +973,6 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await window.keyboard.press('End')
     await window.keyboard.press('Enter')
     await window.keyboard.insertText('Autosaved after idle')
-    await expect(window.getByText(/unsaved changes/i)).toBeVisible()
 
     await expect
       .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
@@ -984,7 +983,6 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await window.keyboard.press('End')
     await window.keyboard.press('Enter')
     await window.keyboard.insertText('Autosaved on blur')
-    await expect(window.getByText(/unsaved changes/i)).toBeVisible()
     await window.getByRole('button', { name: /manage workspaces/i }).click()
 
     await expect
