@@ -23,6 +23,7 @@ import {
   APP_PRODUCT_NAME,
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_USER_DATA_PATH_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
 import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
@@ -30,6 +31,7 @@ import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_USER_DATA_PATH_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
 
@@ -68,6 +70,11 @@ export const configureRuntimeIdentity = (app: RuntimeIdentityApp): void => {
   }
 
   app.setName(DEV_PRODUCT_NAME)
+  if (process.env[E2E_USER_DATA_PATH_ENV]) {
+    app.setPath('userData', process.env[E2E_USER_DATA_PATH_ENV])
+    return
+  }
+
   app.setPath('userData', getDevelopmentUserDataPath(app.getPath('userData')))
 }
 

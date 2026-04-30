@@ -606,6 +606,46 @@ test('opens a workspace and expands the docs folder', async () => {
   }
 })
 
+test('starts each Electron launch with isolated persisted workspace state', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const firstLaunch = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(firstLaunch.window)
+    await expect(
+      firstLaunch.window.getByRole('button', {
+        name: /README\.md Markdown file/i
+      })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    expect(firstLaunch.startupDiagnostics.errors).toEqual([])
+  } finally {
+    await firstLaunch.app.close()
+  }
+
+  const secondLaunch = await launchElectronApp()
+
+  try {
+    await expect(
+      secondLaunch.window.getByRole('button', { name: /^open workspace$/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    await expect(
+      secondLaunch.window.getByRole('dialog', {
+        name: /workspace manager/i
+      })
+    ).toBeVisible()
+    await expect(
+      secondLaunch.window.getByRole('button', {
+        name: /README\.md Markdown file/i
+      })
+    ).toHaveCount(0)
+    expect(secondLaunch.startupDiagnostics.errors).toEqual([])
+  } finally {
+    await secondLaunch.app.close()
+  }
+})
+
 test('opens a workspace from a command line path', async () => {
   const workspacePath = await createFixtureWorkspace()
   const { app, startupDiagnostics, window } = await launchElectronApp({

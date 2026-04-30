@@ -1,11 +1,15 @@
 import { execFile } from 'node:child_process'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 
 import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
-  DISABLE_SINGLE_INSTANCE_ENV
+  DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_USER_DATA_PATH_ENV
 } from '../../../src/shared/appIdentity'
 
 const execFileAsync = promisify(execFile)
@@ -34,17 +38,23 @@ export const launchElectronApp = async (
     errors: [],
     output: []
   }
+  const e2eUserDataPath = await mkdtemp(join(tmpdir(), 'mde-e2e-user-data-'))
   const app = await electron.launch({
     args: ['out/main/index.js', ...options.args ?? []],
     env: {
       ...process.env,
       ...options.env,
       [CAPTURE_STARTUP_DIAGNOSTICS_ENV]: '1',
-      [DISABLE_SINGLE_INSTANCE_ENV]: '1'
+      [DISABLE_SINGLE_INSTANCE_ENV]: '1',
+      [E2E_USER_DATA_PATH_ENV]: e2eUserDataPath
     }
   })
 
   const childProcess = app.process()
+
+  app.on('close', () => {
+    void rm(e2eUserDataPath, { force: true, recursive: true })
+  })
 
   childProcess.stdout?.on('data', (chunk: Buffer) => {
     const output = chunk.toString()

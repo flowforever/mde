@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_USER_DATA_PATH_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY,
   configureRuntimeIdentity,
   createPreloadPath,
@@ -18,6 +19,7 @@ describe('Electron window config', () => {
       'MDE_CAPTURE_STARTUP_DIAGNOSTICS'
     )
     expect(DISABLE_SINGLE_INSTANCE_ENV).toBe('MDE_DISABLE_SINGLE_INSTANCE')
+    expect(E2E_USER_DATA_PATH_ENV).toBe('MDE_E2E_USER_DATA_PATH')
     expect(STARTUP_DIAGNOSTICS_GLOBAL_KEY).toBe('__mdeStartupDiagnostics')
   })
 
@@ -55,6 +57,35 @@ describe('Electron window config', () => {
       'userData',
       '/Users/test/Library/Application Support/MDE Dev'
     )
+  })
+
+  it('uses an isolated development user data path for each E2E launch', () => {
+    const previousE2eUserDataPath = process.env[E2E_USER_DATA_PATH_ENV]
+
+    process.env[E2E_USER_DATA_PATH_ENV] = '/tmp/mde-e2e-user-data'
+
+    try {
+      const app = {
+        getPath: vi.fn(() => '/Users/test/Library/Application Support/MDE'),
+        isPackaged: false,
+        setName: vi.fn(),
+        setPath: vi.fn()
+      }
+
+      configureRuntimeIdentity(app)
+
+      expect(app.setName).toHaveBeenCalledWith('MDE Dev')
+      expect(app.setPath).toHaveBeenCalledWith(
+        'userData',
+        '/tmp/mde-e2e-user-data'
+      )
+    } finally {
+      if (previousE2eUserDataPath === undefined) {
+        delete process.env[E2E_USER_DATA_PATH_ENV]
+      } else {
+        process.env[E2E_USER_DATA_PATH_ENV] = previousE2eUserDataPath
+      }
+    }
   })
 
   it('keeps packaged release identity unchanged', () => {
