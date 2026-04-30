@@ -6,11 +6,14 @@ import { expect, test, type Page } from '@playwright/test'
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
 
-test.setTimeout(120_000)
+const E2E_TEST_TIMEOUT_MS = 120_000
+const E2E_BUILD_TIMEOUT_MS = 300_000
+
+test.setTimeout(E2E_TEST_TIMEOUT_MS)
 
 test.beforeAll(async ({ browserName }, testInfo) => {
   void browserName
-  testInfo.setTimeout(120_000)
+  testInfo.setTimeout(E2E_BUILD_TIMEOUT_MS)
   await buildElectronApp()
 })
 
@@ -1156,18 +1159,23 @@ test('remembers and switches recent workspaces from the workspace menu', async (
           JSON.stringify([
             {
               name: 'Second Workspace',
-              rootPath: secondWorkspacePath
+              rootPath: secondWorkspacePath,
+              type: 'workspace'
             },
             {
               name: 'First Workspace',
-              rootPath: firstWorkspacePath
+              rootPath: firstWorkspacePath,
+              type: 'workspace'
             }
           ])
         )
-        globalThis.location.reload()
       },
       { firstWorkspacePath, secondWorkspacePath }
     )
+    await window.reload({ waitUntil: 'domcontentloaded' })
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible()
 
     await ensureWorkspaceDialogOpen(window)
     await window
