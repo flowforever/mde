@@ -44,6 +44,18 @@ When pushing a production-ready feature or bug fix to the release branch, publis
 
 Do not create a release tag for documentation-only, test-only, formatting-only, local-only, experimental, or internal configuration changes unless the user explicitly asks for a release. If it is unclear whether a change should ship as a user-facing release, ask before creating or pushing a tag.
 
+## Requirement and Bug Tracking
+
+When a feature requirement or bug fix is completed and released:
+
+* Update the corresponding document under `docs/requirements/` or `docs/bugs/` with a `Status` section that includes the release version, completion summary, and relevant verification notes.
+
+* Move completed requirement documents into `docs/requirements/done/`.
+
+* Move completed bug documents into `docs/bugs/done/`.
+
+* Leave incomplete or not-yet-released requirement and bug documents in their original active directories.
+
 ## Verification
 
 Before handing off work, run the relevant checks for the changed surface:

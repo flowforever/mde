@@ -1,5 +1,16 @@
 # Editor Support AI Summary / Translation
 
+## Status
+
+Completed and released in `v1.2.12`.
+
+* Added Summary and Translate editor actions when a supported AI CLI is available.
+* Stored generated artifacts under `.mde/translations/` beside the workspace content.
+* Rendered Summary and Translate output through the read-only Markdown editor.
+* Added fixed-bottom Summary refinement input, document-scoped busy/result state, custom translation languages, and AI IPC/test coverage.
+
+## Requirement
+
 ## AI 功能支持
 
 检测用户电脑有 Codex, Claude Code CLI, 显示AI 操作按钮. (我们后续应该考虑更多其他 CLI)

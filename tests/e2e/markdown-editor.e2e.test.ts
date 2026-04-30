@@ -612,6 +612,58 @@ test('loads README markdown into the block editor surface', async () => {
   }
 })
 
+test('keeps loaded markdown intact when undo is pressed before editing', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  const introPath = join(workspacePath, 'docs', 'intro.md')
+  const originalMarkdown = await readFile(readmePath, 'utf8')
+  const originalIntroMarkdown = await readFile(introPath, 'utf8')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await expect(editor).toContainText('Fixture Workspace')
+    await expect(editableDocument).toBeVisible()
+    await editableDocument.click()
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
+
+    await expect(editor).toContainText('Fixture Workspace')
+    await expect(editor).toContainText('Root markdown file.')
+    await expect(window.getByText(/unsaved changes/i)).toHaveCount(0)
+    await expect.poll(async () => readFile(readmePath, 'utf8')).toBe(originalMarkdown)
+
+    await window.getByRole('button', { name: /expand docs/i }).click()
+    await window
+      .getByRole('button', { name: /intro\.md Markdown file/i })
+      .click()
+
+    await expect(editor).toContainText('Intro')
+    await expect(editor).toContainText('Nested markdown file.')
+    await editableDocument.click()
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
+
+    await expect(editor).toContainText('Intro')
+    await expect(editor).toContainText('Nested markdown file.')
+    await expect(window.getByText(/unsaved changes/i)).toHaveCount(0)
+    await expect
+      .poll(async () => readFile(introPath, 'utf8'))
+      .toBe(originalIntroMarkdown)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('toggles the editor between centered and full-width layouts', async () => {
   const workspacePath = await createFixtureWorkspace()
   const { app, startupDiagnostics, window } = await launchElectronApp({

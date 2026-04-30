@@ -1,5 +1,15 @@
 # Support multi themes
 
+## Status
+
+Completed and released.
+
+* Initial multi-theme support shipped in `v1.2.7`.
+* Final 8 dark / 16 light theme matrix, colorway rows, light-panel and dark-panel light variants, and headerless picker shipped in `v1.2.11`.
+* The release added unit and E2E coverage for theme counts, persistence, follow-system selection behavior, OS appearance switching, and picker layout.
+
+## Requirement
+
 * 使用 $huashu 开发8款 dark theme, 16款light theme
 
   * light theme 中需要有8套主题的 left panel 也是浅色系

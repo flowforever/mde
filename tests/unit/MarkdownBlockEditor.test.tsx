@@ -5,6 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MarkdownBlockEditor } from '../../src/renderer/src/editor/MarkdownBlockEditor'
 
 const mockBlockNoteState = vi.hoisted(() => ({
+  lastEditor: undefined as
+    | {
+        replaceBlocks: ReturnType<typeof vi.fn>
+        transaction: { setMeta: ReturnType<typeof vi.fn> }
+        transact: ReturnType<typeof vi.fn>
+      }
+    | undefined,
   lastOptions: undefined as
     | { uploadFile?: (file: File, blockId?: string) => Promise<string> }
     | undefined
@@ -22,13 +29,21 @@ vi.mock('@blocknote/react', () => ({
   ) => {
     mockBlockNoteState.lastOptions = options
     const blocks = [{ content: '', id: 'initial', type: 'paragraph' }]
-
-    return {
+    const transaction = { setMeta: vi.fn() }
+    const editor = {
       blocksToMarkdownLossy: vi.fn().mockResolvedValue(''),
       document: blocks,
       replaceBlocks: vi.fn(),
+      transaction,
+      transact: vi.fn((callback: (transaction: unknown) => unknown) =>
+        callback(transaction)
+      ),
       tryParseMarkdownToBlocks: vi.fn().mockResolvedValue(blocks)
     }
+
+    mockBlockNoteState.lastEditor = editor
+
+    return editor
   }
 }))
 
@@ -74,6 +89,7 @@ vi.mock('mermaid', () => ({
 describe('MarkdownBlockEditor accessibility', () => {
   afterEach(() => {
     cleanup()
+    mockBlockNoteState.lastEditor = undefined
     mockBlockNoteState.lastOptions = undefined
     mockMermaid.initialize.mockClear()
     mockMermaid.render.mockClear()
@@ -254,6 +270,34 @@ describe('MarkdownBlockEditor accessibility', () => {
     await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
 
     expect(onMarkdownChange).toHaveBeenCalledWith('')
+  })
+
+  it('keeps imported markdown replacement out of the undo history', async () => {
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Fixture Workspace"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Fixture Workspace"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    await waitFor(() => {
+      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalled()
+    })
+
+    expect(mockBlockNoteState.lastEditor?.transact).toHaveBeenCalled()
+    expect(mockBlockNoteState.lastEditor?.transaction.setMeta).toHaveBeenCalledWith(
+      'addToHistory',
+      false
+    )
   })
 
   it('passes pasted image files to the provided image upload handler', async () => {

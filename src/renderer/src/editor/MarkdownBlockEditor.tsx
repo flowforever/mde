@@ -16,6 +16,7 @@ import { useCreateBlockNote } from '@blocknote/react'
 
 import { replaceMermaidBlocksFromSource } from './flowchartMarkdown'
 import { MermaidFlowchartPanel } from './MermaidFlowchartPanel'
+import { replaceEditorDocumentWithoutUndoHistory } from './editorHydration'
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
@@ -122,10 +123,7 @@ export const MarkdownBlockEditor = forwardRef<
         }
 
         isHydratingRef.current = true
-        editor.replaceBlocks(
-          editor.document.map((block) => block.id),
-          blocks as Block[]
-        )
+        replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[])
         setParseErrorMessage(null)
         window.setTimeout(() => {
           if (isCurrent) {

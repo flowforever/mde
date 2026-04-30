@@ -1,5 +1,16 @@
 # Unify Settings
 
+## Status
+
+Completed and released in `v1.2.13`.
+
+* Replaced the left-panel theme picker entry with a unified Settings button.
+* Added Settings sections for AI, Theme, and Check Update.
+* Moved theme controls into Settings while preserving follow-system behavior.
+* Added AI CLI/model settings and manual update check UI with release/test coverage.
+
+## Requirement
+
 使用 $huashu 统一设置界面
 
 * 将现有 设置主题的按钮改成 系统设置 按钮
