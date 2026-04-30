@@ -1,4 +1,4 @@
-import type { IpcMain } from 'electron'
+import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
 import type { AiGenerationOptions, AiToolId } from '../../shared/ai'
 import type { AiService } from '../services/aiService'
@@ -6,7 +6,9 @@ import { AI_CHANNELS } from './channels'
 
 interface RegisterAiHandlersOptions {
   readonly aiService: AiService
-  readonly getActiveWorkspaceRoot: () => string | null
+  readonly getActiveWorkspaceRoot: (
+    event?: Pick<IpcMainInvokeEvent, 'sender'> | null
+  ) => string | null
   readonly ipcMain: Pick<IpcMain, 'handle'>
 }
 
@@ -70,10 +72,13 @@ const assertOptionalAiGenerationOptions = (
 }
 
 const getRequiredWorkspaceRoot = (
-  getActiveWorkspaceRoot: () => string | null,
+  event: Pick<IpcMainInvokeEvent, 'sender'>,
+  getActiveWorkspaceRoot: (
+    event?: Pick<IpcMainInvokeEvent, 'sender'> | null
+  ) => string | null,
   expectedWorkspaceRoot: string
 ): string => {
-  const activeWorkspaceRoot = getActiveWorkspaceRoot()
+  const activeWorkspaceRoot = getActiveWorkspaceRoot(event)
 
   if (!activeWorkspaceRoot) {
     throw new Error('Open a workspace before using AI actions')
@@ -98,7 +103,7 @@ export const registerAiHandlers = ({
   ipcMain.handle(
     AI_CHANNELS.summarizeMarkdown,
     async (
-      _event,
+      event,
       markdownFilePath,
       markdown,
       workspaceRoot,
@@ -107,6 +112,7 @@ export const registerAiHandlers = ({
     ) =>
       aiService.summarizeMarkdown(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -119,9 +125,10 @@ export const registerAiHandlers = ({
 
   ipcMain.handle(
     AI_CHANNELS.translateMarkdown,
-    async (_event, markdownFilePath, markdown, language, workspaceRoot, options) =>
+    async (event, markdownFilePath, markdown, language, workspaceRoot, options) =>
       aiService.translateMarkdown(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),

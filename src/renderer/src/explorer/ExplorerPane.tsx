@@ -11,6 +11,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  ExternalLink,
   FileText,
   FilePlus,
   FolderOpen,
@@ -67,6 +68,7 @@ interface ExplorerPaneProps {
   readonly onOpenFile?: () => void
   readonly onOpenRecentFile?: (filePath: string) => void
   readonly onOpenWorkspace: () => void
+  readonly onOpenWorkspaceInNewWindow?: (workspace: RecentWorkspace) => void
   readonly onRefreshTree?: (directoryPaths: readonly string[]) => Promise<void> | void
   readonly onRenameEntry: (entryName: string) => void
   readonly onSelectTheme?: (themeId: AppThemeId) => void
@@ -327,6 +329,7 @@ export const ExplorerPane = ({
   onOpenFile = () => undefined,
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
+  onOpenWorkspaceInNewWindow = () => undefined,
   onRefreshTree = () => undefined,
   onRenameEntry,
   onSelectTheme = () => undefined,
@@ -1345,24 +1348,48 @@ export const ExplorerPane = ({
                             }}
                             type="button"
                           >
-                            <span>{workspace.name}</span>
-                            <span>{resourcePath}</span>
+                            <span className="workspace-resource-main">
+                              {workspace.name}
+                            </span>
+                            <span className="workspace-resource-meta">
+                              {resourcePath}
+                            </span>
                           </button>
-                          <button
-                            aria-label={`Remove recent ${resourceType} ${workspace.name}`}
-                            className="explorer-icon-button workspace-resource-delete"
-                            onClick={() => {
-                              onForgetWorkspace(workspace)
-                            }}
-                            title={`Remove recent ${resourceType}`}
-                            type="button"
+                          <div
+                            aria-label={`${workspace.name} actions`}
+                            className="workspace-resource-actions"
                           >
-                            <Trash2
-                              aria-hidden="true"
-                              focusable="false"
-                              size={14}
-                            />
-                          </button>
+                            <button
+                              aria-label={`Open ${resourceType} ${workspace.name} in new window`}
+                              className="explorer-icon-button workspace-resource-action workspace-resource-open-window"
+                              onClick={() => {
+                                onOpenWorkspaceInNewWindow(workspace)
+                              }}
+                              title={`Open ${resourceType} in new window`}
+                              type="button"
+                            >
+                              <ExternalLink
+                                aria-hidden="true"
+                                focusable="false"
+                                size={14}
+                              />
+                            </button>
+                            <button
+                              aria-label={`Remove recent ${resourceType} ${workspace.name}`}
+                              className="explorer-icon-button workspace-resource-action workspace-resource-delete"
+                              onClick={() => {
+                                onForgetWorkspace(workspace)
+                              }}
+                              title={`Remove recent ${resourceType}`}
+                              type="button"
+                            >
+                              <Trash2
+                                aria-hidden="true"
+                                focusable="false"
+                                size={14}
+                              />
+                            </button>
+                          </div>
                         </div>
                       )
                     })

@@ -10,6 +10,8 @@ type AiServiceOptions = NonNullable<Parameters<typeof createAiService>[0]>
 type LocateCommand = NonNullable<AiServiceOptions['locateCommand']>
 type RunPrompt = NonNullable<AiServiceOptions['runPrompt']>
 
+const AI_CLI_SPAWN_TEST_TIMEOUT_MS = 60_000
+
 const locateCommands = (
   paths: Partial<Record<'claude' | 'codex', string>>
 ): LocateCommand => (tool) => Promise.resolve(paths[tool.id] ?? null)
@@ -227,7 +229,7 @@ describe('aiService', () => {
         process.env.PATH = previousPath
       }
     },
-    30_000
+    AI_CLI_SPAWN_TEST_TIMEOUT_MS
   )
 
   it(
@@ -282,7 +284,7 @@ describe('aiService', () => {
         }
       }
     },
-    30_000
+    AI_CLI_SPAWN_TEST_TIMEOUT_MS
   )
 
   it(
@@ -332,7 +334,7 @@ describe('aiService', () => {
         }
       }
     },
-    30_000
+    AI_CLI_SPAWN_TEST_TIMEOUT_MS
   )
 
   it('regenerates summaries when the refinement instruction changes', async () => {

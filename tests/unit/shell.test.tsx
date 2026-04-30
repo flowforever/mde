@@ -319,6 +319,128 @@ describe('App shell', () => {
     expect(document.title).toBe('/workspaces/second')
   })
 
+  it('opens a new workspace dialog selection in another window when one is already active', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openPathInNewWindow: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: 'Current Workspace',
+        rootPath: '/workspaces/current',
+        tree: [],
+        type: 'workspace'
+      }),
+      openWorkspaceInNewWindow: vi.fn().mockResolvedValue(true),
+      readMarkdownFile: vi.fn(),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      'mde.activeWorkspace',
+      JSON.stringify({
+        name: 'Current Workspace',
+        rootPath: '/workspaces/current',
+        type: 'workspace'
+      })
+    )
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole('button', { name: /manage workspaces/i })
+    ).toHaveTextContent('Current Workspace')
+
+    await user.click(screen.getByRole('button', { name: /manage workspaces/i }))
+    await user.click(screen.getByRole('button', { name: /open new workspace/i }))
+
+    expect(editorApi.openWorkspaceInNewWindow).toHaveBeenCalledTimes(1)
+    expect(editorApi.openWorkspace).not.toHaveBeenCalled()
+    expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspaces/current')
+    expect(
+      screen.getByRole('button', { name: /manage workspaces/i })
+    ).toHaveTextContent('Current Workspace')
+  })
+
+  it('opens a dropped external path in a new window when a workspace is active', async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openPathInNewWindow: vi.fn().mockResolvedValue(undefined),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: 'Current Workspace',
+        rootPath: '/workspaces/current',
+        tree: [],
+        type: 'workspace'
+      }),
+      openWorkspaceInNewWindow: vi.fn(),
+      readMarkdownFile: vi.fn(),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+    const droppedFile = new File(['# External'], 'external.md', {
+      type: 'text/markdown'
+    })
+
+    Object.defineProperty(droppedFile, 'path', {
+      configurable: true,
+      value: '/external/external.md'
+    })
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      'mde.activeWorkspace',
+      JSON.stringify({
+        name: 'Current Workspace',
+        rootPath: '/workspaces/current',
+        type: 'workspace'
+      })
+    )
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /manage workspaces/i })
+
+    fireEvent.drop(screen.getByRole('main'), {
+      dataTransfer: {
+        files: [droppedFile],
+        getData: vi.fn().mockReturnValue('')
+      }
+    })
+
+    await waitFor(() => {
+      expect(editorApi.openPathInNewWindow).toHaveBeenCalledWith(
+        '/external/external.md'
+      )
+    })
+    expect(editorApi.openPath).not.toHaveBeenCalledWith('/external/external.md')
+  })
+
   it('switches to a remembered file from the workspace menu without generic openPath IPC', async () => {
     const user = userEvent.setup()
     const editorApi = {

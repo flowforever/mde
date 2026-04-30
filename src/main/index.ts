@@ -10,10 +10,10 @@ import type {
 import {
   getTestFilePath,
   getTestWorkspacePath,
-  registerWorkspaceHandlers
+  registerWorkspaceHandlers,
+  type WorkspaceHandlerSession
 } from './ipc/registerWorkspaceHandlers'
 import { getLaunchPathFromArgv } from './launchArgs'
-import { WORKSPACE_CHANNELS } from './ipc/channels'
 import { registerAiHandlers } from './ipc/registerAiHandlers'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createAiService } from './services/aiService'
@@ -140,13 +140,15 @@ export const createWindowOptions = (
 })
 
 const createMainWindow = async (
-  BrowserWindow: BrowserWindowConstructor
+  BrowserWindow: BrowserWindowConstructor,
+  onWindowCreated: (window: BrowserWindow) => void = () => undefined
 ): Promise<BrowserWindow> => {
   const window = new BrowserWindow(
     createWindowOptions(createPreloadPath(__dirname))
   )
 
   captureStartupDiagnostics(window.webContents)
+  onWindowCreated(window)
 
   window.once('ready-to-show', () => {
     window.show()
@@ -186,19 +188,29 @@ const bootstrap = async (): Promise<void> => {
   }
 
   let mainWindow: BrowserWindow | null = null
+  let workspaceSession: WorkspaceHandlerSession | null = null
+  let openAppWindow:
+    | ((launchPath?: string | null) => Promise<BrowserWindow>)
+    | null = null
   const setMainWindow = (window: BrowserWindow): void => {
+    const webContentsId = window.webContents.id
+
     mainWindow = window
 
+    window.on('focus', () => {
+      mainWindow = window
+    })
+
     window.once('closed', () => {
+      workspaceSession?.removeWindow({ id: webContentsId })
+
       if (mainWindow === window) {
-        mainWindow = null
+        mainWindow = BrowserWindow.getAllWindows().at(-1) ?? null
       }
     })
   }
 
-  app.on('second-instance', (_event, commandLine, workingDirectory) => {
-    const launchPath = getLaunchPathFromArgv(commandLine, workingDirectory)
-
+  const focusMainWindow = (): void => {
     if (!mainWindow) {
       return
     }
@@ -208,10 +220,17 @@ const bootstrap = async (): Promise<void> => {
     }
 
     mainWindow.focus()
+  }
 
-    if (launchPath) {
-      mainWindow.webContents.send(WORKSPACE_CHANNELS.launchPath, launchPath)
+  app.on('second-instance', (_event, commandLine, workingDirectory) => {
+    const launchPath = getLaunchPathFromArgv(commandLine, workingDirectory)
+
+    if (launchPath && openAppWindow) {
+      void openAppWindow(launchPath)
+      return
     }
+
+    focusMainWindow()
   })
 
   await app.whenReady()
@@ -221,10 +240,20 @@ const bootstrap = async (): Promise<void> => {
     ipcMain,
     shell
   })
-  const workspaceSession = registerWorkspaceHandlers({
+  workspaceSession = registerWorkspaceHandlers({
     dialog,
     initialLaunchPath,
     ipcMain,
+    openPathInNewWindow: async (resourcePath) => {
+      if (!openAppWindow) {
+        throw new Error('App window creation is not ready')
+      }
+
+      await openAppWindow(resourcePath)
+    },
+    rememberRecentResource: (resourcePath) => {
+      app.addRecentDocument(resourcePath)
+    },
     testFilePath: getTestFilePath(),
     testWorkspacePath: getTestWorkspacePath(),
     workspaceService: createWorkspaceService()
@@ -239,11 +268,17 @@ const bootstrap = async (): Promise<void> => {
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain
   })
-  setMainWindow(await createMainWindow(BrowserWindow))
+  openAppWindow = (launchPath = null) =>
+    createMainWindow(BrowserWindow, (window) => {
+      workspaceSession?.setPendingLaunchPath(window.webContents, launchPath)
+      setMainWindow(window)
+    })
+
+  await openAppWindow(initialLaunchPath)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow(BrowserWindow).then(setMainWindow)
+      void openAppWindow?.(null)
     }
   })
 

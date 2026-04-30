@@ -451,6 +451,70 @@ describe('ExplorerTree', () => {
     expect(onForgetWorkspace).toHaveBeenCalledWith(recentWorkspaces[1])
   })
 
+  it('opens remembered resources in a new window without switching current workspace', async () => {
+    const user = userEvent.setup()
+    const onOpenWorkspaceInNewWindow = vi.fn()
+    const onSwitchWorkspace = vi.fn()
+    const recentWorkspaces: readonly RecentWorkspace[] = [
+      {
+        name: 'Docs',
+        rootPath: '/workspaces/docs',
+        type: 'workspace'
+      },
+      {
+        filePath: '/notes/API.md',
+        name: 'API.md',
+        openedFilePath: 'API.md',
+        rootPath: '/notes',
+        type: 'file'
+      }
+    ]
+    const state: AppState = {
+      draftMarkdown: null,
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: null,
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: null,
+      selectedFilePath: null,
+      workspace: null
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onOpenWorkspaceInNewWindow={onOpenWorkspaceInNewWindow}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        onSwitchWorkspace={onSwitchWorkspace}
+        recentWorkspaces={recentWorkspaces}
+        state={state}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
+    await user.click(
+      screen.getByRole('button', {
+        name: /open workspace Docs in new window/i
+      })
+    )
+
+    expect(onOpenWorkspaceInNewWindow).toHaveBeenCalledWith(recentWorkspaces[0])
+    expect(onSwitchWorkspace).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('dialog', { name: /workspace manager/i })
+    ).toBeVisible()
+  })
+
   it('submits create file and create folder actions from the toolbar', async () => {
     const user = userEvent.setup()
     const onCreateFile = vi.fn()

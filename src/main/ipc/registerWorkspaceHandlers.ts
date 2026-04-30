@@ -1,4 +1,4 @@
-import type { Dialog, IpcMain } from 'electron'
+import type { Dialog, IpcMain, WebContents } from 'electron'
 
 import type { WorkspaceService } from '../services/workspaceService'
 import { WORKSPACE_CHANNELS } from './channels'
@@ -7,13 +7,42 @@ interface RegisterWorkspaceHandlersOptions {
   readonly dialog: Pick<Dialog, 'showOpenDialog'>
   readonly initialLaunchPath?: string | null | undefined
   readonly ipcMain: Pick<IpcMain, 'handle'>
+  readonly openPathInNewWindow?: (resourcePath: string) => Promise<void> | void
+  readonly rememberRecentResource?: (resourcePath: string) => void
   readonly testFilePath?: string | undefined
   readonly testWorkspacePath?: string | undefined
   readonly workspaceService: WorkspaceService
 }
 
+interface WorkspaceIpcEvent {
+  readonly sender?: {
+    readonly id?: number
+  }
+}
+
 export interface WorkspaceHandlerSession {
-  readonly getActiveWorkspaceRoot: () => string | null
+  readonly getActiveWorkspaceRoot: (event?: WorkspaceIpcEvent | null) => string | null
+  readonly removeWindow: (sender: Pick<WebContents, 'id'>) => void
+  readonly setPendingLaunchPath: (
+    sender: Pick<WebContents, 'id'>,
+    launchPath: string | null
+  ) => void
+}
+
+interface WorkspaceWindowState {
+  readonly id: number
+  activeWorkspaceRoot: string | null
+  pendingLaunchPath: string | null
+}
+
+const DEFAULT_WINDOW_ID = 0
+
+const getSenderId = (
+  event?: WorkspaceIpcEvent | null
+): number => {
+  const senderId = event?.sender?.id
+
+  return typeof senderId === 'number' ? senderId : DEFAULT_WINDOW_ID
 }
 
 export const getTestWorkspacePath = (
@@ -38,40 +67,106 @@ export const registerWorkspaceHandlers = ({
   dialog,
   initialLaunchPath = null,
   ipcMain,
+  openPathInNewWindow,
+  rememberRecentResource = () => undefined,
   testFilePath,
   testWorkspacePath,
   workspaceService
 }: RegisterWorkspaceHandlersOptions): WorkspaceHandlerSession => {
-  let activeWorkspaceRoot: string | null = null
-  let pendingLaunchPath: string | null = initialLaunchPath
+  const statesByWindowId = new Map<number, WorkspaceWindowState>([
+    [
+      DEFAULT_WINDOW_ID,
+      {
+        activeWorkspaceRoot: null,
+        id: DEFAULT_WINDOW_ID,
+        pendingLaunchPath: initialLaunchPath
+      }
+    ]
+  ])
 
-  const openWorkspaceByPath = async (workspacePath: string) => {
+  const getWindowState = (
+    event?: WorkspaceIpcEvent | null
+  ): WorkspaceWindowState => {
+    const id = getSenderId(event)
+    const existingState = statesByWindowId.get(id)
+
+    if (existingState) {
+      return existingState
+    }
+
+    const state: WorkspaceWindowState = {
+      activeWorkspaceRoot: null,
+      id,
+      pendingLaunchPath: null
+    }
+
+    statesByWindowId.set(id, state)
+
+    return state
+  }
+
+  const rememberWorkspaceResource = (workspace: {
+    readonly filePath?: string
+    readonly rootPath: string
+    readonly type?: 'file' | 'workspace'
+  }): void => {
+    rememberRecentResource(
+      workspace.type === 'file' && workspace.filePath
+        ? workspace.filePath
+        : workspace.rootPath
+    )
+  }
+
+  const openResourceInNewWindow = async (resourcePath: string): Promise<void> => {
+    if (!openPathInNewWindow) {
+      throw new Error('Opening resources in a new window is unavailable')
+    }
+
+    await openPathInNewWindow(resourcePath)
+  }
+
+  const openWorkspaceByPath = async (
+    event: WorkspaceIpcEvent | null,
+    workspacePath: string
+  ) => {
     const workspace = await workspaceService.openWorkspace(workspacePath)
+    const state = getWindowState(event)
 
-    activeWorkspaceRoot = workspace.rootPath
+    state.activeWorkspaceRoot = workspace.rootPath
+    rememberWorkspaceResource(workspace)
 
     return workspace
   }
 
-  const openFileByPath = async (filePath: string) => {
+  const openFileByPath = async (
+    event: WorkspaceIpcEvent | null,
+    filePath: string
+  ) => {
     const workspace = await workspaceService.openMarkdownFile(filePath)
+    const state = getWindowState(event)
 
-    activeWorkspaceRoot = workspace.rootPath
+    state.activeWorkspaceRoot = workspace.rootPath
+    rememberWorkspaceResource(workspace)
 
     return workspace
   }
 
-  const openPath = async (resourcePath: string) => {
+  const openPath = async (
+    event: WorkspaceIpcEvent | null,
+    resourcePath: string
+  ) => {
     const workspace = await workspaceService.openPath(resourcePath)
+    const state = getWindowState(event)
 
-    activeWorkspaceRoot = workspace.rootPath
+    state.activeWorkspaceRoot = workspace.rootPath
+    rememberWorkspaceResource(workspace)
 
     return workspace
   }
 
-  ipcMain.handle(WORKSPACE_CHANNELS.openWorkspace, async () => {
+  ipcMain.handle(WORKSPACE_CHANNELS.openWorkspace, async (event) => {
     if (testWorkspacePath) {
-      return openWorkspaceByPath(testWorkspacePath)
+      return openWorkspaceByPath(event, testWorkspacePath)
     }
 
     const result = await dialog.showOpenDialog({
@@ -82,23 +177,42 @@ export const registerWorkspaceHandlers = ({
       return null
     }
 
-    return openWorkspaceByPath(result.filePaths[0] ?? '')
+    return openWorkspaceByPath(event, result.filePaths[0] ?? '')
   })
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.openWorkspaceByPath,
-    async (_event, workspacePath: unknown) => {
+    async (event, workspacePath: unknown) => {
       if (typeof workspacePath !== 'string') {
         throw new Error('Workspace path must be a string')
       }
 
-      return openWorkspaceByPath(workspacePath)
+      return openWorkspaceByPath(event, workspacePath)
     }
   )
 
-  ipcMain.handle(WORKSPACE_CHANNELS.openFile, async () => {
+  ipcMain.handle(WORKSPACE_CHANNELS.openWorkspaceInNewWindow, async () => {
+    if (testWorkspacePath) {
+      await openResourceInNewWindow(testWorkspacePath)
+      return true
+    }
+
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory']
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return false
+    }
+
+    await openResourceInNewWindow(result.filePaths[0] ?? '')
+
+    return true
+  })
+
+  ipcMain.handle(WORKSPACE_CHANNELS.openFile, async (event) => {
     if (testFilePath) {
-      return openFileByPath(testFilePath)
+      return openFileByPath(event, testFilePath)
     }
 
     const result = await dialog.showOpenDialog({
@@ -110,42 +224,76 @@ export const registerWorkspaceHandlers = ({
       return null
     }
 
-    return openFileByPath(result.filePaths[0] ?? '')
+    return openFileByPath(event, result.filePaths[0] ?? '')
   })
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.openFileByPath,
-    async (_event, filePath: unknown) => {
+    async (event, filePath: unknown) => {
       if (typeof filePath !== 'string') {
         throw new Error('File path must be a string')
       }
 
-      return openFileByPath(filePath)
+      return openFileByPath(event, filePath)
     }
   )
 
-  ipcMain.handle(WORKSPACE_CHANNELS.consumeLaunchPath, () => {
-    const launchPath = pendingLaunchPath
+  ipcMain.handle(WORKSPACE_CHANNELS.openFileInNewWindow, async () => {
+    if (testFilePath) {
+      await openResourceInNewWindow(testFilePath)
+      return true
+    }
 
-    pendingLaunchPath = null
+    const result = await dialog.showOpenDialog({
+      filters: [{ extensions: ['md'], name: 'Markdown' }],
+      properties: ['openFile']
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return false
+    }
+
+    await openResourceInNewWindow(result.filePaths[0] ?? '')
+
+    return true
+  })
+
+  ipcMain.handle(WORKSPACE_CHANNELS.consumeLaunchPath, (event) => {
+    const state = getWindowState(event)
+    const launchPath = state.pendingLaunchPath
+
+    state.pendingLaunchPath = null
 
     return Promise.resolve(launchPath)
   })
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.openPath,
+    async (event, resourcePath: unknown) => {
+      if (typeof resourcePath !== 'string') {
+        throw new Error('Launch path must be a string')
+      }
+
+      return openPath(event, resourcePath)
+    }
+  )
+
+  ipcMain.handle(
+    WORKSPACE_CHANNELS.openPathInNewWindow,
     async (_event, resourcePath: unknown) => {
       if (typeof resourcePath !== 'string') {
         throw new Error('Launch path must be a string')
       }
 
-      return openPath(resourcePath)
+      await openResourceInNewWindow(resourcePath)
     }
   )
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.listDirectory,
-    async (_event, directoryPath: string) => {
+    async (event, directoryPath: string) => {
+      const activeWorkspaceRoot = getWindowState(event).activeWorkspaceRoot
+
       if (!activeWorkspaceRoot) {
         throw new Error('Open a workspace before listing directories')
       }
@@ -155,6 +303,18 @@ export const registerWorkspaceHandlers = ({
   )
 
   return {
-    getActiveWorkspaceRoot: () => activeWorkspaceRoot
+    getActiveWorkspaceRoot: (event) => getWindowState(event).activeWorkspaceRoot,
+    removeWindow: (sender) => {
+      statesByWindowId.delete(sender.id)
+    },
+    setPendingLaunchPath: (sender, launchPath) => {
+      const existingState = statesByWindowId.get(sender.id)
+
+      statesByWindowId.set(sender.id, {
+        activeWorkspaceRoot: existingState?.activeWorkspaceRoot ?? null,
+        id: sender.id,
+        pendingLaunchPath: launchPath
+      })
+    }
   }
 }

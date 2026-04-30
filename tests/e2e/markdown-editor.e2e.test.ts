@@ -513,6 +513,24 @@ test('searches and removes many recent workspace items from the manager popup', 
       canScroll: true,
       overflowY: 'auto'
     })
+    await expect(
+      window.getByRole('button', {
+        name: /^open workspace Workspace 1 in new window$/i
+      })
+    ).toBeVisible()
+    const openInNewWindowButton = window.getByRole('button', {
+      name: /^open workspace Workspace 1 in new window$/i
+    })
+    const deleteWorkspaceButton = window.getByRole('button', {
+      name: /^remove recent workspace Workspace 1$/i
+    })
+    const [openButtonBox, deleteButtonBox] = await Promise.all([
+      openInNewWindowButton.boundingBox(),
+      deleteWorkspaceButton.boundingBox()
+    ])
+
+    expect(openButtonBox?.height).toBe(deleteButtonBox?.height)
+    expect(openButtonBox?.width).toBe(deleteButtonBox?.width)
 
     await window
       .getByRole('searchbox', { name: /search workspaces and files/i })

@@ -1256,18 +1256,62 @@ input:focus-visible,
 
 .workspace-resource-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 40px;
+  align-items: center;
+  gap: 4px;
 }
 
 .workspace-resource-button {
   width: 100%;
+  min-height: 38px;
+  padding: 5px 8px;
+}
+
+.workspace-resource-main,
+.workspace-resource-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-resource-main {
+  color: var(--panel-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.workspace-resource-meta {
+  color: var(--panel-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.workspace-resource-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.72;
+}
+
+.workspace-resource-row:hover .workspace-resource-actions,
+.workspace-resource-row:focus-within .workspace-resource-actions {
+  opacity: 1;
+}
+
+.workspace-resource-action {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  background: transparent;
 }
 
 .workspace-resource-delete {
-  align-self: stretch;
-  height: auto;
-  min-height: 30px;
+  color: var(--danger);
 }
 
 .workspace-dialog-empty {

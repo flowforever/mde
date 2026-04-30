@@ -4,9 +4,12 @@ export const WORKSPACE_CHANNELS = Object.freeze({
   listDirectory: 'workspace:list-directory',
   openFile: 'workspace:open-file',
   openFileByPath: 'workspace:open-file-by-path',
+  openFileInNewWindow: 'workspace:open-file-in-new-window',
   openPath: 'workspace:open-path',
+  openPathInNewWindow: 'workspace:open-path-in-new-window',
   openWorkspace: 'workspace:open',
-  openWorkspaceByPath: 'workspace:open-by-path'
+  openWorkspaceByPath: 'workspace:open-by-path',
+  openWorkspaceInNewWindow: 'workspace:open-in-new-window'
 })
 
 export const FILE_CHANNELS = Object.freeze({

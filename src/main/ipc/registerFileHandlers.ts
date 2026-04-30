@@ -1,19 +1,24 @@
-import type { IpcMain } from 'electron'
+import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
 import type { MarkdownFileService } from '../services/markdownFileService'
 import { FILE_CHANNELS } from './channels'
 
 interface RegisterFileHandlersOptions {
-  readonly getActiveWorkspaceRoot: () => string | null
+  readonly getActiveWorkspaceRoot: (
+    event?: Pick<IpcMainInvokeEvent, 'sender'> | null
+  ) => string | null
   readonly ipcMain: Pick<IpcMain, 'handle'>
   readonly markdownFileService: MarkdownFileService
 }
 
 const getRequiredWorkspaceRoot = (
-  getActiveWorkspaceRoot: () => string | null,
+  event: Pick<IpcMainInvokeEvent, 'sender'>,
+  getActiveWorkspaceRoot: (
+    event?: Pick<IpcMainInvokeEvent, 'sender'> | null
+  ) => string | null,
   expectedWorkspaceRoot: string
 ): string => {
-  const activeWorkspaceRoot = getActiveWorkspaceRoot()
+  const activeWorkspaceRoot = getActiveWorkspaceRoot(event)
 
   if (!activeWorkspaceRoot) {
     throw new Error('Open a workspace before managing files')
@@ -49,9 +54,10 @@ export const registerFileHandlers = ({
 }: RegisterFileHandlersOptions): void => {
   ipcMain.handle(
     FILE_CHANNELS.readMarkdownFile,
-    async (_event, filePath, workspaceRoot) =>
+    async (event, filePath, workspaceRoot) =>
       markdownFileService.readMarkdownFile(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -61,9 +67,10 @@ export const registerFileHandlers = ({
 
   ipcMain.handle(
     FILE_CHANNELS.writeMarkdownFile,
-    async (_event, filePath, contents, workspaceRoot) =>
+    async (event, filePath, contents, workspaceRoot) =>
       markdownFileService.writeMarkdownFile(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -75,7 +82,7 @@ export const registerFileHandlers = ({
   ipcMain.handle(
     FILE_CHANNELS.saveImageAsset,
     async (
-      _event,
+      event,
       markdownFilePath,
       fileName,
       mimeType,
@@ -84,6 +91,7 @@ export const registerFileHandlers = ({
     ) =>
       markdownFileService.saveImageAsset(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -101,9 +109,10 @@ export const registerFileHandlers = ({
 
   ipcMain.handle(
     FILE_CHANNELS.createMarkdownFile,
-    async (_event, filePath, workspaceRoot) =>
+    async (event, filePath, workspaceRoot) =>
       markdownFileService.createMarkdownFile(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -113,9 +122,10 @@ export const registerFileHandlers = ({
 
   ipcMain.handle(
     FILE_CHANNELS.createFolder,
-    async (_event, folderPath, workspaceRoot) =>
+    async (event, folderPath, workspaceRoot) =>
       markdownFileService.createFolder(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -125,9 +135,10 @@ export const registerFileHandlers = ({
 
   ipcMain.handle(
     FILE_CHANNELS.renameEntry,
-    async (_event, oldPath, newPath, workspaceRoot) =>
+    async (event, oldPath, newPath, workspaceRoot) =>
       markdownFileService.renameEntry(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
@@ -138,9 +149,10 @@ export const registerFileHandlers = ({
 
   ipcMain.handle(
     FILE_CHANNELS.deleteEntry,
-    async (_event, entryPath, workspaceRoot) =>
+    async (event, entryPath, workspaceRoot) =>
       markdownFileService.deleteEntry(
         getRequiredWorkspaceRoot(
+          event,
           getActiveWorkspaceRoot,
           assertStringInput(workspaceRoot, 'Workspace root')
         ),

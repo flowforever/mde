@@ -35,9 +35,12 @@ export interface EditorApi {
   readonly onLaunchPath: (callback: (resourcePath: string) => void) => () => void
   readonly openFile: () => Promise<Workspace | null>
   readonly openFileByPath: (filePath: string) => Promise<Workspace>
+  readonly openFileInNewWindow?: () => Promise<boolean>
   readonly openPath: (resourcePath: string) => Promise<Workspace>
+  readonly openPathInNewWindow?: (resourcePath: string) => Promise<void>
   readonly openWorkspace: () => Promise<Workspace | null>
   readonly openWorkspaceByPath: (workspaceRoot: string) => Promise<Workspace>
+  readonly openWorkspaceInNewWindow?: () => Promise<boolean>
   readonly listDirectory: (directoryPath: string) => Promise<readonly TreeNode[]>
   readonly readMarkdownFile: (
     filePath: string,

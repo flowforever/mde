@@ -44,11 +44,18 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       WORKSPACE_CHANNELS.openFileByPath,
       filePath
     ) as Promise<Awaited<ReturnType<EditorApi['openFileByPath']>>>,
+  openFileInNewWindow: () =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.openFileInNewWindow) as Promise<boolean>,
   openPath: (resourcePath) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openPath,
       resourcePath
     ) as Promise<Awaited<ReturnType<EditorApi['openPath']>>>,
+  openPathInNewWindow: (resourcePath) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openPathInNewWindow,
+      resourcePath
+    ) as Promise<void>,
   openWorkspace: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.openWorkspace) as Promise<
       Awaited<ReturnType<EditorApi['openWorkspace']>>
@@ -58,6 +65,10 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       WORKSPACE_CHANNELS.openWorkspaceByPath,
       workspaceRoot
     ) as Promise<Awaited<ReturnType<EditorApi['openWorkspaceByPath']>>>,
+  openWorkspaceInNewWindow: () =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openWorkspaceInNewWindow
+    ) as Promise<boolean>,
   readMarkdownFile: (filePath, workspaceRoot) =>
     ipcRenderer.invoke(
       FILE_CHANNELS.readMarkdownFile,

@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -193,6 +194,57 @@ const clampExplorerWidth = (width: number): number =>
 
 const createAiDocumentKey = (workspaceRoot: string, filePath: string): string =>
   `${workspaceRoot}\u0000${filePath}`
+
+const normalizeNativePath = (filePath: string): string =>
+  filePath.replace(/\\/g, '/').replace(/\/+$/u, '')
+
+const getRelativeWorkspacePath = (
+  resourcePath: string,
+  workspaceRoot: string
+): string | null => {
+  const normalizedResourcePath = normalizeNativePath(resourcePath)
+  const normalizedWorkspaceRoot = normalizeNativePath(workspaceRoot)
+
+  if (normalizedResourcePath === normalizedWorkspaceRoot) {
+    return ''
+  }
+
+  if (!normalizedResourcePath.startsWith(`${normalizedWorkspaceRoot}/`)) {
+    return null
+  }
+
+  return normalizedResourcePath.slice(normalizedWorkspaceRoot.length + 1)
+}
+
+const getDroppedResourcePath = (
+  event: ReactDragEvent<HTMLElement>
+): string | null => {
+  const [firstFile] = Array.from(event.dataTransfer.files)
+  const nativeFilePath = (firstFile as File & { readonly path?: string } | undefined)
+    ?.path
+
+  if (nativeFilePath) {
+    return nativeFilePath
+  }
+
+  const uriList = event.dataTransfer.getData('text/uri-list')
+  const firstUri = uriList
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith('#'))
+
+  if (!firstUri?.startsWith('file://')) {
+    return null
+  }
+
+  try {
+    const url = new URL(firstUri)
+
+    return decodeURIComponent(url.pathname)
+  } catch {
+    return null
+  }
+}
 
 const removeAiDocumentEntry = <Value,>(
   entries: Readonly<Record<string, Value>>,
@@ -599,6 +651,18 @@ export const App = (): React.JSX.Element => {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
+      if (state.workspace && window.editorApi.openWorkspaceInNewWindow) {
+        const didOpen = await window.editorApi.openWorkspaceInNewWindow()
+
+        dispatch({ type: 'workspace/open-cancelled' })
+
+        if (!didOpen) {
+          return
+        }
+
+        return
+      }
+
       const workspace = await window.editorApi.openWorkspace()
 
       if (!workspace) {
@@ -624,6 +688,18 @@ export const App = (): React.JSX.Element => {
         throw new Error('Editor API unavailable. Restart the app and try again.')
       }
 
+      if (state.workspace && window.editorApi.openFileInNewWindow) {
+        const didOpen = await window.editorApi.openFileInNewWindow()
+
+        dispatch({ type: 'workspace/open-cancelled' })
+
+        if (!didOpen) {
+          return
+        }
+
+        return
+      }
+
       const workspace = await window.editorApi.openFile()
 
       if (!workspace) {
@@ -640,6 +716,26 @@ export const App = (): React.JSX.Element => {
       })
     }
   }
+
+  const openWorkspaceInNewWindow = useCallback(async (
+    workspace: RecentWorkspace
+  ): Promise<void> => {
+    try {
+      if (!window.editorApi?.openPathInNewWindow) {
+        throw new Error('Editor API unavailable. Restart the app and try again.')
+      }
+
+      await window.editorApi.openPathInNewWindow(
+        workspace.type === 'file' ? workspace.filePath : workspace.rootPath
+      )
+    } catch (error) {
+      dispatch({
+        type: 'workspace/operation-failed',
+        workspaceRoot: state.workspace?.rootPath ?? '',
+        message: getErrorMessage(error, 'Unable to open workspace in new window')
+      })
+    }
+  }, [state.workspace?.rootPath])
 
   const switchWorkspace = useCallback(async (
     workspace: RecentWorkspace
@@ -789,6 +885,34 @@ export const App = (): React.JSX.Element => {
     },
     [state.workspace?.rootPath]
   )
+
+  const openDroppedPath = useCallback(async (
+    resourcePath: string
+  ): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath ?? null
+    const relativeWorkspacePath =
+      workspaceRoot ? getRelativeWorkspacePath(resourcePath, workspaceRoot) : null
+
+    if (
+      workspaceRoot &&
+      relativeWorkspacePath?.toLowerCase().endsWith('.md')
+    ) {
+      await loadFile(relativeWorkspacePath, workspaceRoot)
+      return
+    }
+
+    if (workspaceRoot && relativeWorkspacePath !== null) {
+      await refreshWorkspaceTree(workspaceRoot)
+      return
+    }
+
+    if (workspaceRoot && window.editorApi?.openPathInNewWindow) {
+      await window.editorApi.openPathInNewWindow(resourcePath)
+      return
+    }
+
+    await openPath(resourcePath)
+  }, [loadFile, openPath, refreshWorkspaceTree, state.workspace?.rootPath])
 
   const saveCurrentFile = useCallback(
     async (serializedMarkdown?: string): Promise<void> => {
@@ -1213,6 +1337,35 @@ export const App = (): React.JSX.Element => {
     setIsResizingExplorer(true)
   }
 
+  const handleAppDragOver = (event: ReactDragEvent<HTMLElement>): void => {
+    const hasFileTransfer =
+      event.dataTransfer.files.length > 0 ||
+      Array.from(event.dataTransfer.types).includes('Files')
+
+    if (!hasFileTransfer) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  const handleAppDrop = (event: ReactDragEvent<HTMLElement>): void => {
+    const resourcePath = getDroppedResourcePath(event)
+
+    if (!resourcePath) {
+      return
+    }
+
+    event.preventDefault()
+    void openDroppedPath(resourcePath).catch((error) => {
+      dispatch({
+        message: getErrorMessage(error, 'Unable to open dropped path'),
+        type: 'workspace/open-failed'
+      })
+    })
+  }
+
   const resizeExplorerFromKeyboard = (
     event: ReactKeyboardEvent<HTMLDivElement>
   ): void => {
@@ -1328,6 +1481,8 @@ export const App = (): React.JSX.Element => {
       data-theme={resolvedTheme.id}
       data-theme-family={resolvedTheme.family}
       data-theme-mode={themePreference.mode}
+      onDragOver={handleAppDragOver}
+      onDrop={handleAppDrop}
       ref={appShellRef}
       style={appShellStyle}
     >
@@ -1356,6 +1511,9 @@ export const App = (): React.JSX.Element => {
         }}
         onOpenWorkspace={() => {
           void openWorkspace()
+        }}
+        onOpenWorkspaceInNewWindow={(workspace) => {
+          void openWorkspaceInNewWindow(workspace)
         }}
         onRefreshTree={(directoryPaths) =>
           refreshWorkspaceTree(state.workspace?.rootPath, directoryPaths)

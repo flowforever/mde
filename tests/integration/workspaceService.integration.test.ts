@@ -11,6 +11,12 @@ import type { TreeNode } from '../../src/shared/fileTree'
 
 const fixtureWorkspacePath = resolve('tests/fixtures/workspace')
 
+const createIpcEvent = (senderId: number) => ({
+  sender: {
+    id: senderId
+  }
+})
+
 const flattenTree = (nodes: readonly TreeNode[]): string[] =>
   nodes.flatMap((node) =>
     node.type === 'directory'
@@ -291,6 +297,139 @@ describe('workspaceService integration', () => {
       rootPath: await realpath(secondWorkspacePath)
     })
     expect(activeNodes.map((node) => node.path)).toEqual(['second.md'])
+  })
+
+  it('keeps active workspaces and launch paths isolated by renderer window', async () => {
+    const firstWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-window-one-'))
+    const secondWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-window-two-'))
+    const launchFilePath = join(secondWorkspacePath, 'launch.md')
+    const rememberedResources: string[] = []
+
+    await writeFile(join(firstWorkspacePath, 'first.md'), '# First')
+    await writeFile(join(secondWorkspacePath, 'second.md'), '# Second')
+    await writeFile(launchFilePath, '# Launch')
+
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    const session = registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      rememberRecentResource: (resourcePath) => {
+        rememberedResources.push(resourcePath)
+      },
+      workspaceService: createWorkspaceService()
+    })
+
+    const windowOneEvent = createIpcEvent(101)
+    const windowTwoEvent = createIpcEvent(202)
+    const openWorkspaceByPath = handlers.get(WORKSPACE_CHANNELS.openWorkspaceByPath)
+    const consumeLaunchPath = handlers.get(WORKSPACE_CHANNELS.consumeLaunchPath)
+    const listDirectory = handlers.get(WORKSPACE_CHANNELS.listDirectory)
+
+    await openWorkspaceByPath?.(windowOneEvent, firstWorkspacePath)
+    await openWorkspaceByPath?.(windowTwoEvent, secondWorkspacePath)
+    session.setPendingLaunchPath(windowTwoEvent.sender, launchFilePath)
+
+    await expect(consumeLaunchPath?.(windowOneEvent)).resolves.toBeNull()
+    await expect(consumeLaunchPath?.(windowTwoEvent)).resolves.toBe(launchFilePath)
+    await expect(consumeLaunchPath?.(windowTwoEvent)).resolves.toBeNull()
+
+    expect(
+      ((await listDirectory?.(windowOneEvent, '')) as TreeNode[]).map(
+        (node) => node.path
+      )
+    ).toEqual(['first.md'])
+    expect(
+      ((await listDirectory?.(windowTwoEvent, '')) as TreeNode[]).map(
+        (node) => node.path
+      )
+    ).toEqual(['launch.md', 'second.md'])
+    expect(session.getActiveWorkspaceRoot(windowOneEvent)).toBe(
+      await realpath(firstWorkspacePath)
+    )
+    expect(session.getActiveWorkspaceRoot(windowTwoEvent)).toBe(
+      await realpath(secondWorkspacePath)
+    )
+    expect(rememberedResources).toEqual([
+      await realpath(firstWorkspacePath),
+      await realpath(secondWorkspacePath)
+    ])
+  })
+
+  it('opens renderer-supplied resources in a separate app window through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-new-window-'))
+    const openedPaths: string[] = []
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await writeFile(join(workspacePath, 'new-window.md'), '# New Window')
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      openPathInNewWindow: (resourcePath) => {
+        openedPaths.push(resourcePath)
+      },
+      workspaceService: createWorkspaceService()
+    })
+
+    const openPathInNewWindow = handlers.get(
+      WORKSPACE_CHANNELS.openPathInNewWindow
+    )
+
+    await openPathInNewWindow?.(createIpcEvent(303), workspacePath)
+
+    expect(openedPaths).toEqual([workspacePath])
+  })
+
+  it('opens a selected workspace in a separate app window through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-dialog-new-window-'))
+    const openedPaths: string[] = []
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const dialog = {
+      showOpenDialog: vi.fn().mockResolvedValue({
+        canceled: false,
+        filePaths: [workspacePath]
+      })
+    }
+
+    await writeFile(join(workspacePath, 'dialog.md'), '# Dialog')
+
+    registerWorkspaceHandlers({
+      dialog,
+      ipcMain,
+      openPathInNewWindow: (resourcePath) => {
+        openedPaths.push(resourcePath)
+      },
+      workspaceService: createWorkspaceService()
+    })
+
+    const openWorkspaceInNewWindow = handlers.get(
+      WORKSPACE_CHANNELS.openWorkspaceInNewWindow
+    )
+
+    await expect(openWorkspaceInNewWindow?.(createIpcEvent(404))).resolves.toBe(
+      true
+    )
+
+    expect(dialog.showOpenDialog).toHaveBeenCalledWith({
+      properties: ['openDirectory']
+    })
+    expect(openedPaths).toEqual([workspacePath])
   })
 
   it('keeps listDirectory pinned to the canonical workspace root after an opened symlink is retargeted', async () => {
