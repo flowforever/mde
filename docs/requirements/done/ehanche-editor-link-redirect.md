@@ -1,9 +1,10 @@
-# editor link 支持 - HIGH PRIORITY - READY FOR RELEASE
+# editor link 支持 - HIGH PRIORITY - DONE
 
 ## 开发状态
 
 * 2026-05-01: 已按 auto-pick-tasks 选中，开始分析 editor link 插入、内部/外部链接打开、UT/IT/E2E 覆盖和发布验证。
-* 2026-05-01: 已实现 editor `/` Link 命令、路径建议、新建文档插入、内部/外部链接打开路由，并完成 lint、typecheck、unit、integration、E2E 验证。等待 v1.3.9 release 成功后归档。
+* 2026-05-01: 已实现 editor `/` Link 命令、路径建议、新建文档插入、内部/外部链接打开路由，并完成 lint、typecheck、unit、integration、E2E 验证。
+* 2026-05-01: 已发布 v1.3.9。GitHub Release workflow 成功，Release 资产已确认包含 macOS arm64/x64 dmg/zip、Windows x64 exe、`latest-mac.yml` 和 `latest.yml`。
 
 ## 完成说明
 
