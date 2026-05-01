@@ -1,4 +1,12 @@
-# YAML Frontmatter Render 增强 - READY
+# YAML Frontmatter Render 增强 - DONE
+
+## Status
+
+* Released in `v1.3.10`.
+* Completed YAML frontmatter parsing at the editor boundary so BlockNote receives only Markdown body content.
+* Added a compact, expandable metadata panel with raw YAML editing, invalid YAML warnings, and lossless recomposition on save.
+* Workspace search now labels frontmatter matches as metadata, and AI summary/translation flows default to body-only Markdown.
+* Verification completed: `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run test:integration`, and `npm run test:e2e`.
 
 ## 开发状态
 
