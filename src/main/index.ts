@@ -26,6 +26,7 @@ import {
   E2E_USER_DATA_PATH_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
+import type { WorkspaceLaunchResource } from '../shared/workspace'
 import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
 
 export {
@@ -197,7 +198,7 @@ const bootstrap = async (): Promise<void> => {
   let mainWindow: BrowserWindow | null = null
   let workspaceSession: WorkspaceHandlerSession | null = null
   let openAppWindow:
-    | ((launchPath?: string | null) => Promise<BrowserWindow>)
+    | ((launchPath?: WorkspaceLaunchResource | null) => Promise<BrowserWindow>)
     | null = null
   const setMainWindow = (window: BrowserWindow): void => {
     const webContentsId = window.webContents.id
@@ -251,6 +252,9 @@ const bootstrap = async (): Promise<void> => {
     dialog,
     initialLaunchPath,
     ipcMain,
+    openExternalLink: async (url) => {
+      await shell.openExternal(url)
+    },
     openPathInNewWindow: async (resourcePath) => {
       if (!openAppWindow) {
         throw new Error('App window creation is not ready')

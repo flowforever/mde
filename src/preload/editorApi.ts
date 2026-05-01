@@ -6,6 +6,8 @@ import type {
   EditorApi,
   FileContents,
   ImageAsset,
+  WorkspaceFileLaunchResource,
+  WorkspaceLaunchResource,
   WorkspaceSearchResult
 } from '../shared/workspace'
 
@@ -17,7 +19,7 @@ type IpcRenderer = Pick<
 export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
   consumeLaunchPath: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.consumeLaunchPath) as Promise<
-      string | null
+      WorkspaceLaunchResource | null
     >,
   listDirectory: (directoryPath) =>
     ipcRenderer.invoke(
@@ -29,7 +31,10 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       _event: Electron.IpcRendererEvent,
       resourcePath: unknown
     ): void => {
-      if (typeof resourcePath === 'string') {
+      if (
+        typeof resourcePath === 'string' ||
+        isWorkspaceFileLaunchResource(resourcePath)
+      ) {
         callback(resourcePath)
       }
     }
@@ -51,6 +56,8 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
     ) as Promise<Awaited<ReturnType<EditorApi['openFileByPath']>>>,
   openFileInNewWindow: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.openFileInNewWindow) as Promise<boolean>,
+  openExternalLink: (url) =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.openExternalLink, url) as Promise<void>,
   openPath: (resourcePath) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openPath,
@@ -60,6 +67,12 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openPathInNewWindow,
       resourcePath
+    ) as Promise<void>,
+  openWorkspaceFileInNewWindow: (workspaceRoot, filePath) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openWorkspaceFileInNewWindow,
+      workspaceRoot,
+      filePath
     ) as Promise<void>,
   openWorkspace: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.openWorkspace) as Promise<
@@ -128,3 +141,12 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       workspaceRoot
     ) as Promise<void>
 })
+
+const isWorkspaceFileLaunchResource = (
+  value: unknown
+): value is WorkspaceFileLaunchResource =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as WorkspaceFileLaunchResource).type === 'workspace-file' &&
+  typeof (value as WorkspaceFileLaunchResource).workspaceRoot === 'string' &&
+  typeof (value as WorkspaceFileLaunchResource).filePath === 'string'

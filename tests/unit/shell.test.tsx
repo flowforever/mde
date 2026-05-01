@@ -19,6 +19,7 @@ interface MockMarkdownBlockEditorProps {
   readonly isSaving: boolean;
   readonly markdown: string;
   readonly onMarkdownChange: (contents: string) => void;
+  readonly onOpenLink?: (href: string) => void;
   readonly onSearchStateChange?: (state: {
     readonly activeMatchIndex: number;
     readonly matchCount: number;
@@ -58,6 +59,30 @@ vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
         type="button"
       >
         Change mock markdown
+      </button>
+      <button
+        onClick={() => {
+          props.onOpenLink?.("docs/intro.md");
+        }}
+        type="button"
+      >
+        Open mock workspace link
+      </button>
+      <button
+        onClick={() => {
+          props.onOpenLink?.("https://example.com/docs");
+        }}
+        type="button"
+      >
+        Open mock external link
+      </button>
+      <button
+        onClick={() => {
+          props.onOpenLink?.("/other-workspace/docs/guide.md");
+        }}
+        type="button"
+      >
+        Open mock known workspace link
       </button>
     </section>
   );
@@ -519,6 +544,237 @@ describe("App shell", () => {
     expect(editorApi.openPath).not.toHaveBeenCalledWith(
       "/external/external.md",
     );
+  });
+
+  it("opens same-workspace editor links in the current window", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openExternalLink: vi.fn(),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openPathInNewWindow: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [
+          { name: "README.md", path: "README.md", type: "file" },
+          {
+            children: [
+              { name: "intro.md", path: "docs/intro.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ],
+        type: "workspace",
+      }),
+      readMarkdownFile: vi
+        .fn()
+        .mockResolvedValueOnce({
+          contents: "# README",
+          path: "README.md",
+        })
+        .mockResolvedValueOnce({
+          contents: "# Intro",
+          path: "docs/intro.md",
+        }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: "README.md",
+          recentFilePaths: ["README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+
+    render(<App />);
+
+    await screen.findByText("# README");
+    await user.click(
+      screen.getByRole("button", { name: /open mock workspace link/i }),
+    );
+
+    await waitFor(() => {
+      expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+        "docs/intro.md",
+        "/workspace",
+      );
+    });
+    expect(editorApi.openPathInNewWindow).not.toHaveBeenCalled();
+    expect(editorApi.openExternalLink).not.toHaveBeenCalled();
+  });
+
+  it("opens http editor links in the external browser", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openExternalLink: vi.fn().mockResolvedValue(undefined),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openPathInNewWindow: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# README",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: "README.md",
+          recentFilePaths: ["README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+
+    render(<App />);
+
+    await screen.findByText("# README");
+    await user.click(
+      screen.getByRole("button", { name: /open mock external link/i }),
+    );
+
+    expect(editorApi.openExternalLink).toHaveBeenCalledWith(
+      "https://example.com/docs",
+    );
+    expect(editorApi.openPathInNewWindow).not.toHaveBeenCalled();
+  });
+
+  it("opens editor links under remembered workspaces in a new workspace window", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openPathInNewWindow: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      openWorkspaceFileInNewWindow: vi.fn().mockResolvedValue(undefined),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# README",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem(
+      "mde.recentWorkspaces",
+      JSON.stringify([
+        {
+          name: "Other",
+          rootPath: "/other-workspace",
+          type: "workspace",
+        },
+      ]),
+    );
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: "README.md",
+          recentFilePaths: ["README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+
+    render(<App />);
+
+    await screen.findByText("# README");
+    await user.click(
+      screen.getByRole("button", {
+        name: /open mock known workspace link/i,
+      }),
+    );
+
+    expect(editorApi.openWorkspaceFileInNewWindow).toHaveBeenCalledWith(
+      "/other-workspace",
+      "docs/guide.md",
+    );
+    expect(editorApi.openPathInNewWindow).not.toHaveBeenCalled();
   });
 
   it("switches to a remembered file from the workspace menu without generic openPath IPC", async () => {

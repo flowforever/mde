@@ -2,6 +2,7 @@ export const WORKSPACE_CHANNELS = Object.freeze({
   consumeLaunchPath: "workspace:consume-launch-path",
   launchPath: "workspace:launch-path",
   listDirectory: "workspace:list-directory",
+  openExternalLink: "workspace:open-external-link",
   openFile: "workspace:open-file",
   openFileByPath: "workspace:open-file-by-path",
   openFileInNewWindow: "workspace:open-file-in-new-window",
@@ -9,6 +10,7 @@ export const WORKSPACE_CHANNELS = Object.freeze({
   openPathInNewWindow: "workspace:open-path-in-new-window",
   openWorkspace: "workspace:open",
   openWorkspaceByPath: "workspace:open-by-path",
+  openWorkspaceFileInNewWindow: "workspace:open-workspace-file-in-new-window",
   openWorkspaceInNewWindow: "workspace:open-in-new-window",
 });
 

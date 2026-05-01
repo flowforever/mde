@@ -21,6 +21,7 @@ import type { AiApi, AiGenerationResult, AiTool } from "../../../shared/ai";
 import type {
   EditorApi,
   Workspace,
+  WorkspaceLaunchResource,
   WorkspaceSearchResult,
 } from "../../../shared/workspace";
 import type {
@@ -39,6 +40,10 @@ import {
   readEditorViewMode,
   writeEditorViewMode,
 } from "../editor/editorViewMode";
+import {
+  collectMarkdownFilePaths,
+  resolveEditorLinkTarget,
+} from "../editor/editorLinks";
 import { getNextSearchMatchIndex } from "../search/editorSearch";
 import { ExplorerPane } from "../explorer/ExplorerPane";
 import { UpdateDialog, type UpdateDialogStatus } from "./UpdateDialog";
@@ -937,7 +942,7 @@ export const App = (): React.JSX.Element => {
   );
 
   const openPath = useCallback(
-    async (resourcePath: string): Promise<void> => {
+    async (resourcePath: WorkspaceLaunchResource): Promise<void> => {
       dispatch({ type: "workspace/open-started" });
 
       try {
@@ -945,10 +950,19 @@ export const App = (): React.JSX.Element => {
           throw new Error(text("errors.editorApiUnavailable"));
         }
 
-        const workspace = await window.editorApi.openPath(resourcePath);
+        const workspace =
+          typeof resourcePath === "string"
+            ? await window.editorApi.openPath(resourcePath)
+            : await window.editorApi.openWorkspaceByPath(
+                resourcePath.workspaceRoot,
+              );
 
         completeWorkspaceOpen(workspace);
-        await loadWorkspaceDefaultFile(workspace);
+        if (typeof resourcePath === "string") {
+          await loadWorkspaceDefaultFile(workspace);
+        } else {
+          await loadFile(resourcePath.filePath, workspace.rootPath);
+        }
       } catch (error) {
         dispatch({
           message: getErrorMessage(error, text("errors.openLaunchPathFailed")),
@@ -956,7 +970,7 @@ export const App = (): React.JSX.Element => {
         });
       }
     },
-    [completeWorkspaceOpen, loadWorkspaceDefaultFile, text],
+    [completeWorkspaceOpen, loadFile, loadWorkspaceDefaultFile, text],
   );
 
   useEffect(() => {
@@ -1097,6 +1111,62 @@ export const App = (): React.JSX.Element => {
       await openPath(resourcePath);
     },
     [loadFile, openPath, refreshWorkspaceTree, state.workspace?.rootPath],
+  );
+
+  const openEditorLink = useCallback(
+    async (href: string): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+      const currentFilePath = state.loadedFile?.path;
+
+      if (!workspaceRoot || !currentFilePath) {
+        return;
+      }
+
+      const target = resolveEditorLinkTarget({
+        currentFilePath,
+        currentWorkspaceRoot: workspaceRoot,
+        href,
+        recentWorkspaces,
+      });
+
+      switch (target.kind) {
+        case "external":
+          if (!window.editorApi?.openExternalLink) {
+            throw new Error(text("errors.editorApiUnavailable"));
+          }
+
+          await window.editorApi.openExternalLink(target.url);
+          return;
+        case "workspace-file":
+          await loadFile(target.filePath, workspaceRoot);
+          return;
+        case "workspace-file-new-window":
+          if (window.editorApi?.openWorkspaceFileInNewWindow) {
+            await window.editorApi.openWorkspaceFileInNewWindow(
+              target.workspaceRoot,
+              target.filePath,
+            );
+            return;
+          }
+
+          await window.editorApi?.openPathInNewWindow?.(
+            `${target.workspaceRoot}/${target.filePath}`,
+          );
+          return;
+        case "new-window-path":
+          await window.editorApi?.openPathInNewWindow?.(target.resourcePath);
+          return;
+        case "none":
+          return;
+      }
+    },
+    [
+      loadFile,
+      recentWorkspaces,
+      state.loadedFile?.path,
+      state.workspace?.rootPath,
+      text,
+    ],
   );
 
   const saveCurrentFile = useCallback(
@@ -1429,7 +1499,7 @@ export const App = (): React.JSX.Element => {
     };
   }, [openEditorSearch, state.loadedFile]);
 
-  const createMarkdownFile = async (promptedPath: string): Promise<void> => {
+  const createMarkdownFile = useCallback(async (promptedPath: string): Promise<void> => {
     const workspaceRoot = state.workspace?.rootPath;
     const filePath = ensureMarkdownExtension(promptedPath);
 
@@ -1455,7 +1525,28 @@ export const App = (): React.JSX.Element => {
         workspaceRoot,
       });
     }
-  };
+  }, [loadFile, refreshWorkspaceTree, state.workspace?.rootPath, text]);
+
+  const createMarkdownFileFromEditorLink = useCallback(
+    async (promptedPath: string): Promise<string> => {
+      const workspaceRoot = state.workspace?.rootPath;
+      const filePath = ensureMarkdownExtension(promptedPath);
+
+      if (!workspaceRoot) {
+        throw new Error(text("errors.openWorkspaceBeforeFiles"));
+      }
+
+      if (!window.editorApi) {
+        throw new Error(text("errors.editorApiUnavailable"));
+      }
+
+      await window.editorApi.createMarkdownFile(filePath, workspaceRoot);
+      await refreshWorkspaceTree(workspaceRoot);
+
+      return filePath;
+    },
+    [refreshWorkspaceTree, state.workspace?.rootPath, text],
+  );
 
   const createFolder = async (folderPath: string): Promise<void> => {
     const workspaceRoot = state.workspace?.rootPath;
@@ -2026,8 +2117,26 @@ export const App = (): React.JSX.Element => {
             errorMessage={state.fileErrorMessage}
             isDirty={state.isDirty}
             isSaving={state.isSavingFile}
+            markdownFilePaths={
+              state.workspace
+                ? collectMarkdownFilePaths(state.workspace.tree)
+                : []
+            }
             markdown={state.loadedFile.contents}
+            onCreateLinkedMarkdown={createMarkdownFileFromEditorLink}
             onImageUpload={uploadImageAsset}
+            onOpenLink={(href) => {
+              void openEditorLink(href).catch((error) => {
+                dispatch({
+                  message: getErrorMessage(
+                    error,
+                    text("errors.openEditorLinkFailed"),
+                  ),
+                  type: "workspace/operation-failed",
+                  workspaceRoot: state.workspace?.rootPath ?? "",
+                });
+              });
+            }}
             onMarkdownChange={(contents) => {
               const workspaceRoot = state.workspace?.rootPath;
 
@@ -2049,6 +2158,7 @@ export const App = (): React.JSX.Element => {
             searchQuery={editorSearchQuery}
             text={text}
             activeSearchMatchIndex={editorSearchState.activeMatchIndex}
+            workspaceTree={state.workspace?.tree ?? []}
             workspaceRoot={state.workspace?.rootPath ?? ""}
           />
         ) : (

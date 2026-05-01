@@ -1784,6 +1784,48 @@ test('keeps the editing position after idle autosave', async () => {
   }
 })
 
+test('inserts a Markdown link from the editor slash command picker', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await expect(editableDocument).toBeVisible()
+    await editableDocument.click()
+    await window.keyboard.press('End')
+    await window.keyboard.press('Enter')
+    await window.keyboard.insertText('/')
+    await window.getByText(/^Link$/).click()
+
+    const linkDialog = window.getByRole('dialog', { name: /insert link/i })
+
+    await expect(linkDialog).toBeVisible()
+    await linkDialog.getByLabel(/link target/i).fill('doc/intro')
+    await linkDialog
+      .getByRole('option', { name: /docs\/intro\.md/i })
+      .click()
+
+    await expect(linkDialog).toHaveCount(0)
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toContain('[intro.md](docs/intro.md)')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('remembers and switches recent workspaces from the workspace menu', async () => {
   const firstWorkspacePath = await createFixtureWorkspace()
   const secondWorkspacePath = await createFixtureWorkspace()

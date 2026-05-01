@@ -1,5 +1,6 @@
 import type { Dialog, IpcMain, WebContents } from 'electron'
 
+import type { WorkspaceLaunchResource } from '../../shared/workspace'
 import type { WorkspaceService } from '../services/workspaceService'
 import { WORKSPACE_CHANNELS } from './channels'
 
@@ -7,7 +8,10 @@ interface RegisterWorkspaceHandlersOptions {
   readonly dialog: Pick<Dialog, 'showOpenDialog'>
   readonly initialLaunchPath?: string | null | undefined
   readonly ipcMain: Pick<IpcMain, 'handle'>
-  readonly openPathInNewWindow?: (resourcePath: string) => Promise<void> | void
+  readonly openExternalLink?: (url: string) => Promise<void> | void
+  readonly openPathInNewWindow?: (
+    resourcePath: WorkspaceLaunchResource
+  ) => Promise<void> | void
   readonly rememberRecentResource?: (resourcePath: string) => void
   readonly testFilePath?: string | undefined
   readonly testWorkspacePath?: string | undefined
@@ -25,14 +29,14 @@ export interface WorkspaceHandlerSession {
   readonly removeWindow: (sender: Pick<WebContents, 'id'>) => void
   readonly setPendingLaunchPath: (
     sender: Pick<WebContents, 'id'>,
-    launchPath: string | null
+    launchPath: WorkspaceLaunchResource | null
   ) => void
 }
 
 interface WorkspaceWindowState {
   readonly id: number
   activeWorkspaceRoot: string | null
-  pendingLaunchPath: string | null
+  pendingLaunchPath: WorkspaceLaunchResource | null
 }
 
 const DEFAULT_WINDOW_ID = 0
@@ -67,6 +71,7 @@ export const registerWorkspaceHandlers = ({
   dialog,
   initialLaunchPath = null,
   ipcMain,
+  openExternalLink,
   openPathInNewWindow,
   rememberRecentResource = () => undefined,
   testFilePath,
@@ -117,12 +122,42 @@ export const registerWorkspaceHandlers = ({
     )
   }
 
-  const openResourceInNewWindow = async (resourcePath: string): Promise<void> => {
+  const openResourceInNewWindow = async (
+    resourcePath: WorkspaceLaunchResource
+  ): Promise<void> => {
     if (!openPathInNewWindow) {
       throw new Error('Opening resources in a new window is unavailable')
     }
 
     await openPathInNewWindow(resourcePath)
+  }
+
+  const assertHttpUrl = (value: unknown): string => {
+    if (typeof value !== 'string') {
+      throw new Error('External link must be a string')
+    }
+
+    let url: URL
+
+    try {
+      url = new URL(value)
+    } catch {
+      throw new Error('External link must be an HTTP or HTTPS URL')
+    }
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('External link must be an HTTP or HTTPS URL')
+    }
+
+    return url.toString()
+  }
+
+  const openHttpUrlExternally = async (url: string): Promise<void> => {
+    if (!openExternalLink) {
+      throw new Error('Opening external links is unavailable')
+    }
+
+    await openExternalLink(url)
   }
 
   const openWorkspaceByPath = async (
@@ -286,6 +321,32 @@ export const registerWorkspaceHandlers = ({
       }
 
       await openResourceInNewWindow(resourcePath)
+    }
+  )
+
+  ipcMain.handle(
+    WORKSPACE_CHANNELS.openWorkspaceFileInNewWindow,
+    async (_event, workspaceRoot: unknown, filePath: unknown) => {
+      if (typeof workspaceRoot !== 'string') {
+        throw new Error('Workspace root must be a string')
+      }
+
+      if (typeof filePath !== 'string') {
+        throw new Error('File path must be a string')
+      }
+
+      await openResourceInNewWindow({
+        filePath,
+        type: 'workspace-file',
+        workspaceRoot
+      })
+    }
+  )
+
+  ipcMain.handle(
+    WORKSPACE_CHANNELS.openExternalLink,
+    async (_event, url: unknown) => {
+      await openHttpUrlExternally(assertHttpUrl(url))
     }
   )
 

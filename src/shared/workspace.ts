@@ -9,6 +9,14 @@ export interface Workspace {
   readonly type?: 'file' | 'workspace'
 }
 
+export interface WorkspaceFileLaunchResource {
+  readonly filePath: string
+  readonly type: 'workspace-file'
+  readonly workspaceRoot: string
+}
+
+export type WorkspaceLaunchResource = string | WorkspaceFileLaunchResource
+
 export interface FileContents {
   readonly path: string
   readonly contents: string
@@ -48,13 +56,20 @@ export interface WorkspaceSearchResult {
 }
 
 export interface EditorApi {
-  readonly consumeLaunchPath: () => Promise<string | null>
-  readonly onLaunchPath: (callback: (resourcePath: string) => void) => () => void
+  readonly consumeLaunchPath: () => Promise<WorkspaceLaunchResource | null>
+  readonly onLaunchPath: (
+    callback: (resourcePath: WorkspaceLaunchResource) => void
+  ) => () => void
   readonly openFile: () => Promise<Workspace | null>
   readonly openFileByPath: (filePath: string) => Promise<Workspace>
   readonly openFileInNewWindow?: () => Promise<boolean>
+  readonly openExternalLink?: (url: string) => Promise<void>
   readonly openPath: (resourcePath: string) => Promise<Workspace>
   readonly openPathInNewWindow?: (resourcePath: string) => Promise<void>
+  readonly openWorkspaceFileInNewWindow?: (
+    workspaceRoot: string,
+    filePath: string
+  ) => Promise<void>
   readonly openWorkspace: () => Promise<Workspace | null>
   readonly openWorkspaceByPath: (workspaceRoot: string) => Promise<Workspace>
   readonly openWorkspaceInNewWindow?: () => Promise<boolean>

@@ -8,6 +8,7 @@ import { WORKSPACE_CHANNELS } from '../../src/main/ipc/channels'
 import { registerWorkspaceHandlers } from '../../src/main/ipc/registerWorkspaceHandlers'
 import { createWorkspaceService } from '../../src/main/services/workspaceService'
 import type { TreeNode } from '../../src/shared/fileTree'
+import type { WorkspaceLaunchResource } from '../../src/shared/workspace'
 
 const fixtureWorkspacePath = resolve('tests/fixtures/workspace')
 
@@ -118,6 +119,14 @@ describe('workspaceService integration', () => {
     )
     expect(ipcMain.handle).toHaveBeenCalledWith(
       WORKSPACE_CHANNELS.openPath,
+      expect.any(Function)
+    )
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      WORKSPACE_CHANNELS.openExternalLink,
+      expect.any(Function)
+    )
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      WORKSPACE_CHANNELS.openWorkspaceFileInNewWindow,
       expect.any(Function)
     )
     expect(ipcMain.handle).toHaveBeenCalledWith(
@@ -363,7 +372,7 @@ describe('workspaceService integration', () => {
 
   it('opens renderer-supplied resources in a separate app window through IPC', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-new-window-'))
-    const openedPaths: string[] = []
+    const openedPaths: WorkspaceLaunchResource[] = []
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -391,9 +400,77 @@ describe('workspaceService integration', () => {
     expect(openedPaths).toEqual([workspacePath])
   })
 
+  it('opens remembered workspace files in a separate app window through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-known-workspace-'))
+    const openedResources: unknown[] = []
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      openPathInNewWindow: (resourcePath) => {
+        openedResources.push(resourcePath)
+      },
+      workspaceService: createWorkspaceService()
+    })
+
+    const openWorkspaceFileInNewWindow = handlers.get(
+      WORKSPACE_CHANNELS.openWorkspaceFileInNewWindow
+    )
+
+    await openWorkspaceFileInNewWindow?.(
+      createIpcEvent(505),
+      workspacePath,
+      'docs/target.md'
+    )
+
+    expect(openedResources).toEqual([
+      {
+        filePath: 'docs/target.md',
+        type: 'workspace-file',
+        workspaceRoot: workspacePath
+      }
+    ])
+  })
+
+  it('opens http links externally and rejects unsupported protocols', async () => {
+    const openedUrls: string[] = []
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      openExternalLink: (url) => {
+        openedUrls.push(url)
+      },
+      workspaceService: createWorkspaceService()
+    })
+
+    const openExternalLink = handlers.get(WORKSPACE_CHANNELS.openExternalLink)
+
+    await expect(
+      openExternalLink?.(createIpcEvent(606), 'https://example.com/docs')
+    ).resolves.toBeUndefined()
+    await expect(
+      openExternalLink?.(createIpcEvent(606), 'javascript:alert(1)')
+    ).rejects.toThrow(/http/i)
+
+    expect(openedUrls).toEqual(['https://example.com/docs'])
+  })
+
   it('opens a selected workspace in a separate app window through IPC', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-dialog-new-window-'))
-    const openedPaths: string[] = []
+    const openedPaths: WorkspaceLaunchResource[] = []
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {

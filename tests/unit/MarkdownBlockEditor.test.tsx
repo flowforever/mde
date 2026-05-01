@@ -27,7 +27,10 @@ const mockBlockNoteState = vi.hoisted(() => ({
   lastEditor: undefined as
     | {
         blocksToMarkdownLossy: ReturnType<typeof vi.fn>;
+        createLink: ReturnType<typeof vi.fn>;
         document: { content: string; id: string; type: string }[];
+        focus: ReturnType<typeof vi.fn>;
+        getSelectedText: ReturnType<typeof vi.fn>;
         replaceBlocks: ReturnType<typeof vi.fn>;
         transaction: { setMeta: ReturnType<typeof vi.fn> };
         transact: ReturnType<typeof vi.fn>;
@@ -35,7 +38,13 @@ const mockBlockNoteState = vi.hoisted(() => ({
       }
     | undefined,
   lastOptions: undefined as
-    | { uploadFile?: (file: File, blockId?: string) => Promise<string> }
+    | {
+        links?: {
+          isValidLink?: (href: string) => boolean;
+          onClick?: (event: MouseEvent) => boolean | void;
+        };
+        uploadFile?: (file: File, blockId?: string) => Promise<string>;
+      }
     | undefined,
 }));
 const mockMermaid = vi.hoisted(() => ({
@@ -46,7 +55,13 @@ const mockMermaid = vi.hoisted(() => ({
 }));
 
 vi.mock("@blocknote/react", () => ({
+  SuggestionMenuController: () => null,
+  getDefaultReactSlashMenuItems: () => [],
   useCreateBlockNote: (options?: {
+    links?: {
+      isValidLink?: (href: string) => boolean;
+      onClick?: (event: MouseEvent) => boolean | void;
+    };
     uploadFile?: (file: File, blockId?: string) => Promise<string>;
   }) => {
     mockBlockNoteState.lastOptions = options;
@@ -57,7 +72,10 @@ vi.mock("@blocknote/react", () => ({
 
       mockBlockNoteState.lastEditor = {
         blocksToMarkdownLossy: vi.fn().mockResolvedValue(""),
+        createLink: vi.fn(),
         document: blocks,
+        focus: vi.fn(),
+        getSelectedText: vi.fn().mockReturnValue(""),
         replaceBlocks: vi.fn(),
         transaction,
         transact: vi.fn((callback: (transaction: unknown) => unknown) =>
@@ -602,6 +620,78 @@ describe("MarkdownBlockEditor accessibility", () => {
 
     expect(onImageUpload).toHaveBeenCalledWith(file);
     expect(result).toBe("file:///workspace/.mde/assets/image.png");
+  });
+
+  it("uses the editor link click handler for Markdown links", () => {
+    const onOpenLink = vi.fn();
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="[Intro](docs/intro.md)"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="[Intro](docs/intro.md)"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onOpenLink={onOpenLink}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    const anchor = document.createElement("a");
+
+    anchor.href = "docs/intro.md";
+    anchor.setAttribute("href", "docs/intro.md");
+    document.body.append(anchor);
+
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "target", {
+      configurable: true,
+      value: anchor,
+    });
+    const preventDefault = vi.spyOn(event, "preventDefault");
+    const handled = mockBlockNoteState.lastOptions?.links?.onClick?.(event);
+
+    expect(handled).toBe(true);
+    expect(preventDefault).toHaveBeenCalled();
+    expect(onOpenLink).toHaveBeenCalledWith("docs/intro.md");
+    anchor.remove();
+  });
+
+  it("rejects javascript link hrefs at the editor boundary", () => {
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Fixture Workspace"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Fixture Workspace"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    expect(
+      mockBlockNoteState.lastOptions?.links?.isValidLink?.(
+        "javascript:alert(1)",
+      ),
+    ).toBe(false);
+    expect(
+      mockBlockNoteState.lastOptions?.links?.isValidLink?.("docs/intro.md"),
+    ).toBe(true);
   });
 
   it("passes dark color scheme to BlockNote and Mermaid rendering", async () => {
