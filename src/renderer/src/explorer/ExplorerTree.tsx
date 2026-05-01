@@ -1,54 +1,65 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from "react";
 import type {
   CSSProperties,
   FormEvent,
   KeyboardEvent,
-  MouseEvent
-} from 'react'
+  MouseEvent,
+} from "react";
 
-import type { TreeNode } from '../../../shared/fileTree'
-import type { ExplorerInlineEditor, ExplorerTreeProps } from './explorerTypes'
+import type { TreeNode } from "../../../shared/fileTree";
+import type { ExplorerInlineEditor, ExplorerTreeProps } from "./explorerTypes";
 
 interface ExplorerTreeNodeProps extends ExplorerTreeProps {
-  readonly depth: number
-  readonly node: TreeNode
+  readonly depth: number;
+  readonly node: TreeNode;
 }
 
 interface ExplorerTreeRootProps extends ExplorerTreeProps {
-  readonly nodes: readonly TreeNode[]
+  readonly nodes: readonly TreeNode[];
 }
 
-const getRowAccessibleName = (node: TreeNode): string =>
-  node.type === 'directory'
-    ? `${node.name} folder`
-    : `${node.name} Markdown file`
+const getRowAccessibleName = (
+  node: TreeNode,
+  text: ExplorerTreeProps["text"],
+): string =>
+  node.type === "directory"
+    ? text("explorer.directoryAccessibleName", { name: node.name })
+    : text("explorer.markdownFileAccessibleName", { name: node.name });
 
 const getEntryName = (entryPath: string): string => {
-  const separatorIndex = entryPath.lastIndexOf('/')
+  const separatorIndex = entryPath.lastIndexOf("/");
 
-  return separatorIndex === -1 ? entryPath : entryPath.slice(separatorIndex + 1)
-}
+  return separatorIndex === -1
+    ? entryPath
+    : entryPath.slice(separatorIndex + 1);
+};
 
-const getInlineEditorLabel = (editor: ExplorerInlineEditor): string => {
-  if (editor.type === 'create-file') {
-    return 'New Markdown file name'
+const getInlineEditorLabel = (
+  editor: ExplorerInlineEditor,
+  text: ExplorerTreeProps["text"],
+): string => {
+  if (editor.type === "create-file") {
+    return text("explorer.newMarkdownFileName");
   }
 
-  if (editor.type === 'create-folder') {
-    return 'New folder name'
+  if (editor.type === "create-folder") {
+    return text("explorer.newFolderName");
   }
 
-  return `Rename ${
-    editor.targetEntryPath ? getEntryName(editor.targetEntryPath) : editor.value
-  }`
-}
+  return text("explorer.renameEntryName", {
+    name: editor.targetEntryPath
+      ? getEntryName(editor.targetEntryPath)
+      : editor.value,
+  });
+};
 
 interface ExplorerInlineEditorRowProps {
-  readonly depth: number
-  readonly editor: ExplorerInlineEditor
-  readonly onCancel?: () => void
-  readonly onChange?: (value: string) => void
-  readonly onSubmit?: () => void
+  readonly depth: number;
+  readonly editor: ExplorerInlineEditor;
+  readonly onCancel?: () => void;
+  readonly onChange?: (value: string) => void;
+  readonly onSubmit?: () => void;
+  readonly text: ExplorerTreeProps["text"];
 }
 
 const ExplorerInlineEditorRow = ({
@@ -56,28 +67,29 @@ const ExplorerInlineEditorRow = ({
   editor,
   onCancel,
   onChange,
-  onSubmit
+  onSubmit,
+  text,
 }: ExplorerInlineEditorRowProps): React.JSX.Element => {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const rowStyle = { '--depth': depth } as CSSProperties
-  const label = getInlineEditorLabel(editor)
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const rowStyle = { "--depth": depth } as CSSProperties;
+  const label = getInlineEditorLabel(editor, text);
   const submitInlineEditor = (event: FormEvent): void => {
-    event.preventDefault()
-    onSubmit?.()
-  }
+    event.preventDefault();
+    onSubmit?.();
+  };
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key !== 'Escape') {
-      return
+    if (event.key !== "Escape") {
+      return;
     }
 
-    event.preventDefault()
-    onCancel?.()
-  }
+    event.preventDefault();
+    onCancel?.();
+  };
 
   useEffect(() => {
-    inputRef.current?.focus()
-    inputRef.current?.select()
-  }, [editor.targetDirectoryPath, editor.targetEntryPath, editor.type])
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editor.targetDirectoryPath, editor.targetEntryPath, editor.type]);
 
   return (
     <form
@@ -89,15 +101,15 @@ const ExplorerInlineEditorRow = ({
       <input
         aria-label={label}
         onChange={(event) => {
-          onChange?.(event.target.value)
+          onChange?.(event.target.value);
         }}
         onKeyDown={handleKeyDown}
         ref={inputRef}
         value={editor.value}
       />
     </form>
-  )
-}
+  );
+};
 
 const ExplorerTreeNode = ({
   depth,
@@ -114,52 +126,54 @@ const ExplorerTreeNode = ({
   locateFilePath,
   locateFileRequestId,
   selectedEntryPath,
-  selectedFilePath
+  selectedFilePath,
+  text,
 }: ExplorerTreeNodeProps): React.JSX.Element => {
-  const rowButtonRef = useRef<HTMLButtonElement | null>(null)
-  const isExpanded = expandedDirectoryPaths?.has(node.path) ?? false
+  const rowButtonRef = useRef<HTMLButtonElement | null>(null);
+  const isExpanded = expandedDirectoryPaths?.has(node.path) ?? false;
   const isRenamingEntry =
-    inlineEditor?.type === 'rename' && inlineEditor.targetEntryPath === node.path
+    inlineEditor?.type === "rename" &&
+    inlineEditor.targetEntryPath === node.path;
   const isSelected =
     selectedEntryPath === node.path ||
-    (node.type === 'file' && selectedFilePath === node.path)
-  const rowStyle = { '--depth': depth } as CSSProperties
+    (node.type === "file" && selectedFilePath === node.path);
+  const rowStyle = { "--depth": depth } as CSSProperties;
   const toggleExpanded = (): void => {
-    onDirectoryExpandedChange?.(node.path, !isExpanded)
-  }
+    onDirectoryExpandedChange?.(node.path, !isExpanded);
+  };
   const openContextMenu = (event: MouseEvent): void => {
     if (!onOpenEntryMenu) {
-      return
+      return;
     }
 
-    event.preventDefault()
+    event.preventDefault();
     onOpenEntryMenu({
       clientX: event.clientX,
       clientY: event.clientY,
-      entry: node
-    })
-  }
+      entry: node,
+    });
+  };
 
   useEffect(() => {
-    if (node.type !== 'file' || locateFilePath !== node.path) {
-      return
+    if (node.type !== "file" || locateFilePath !== node.path) {
+      return;
     }
 
-    if (typeof rowButtonRef.current?.scrollIntoView !== 'function') {
-      return
+    if (typeof rowButtonRef.current?.scrollIntoView !== "function") {
+      return;
     }
 
     rowButtonRef.current.scrollIntoView({
-      block: 'nearest',
-      inline: 'nearest'
-    })
-  }, [locateFilePath, locateFileRequestId, node.path, node.type])
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [locateFilePath, locateFileRequestId, node.path, node.type]);
 
-  if (node.type === 'directory') {
+  if (node.type === "directory") {
     const isCreatingInsideDirectory =
-      inlineEditor?.type !== 'rename' &&
-      inlineEditor?.targetDirectoryPath === node.path
-    const isShowingChildren = isExpanded || isCreatingInsideDirectory
+      inlineEditor?.type !== "rename" &&
+      inlineEditor?.targetDirectoryPath === node.path;
+    const isShowingChildren = isExpanded || isCreatingInsideDirectory;
 
     return (
       <li>
@@ -170,29 +184,39 @@ const ExplorerTreeNode = ({
             onCancel={onInlineEditorCancel}
             onChange={onInlineEditorChange}
             onSubmit={onInlineEditorSubmit}
+            text={text}
           />
         ) : (
           <div className="explorer-tree-row" style={rowStyle}>
             <button
               aria-expanded={isShowingChildren}
-              aria-label={`${isShowingChildren ? 'Collapse' : 'Expand'} ${node.name}`}
+              aria-label={text(
+                isShowingChildren
+                  ? "explorer.collapseDirectory"
+                  : "explorer.expandDirectory",
+                { name: node.name },
+              )}
               className="explorer-disclosure-button"
               onClick={toggleExpanded}
               type="button"
             >
-              {isShowingChildren ? 'v' : '>'}
+              {isShowingChildren ? "v" : ">"}
             </button>
             <button
               aria-expanded={isShowingChildren}
-              aria-current={isSelected ? 'page' : undefined}
-              aria-label={getRowAccessibleName(node)}
+              aria-current={isSelected ? "page" : undefined}
+              aria-label={getRowAccessibleName(node, text)}
               className={
-                isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
+                isSelected
+                  ? "explorer-row-button is-active"
+                  : "explorer-row-button"
               }
               onContextMenu={openContextMenu}
               onClick={() => {
-                onSelectEntry(selectedEntryPath === node.path ? null : node.path)
-                toggleExpanded()
+                onSelectEntry(
+                  selectedEntryPath === node.path ? null : node.path,
+                );
+                toggleExpanded();
               }}
               type="button"
             >
@@ -210,6 +234,7 @@ const ExplorerTreeNode = ({
                   onCancel={onInlineEditorCancel}
                   onChange={onInlineEditorChange}
                   onSubmit={onInlineEditorSubmit}
+                  text={text}
                 />
               </li>
             ) : null}
@@ -231,12 +256,13 @@ const ExplorerTreeNode = ({
                 locateFileRequestId={locateFileRequestId}
                 selectedEntryPath={selectedEntryPath}
                 selectedFilePath={selectedFilePath}
+                text={text}
               />
             ))}
           </ul>
         ) : null}
       </li>
-    )
+    );
   }
 
   return (
@@ -248,20 +274,23 @@ const ExplorerTreeNode = ({
           onCancel={onInlineEditorCancel}
           onChange={onInlineEditorChange}
           onSubmit={onInlineEditorSubmit}
+          text={text}
         />
       ) : (
         <div className="explorer-tree-row" style={rowStyle}>
           <span className="explorer-file-spacer" aria-hidden="true" />
           <button
-            aria-current={isSelected ? 'page' : undefined}
-            aria-label={getRowAccessibleName(node)}
+            aria-current={isSelected ? "page" : undefined}
+            aria-label={getRowAccessibleName(node, text)}
             className={
-              isSelected ? 'explorer-row-button is-active' : 'explorer-row-button'
+              isSelected
+                ? "explorer-row-button is-active"
+                : "explorer-row-button"
             }
             onContextMenu={openContextMenu}
             onClick={() => {
-              onSelectEntry(node.path)
-              onSelectFile(node.path)
+              onSelectEntry(node.path);
+              onSelectFile(node.path);
             }}
             ref={rowButtonRef}
             type="button"
@@ -271,8 +300,8 @@ const ExplorerTreeNode = ({
         </div>
       )}
     </li>
-  )
-}
+  );
+};
 
 export const ExplorerTree = ({
   expandedDirectoryPaths,
@@ -288,37 +317,40 @@ export const ExplorerTree = ({
   onSelectEntry,
   onSelectFile,
   selectedEntryPath,
-  selectedFilePath
+  selectedFilePath,
+  text,
 }: ExplorerTreeRootProps): React.JSX.Element => {
-  const [uncontrolledExpandedDirectoryPaths, setUncontrolledExpandedDirectoryPaths] =
-    useState<ReadonlySet<string>>(() => new Set())
+  const [
+    uncontrolledExpandedDirectoryPaths,
+    setUncontrolledExpandedDirectoryPaths,
+  ] = useState<ReadonlySet<string>>(() => new Set());
   const effectiveExpandedDirectoryPaths =
-    expandedDirectoryPaths ?? uncontrolledExpandedDirectoryPaths
+    expandedDirectoryPaths ?? uncontrolledExpandedDirectoryPaths;
   const changeDirectoryExpansion = (
     directoryPath: string,
-    isExpanded: boolean
+    isExpanded: boolean,
   ): void => {
     if (!expandedDirectoryPaths) {
       setUncontrolledExpandedDirectoryPaths((currentPaths) => {
-        const nextPaths = new Set(currentPaths)
+        const nextPaths = new Set(currentPaths);
 
         if (isExpanded) {
-          nextPaths.add(directoryPath)
+          nextPaths.add(directoryPath);
         } else {
-          nextPaths.delete(directoryPath)
+          nextPaths.delete(directoryPath);
         }
 
-        return nextPaths
-      })
+        return nextPaths;
+      });
     }
 
-    onDirectoryExpandedChange?.(directoryPath, isExpanded)
-  }
+    onDirectoryExpandedChange?.(directoryPath, isExpanded);
+  };
 
   return (
     <ul className="explorer-tree explorer-tree-root">
       {inlineEditor &&
-      inlineEditor.type !== 'rename' &&
+      inlineEditor.type !== "rename" &&
       inlineEditor.targetDirectoryPath === null ? (
         <li>
           <ExplorerInlineEditorRow
@@ -327,6 +359,7 @@ export const ExplorerTree = ({
             onCancel={onInlineEditorCancel}
             onChange={onInlineEditorChange}
             onSubmit={onInlineEditorSubmit}
+            text={text}
           />
         </li>
       ) : null}
@@ -348,8 +381,9 @@ export const ExplorerTree = ({
           onSelectFile={onSelectFile}
           selectedEntryPath={selectedEntryPath}
           selectedFilePath={selectedFilePath}
+          text={text}
         />
       ))}
     </ul>
-  )
-}
+  );
+};

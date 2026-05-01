@@ -4,83 +4,95 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor
-} from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+  waitFor,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MarkdownBlockEditor } from '../../src/renderer/src/editor/MarkdownBlockEditor'
+import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
+import {
+  BUILT_IN_APP_LANGUAGE_PACKS,
+  createAppText,
+  type AppText,
+} from "../../src/renderer/src/i18n/appLanguage";
+
+const text: AppText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 
 interface MockHighlightRegistry {
-  readonly delete: ReturnType<typeof vi.fn>
-  readonly set: ReturnType<typeof vi.fn>
+  readonly delete: ReturnType<typeof vi.fn>;
+  readonly set: ReturnType<typeof vi.fn>;
 }
 
 const mockBlockNoteState = vi.hoisted(() => ({
   lastEditor: undefined as
     | {
-        blocksToMarkdownLossy: ReturnType<typeof vi.fn>
-        document: { content: string; id: string; type: string }[]
-        replaceBlocks: ReturnType<typeof vi.fn>
-        transaction: { setMeta: ReturnType<typeof vi.fn> }
-        transact: ReturnType<typeof vi.fn>
-        tryParseMarkdownToBlocks: ReturnType<typeof vi.fn>
+        blocksToMarkdownLossy: ReturnType<typeof vi.fn>;
+        document: { content: string; id: string; type: string }[];
+        replaceBlocks: ReturnType<typeof vi.fn>;
+        transaction: { setMeta: ReturnType<typeof vi.fn> };
+        transact: ReturnType<typeof vi.fn>;
+        tryParseMarkdownToBlocks: ReturnType<typeof vi.fn>;
       }
     | undefined,
   lastOptions: undefined as
     | { uploadFile?: (file: File, blockId?: string) => Promise<string> }
-    | undefined
-}))
+    | undefined,
+}));
 const mockMermaid = vi.hoisted(() => ({
   initialize: vi.fn(),
   render: vi.fn().mockResolvedValue({
-    svg: '<svg role="img"><text>Rendered flowchart</text></svg>'
-  })
-}))
+    svg: '<svg role="img"><text>Rendered flowchart</text></svg>',
+  }),
+}));
 
-vi.mock('@blocknote/react', () => ({
-  useCreateBlockNote: (
-    options?: { uploadFile?: (file: File, blockId?: string) => Promise<string> }
-  ) => {
-    mockBlockNoteState.lastOptions = options
+vi.mock("@blocknote/react", () => ({
+  useCreateBlockNote: (options?: {
+    uploadFile?: (file: File, blockId?: string) => Promise<string>;
+  }) => {
+    mockBlockNoteState.lastOptions = options;
 
     if (!mockBlockNoteState.lastEditor) {
-      const blocks = [{ content: '', id: 'initial', type: 'paragraph' }]
-      const transaction = { setMeta: vi.fn() }
+      const blocks = [{ content: "", id: "initial", type: "paragraph" }];
+      const transaction = { setMeta: vi.fn() };
 
       mockBlockNoteState.lastEditor = {
-        blocksToMarkdownLossy: vi.fn().mockResolvedValue(''),
+        blocksToMarkdownLossy: vi.fn().mockResolvedValue(""),
         document: blocks,
         replaceBlocks: vi.fn(),
         transaction,
         transact: vi.fn((callback: (transaction: unknown) => unknown) =>
-          callback(transaction)
+          callback(transaction),
         ),
-        tryParseMarkdownToBlocks: vi.fn().mockResolvedValue(blocks)
-      }
+        tryParseMarkdownToBlocks: vi.fn().mockResolvedValue(blocks),
+      };
     }
 
-    return mockBlockNoteState.lastEditor
-  }
-}))
+    return mockBlockNoteState.lastEditor;
+  },
+}));
 
-vi.mock('@blocknote/mantine', () => ({
+vi.mock("@blocknote/mantine", () => ({
   BlockNoteView: ({
     className,
-    'data-testid': testId,
+    "data-testid": testId,
     editable,
     editor,
     onChange,
-    theme
+    theme,
   }: {
-    readonly className?: string
-    readonly 'data-testid'?: string
-    readonly editable?: boolean
-    readonly editor: unknown
-    readonly onChange: (editor: unknown) => void
-    readonly theme: 'dark' | 'light'
+    readonly className?: string;
+    readonly "data-testid"?: string;
+    readonly editable?: boolean;
+    readonly editor: unknown;
+    readonly onChange: (editor: unknown) => void;
+    readonly theme: "dark" | "light";
   }) => (
-    <div className={className} data-testid={testId} data-theme={theme} tabIndex={0}>
+    <div
+      className={className}
+      data-testid={testId}
+      data-theme={theme}
+      tabIndex={0}
+    >
       <div
         contentEditable={editable !== false}
         data-testid="mock-contenteditable"
@@ -89,50 +101,50 @@ vi.mock('@blocknote/mantine', () => ({
       />
       <button
         onClick={() => {
-          onChange(editor)
+          onChange(editor);
         }}
         type="button"
       >
         Trigger editor change
       </button>
     </div>
-  )
-}))
+  ),
+}));
 
-vi.mock('mermaid', () => ({
-  default: mockMermaid
-}))
+vi.mock("mermaid", () => ({
+  default: mockMermaid,
+}));
 
-describe('MarkdownBlockEditor accessibility', () => {
+describe("MarkdownBlockEditor accessibility", () => {
   const installHighlightMock = (): MockHighlightRegistry => {
     const registry = {
       delete: vi.fn(),
-      set: vi.fn()
-    }
+      set: vi.fn(),
+    };
 
-    Object.defineProperty(window, 'Highlight', {
+    Object.defineProperty(window, "Highlight", {
       configurable: true,
-      value: vi.fn()
-    })
-    Object.defineProperty(window.CSS, 'highlights', {
+      value: vi.fn(),
+    });
+    Object.defineProperty(window.CSS, "highlights", {
       configurable: true,
-      value: registry
-    })
+      value: registry,
+    });
 
-    return registry
-  }
+    return registry;
+  };
 
   afterEach(() => {
-    cleanup()
-    mockBlockNoteState.lastEditor = undefined
-    mockBlockNoteState.lastOptions = undefined
-    mockMermaid.initialize.mockClear()
-    mockMermaid.render.mockClear()
-    Reflect.deleteProperty(window, 'Highlight')
-    Reflect.deleteProperty(window.CSS, 'highlights')
-  })
+    cleanup();
+    mockBlockNoteState.lastEditor = undefined;
+    mockBlockNoteState.lastOptions = undefined;
+    mockMermaid.initialize.mockClear();
+    mockMermaid.render.mockClear();
+    Reflect.deleteProperty(window, "Highlight");
+    Reflect.deleteProperty(window.CSS, "highlights");
+  });
 
-  it('does not render a manual save control', () => {
+  it("does not render a manual save control", () => {
     render(
       <MarkdownBlockEditor
         colorScheme="light"
@@ -145,19 +157,20 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     expect(
-      screen.queryByRole('button', { name: /save README\.md/i })
-    ).not.toBeInTheDocument()
-  })
+      screen.queryByRole("button", { name: /save README\.md/i }),
+    ).not.toBeInTheDocument();
+  });
 
-  it('renders read-only markdown without propagating editor changes', async () => {
-    const user = userEvent.setup()
-    const onMarkdownChange = vi.fn()
-    const onSaveRequest = vi.fn()
+  it("renders read-only markdown without propagating editor changes", async () => {
+    const user = userEvent.setup();
+    const onMarkdownChange = vi.fn();
+    const onSaveRequest = vi.fn();
 
     render(
       <MarkdownBlockEditor
@@ -172,22 +185,25 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={onMarkdownChange}
         onSaveRequest={onSaveRequest}
         path=".mde/translations/README-summary.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
-    expect(screen.getByTestId('mock-contenteditable')).toHaveAttribute(
-      'contenteditable',
-      'false'
-    )
+    expect(screen.getByTestId("mock-contenteditable")).toHaveAttribute(
+      "contenteditable",
+      "false",
+    );
 
-    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
 
-    expect(onMarkdownChange).not.toHaveBeenCalled()
-    expect(onSaveRequest).not.toHaveBeenCalled()
-  })
+    expect(onMarkdownChange).not.toHaveBeenCalled();
+    expect(onSaveRequest).not.toHaveBeenCalled();
+  });
 
-  it('shows visible dirty state text for unsaved changes', () => {
+  it("shows visible dirty state text for unsaved changes", () => {
     render(
       <MarkdownBlockEditor
         colorScheme="light"
@@ -200,16 +216,17 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
-    expect(screen.getByText(/unsaved changes/i)).toBeVisible()
-  })
+    expect(screen.getByText(/unsaved changes/i)).toBeVisible();
+  });
 
-  it('serializes markdown when the dirty editor loses focus', async () => {
-    const user = userEvent.setup()
-    const onSaveRequest = vi.fn()
+  it("serializes markdown when the dirty editor loses focus", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
 
     render(
       <>
@@ -224,21 +241,24 @@ describe('MarkdownBlockEditor accessibility', () => {
           onMarkdownChange={vi.fn()}
           onSaveRequest={onSaveRequest}
           path="README.md"
+          text={text}
           workspaceRoot="/workspace"
         />
         <button type="button">Outside editor</button>
-      </>
-    )
+      </>,
+    );
 
-    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
-    await user.click(screen.getByRole('button', { name: /outside editor/i }))
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
-    expect(onSaveRequest).toHaveBeenCalledWith('')
-  })
+    expect(onSaveRequest).toHaveBeenCalledWith("");
+  });
 
-  it('saves block editor changes on blur even after the draft has updated', async () => {
-    const user = userEvent.setup()
-    const onSaveRequest = vi.fn()
+  it("saves block editor changes on blur even after the draft has updated", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
     const { rerender } = render(
       <>
         <MarkdownBlockEditor
@@ -252,13 +272,16 @@ describe('MarkdownBlockEditor accessibility', () => {
           onMarkdownChange={vi.fn()}
           onSaveRequest={onSaveRequest}
           path="README.md"
+          text={text}
           workspaceRoot="/workspace"
         />
         <button type="button">Outside editor</button>
-      </>
-    )
+      </>,
+    );
 
-    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
 
     rerender(
       <>
@@ -273,20 +296,21 @@ describe('MarkdownBlockEditor accessibility', () => {
           onMarkdownChange={vi.fn()}
           onSaveRequest={onSaveRequest}
           path="README.md"
+          text={text}
           workspaceRoot="/workspace"
         />
         <button type="button">Outside editor</button>
-      </>
-    )
+      </>,
+    );
 
-    await user.click(screen.getByRole('button', { name: /outside editor/i }))
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
-    expect(onSaveRequest).toHaveBeenCalledWith('')
-  })
+    expect(onSaveRequest).toHaveBeenCalledWith("");
+  });
 
-  it('reports serialized markdown after editor changes', async () => {
-    const user = userEvent.setup()
-    const onMarkdownChange = vi.fn()
+  it("reports serialized markdown after editor changes", async () => {
+    const user = userEvent.setup();
+    const onMarkdownChange = vi.fn();
 
     render(
       <MarkdownBlockEditor
@@ -300,18 +324,21 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={onMarkdownChange}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
-    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
 
-    expect(onMarkdownChange).toHaveBeenCalledWith('')
-  })
+    expect(onMarkdownChange).toHaveBeenCalledWith("");
+  });
 
-  it('reports current search matches and publishes highlight ranges', async () => {
-    const highlightRegistry = installHighlightMock()
-    const onSearchStateChange = vi.fn()
+  it("reports current search matches and publishes highlight ranges", async () => {
+    const highlightRegistry = installHighlightMock();
+    const onSearchStateChange = vi.fn();
 
     render(
       <MarkdownBlockEditor
@@ -328,34 +355,35 @@ describe('MarkdownBlockEditor accessibility', () => {
         onSearchStateChange={onSearchStateChange}
         path="README.md"
         searchQuery="alpha"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     act(() => {
-      screen.getByTestId('mock-contenteditable').textContent =
-        'Alpha beta\nalpha ALPHA'
-    })
+      screen.getByTestId("mock-contenteditable").textContent =
+        "Alpha beta\nalpha ALPHA";
+    });
 
     await waitFor(() => {
       expect(onSearchStateChange).toHaveBeenLastCalledWith({
         activeMatchIndex: 1,
-        matchCount: 3
-      })
-    })
+        matchCount: 3,
+      });
+    });
     expect(highlightRegistry.set).toHaveBeenCalledWith(
-      'mde-editor-search-match',
-      expect.anything()
-    )
+      "mde-editor-search-match",
+      expect.anything(),
+    );
     expect(highlightRegistry.set).toHaveBeenCalledWith(
-      'mde-editor-search-active',
-      expect.anything()
-    )
-  })
+      "mde-editor-search-active",
+      expect.anything(),
+    );
+  });
 
-  it('counts search matches from rendered editor text instead of raw markdown syntax', async () => {
-    installHighlightMock()
-    const onSearchStateChange = vi.fn()
+  it("counts search matches from rendered editor text instead of raw markdown syntax", async () => {
+    installHighlightMock();
+    const onSearchStateChange = vi.fn();
 
     render(
       <MarkdownBlockEditor
@@ -372,23 +400,24 @@ describe('MarkdownBlockEditor accessibility', () => {
         onSearchStateChange={onSearchStateChange}
         path="README.md"
         searchQuery="https"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     act(() => {
-      screen.getByTestId('mock-contenteditable').textContent = 'Link title'
-    })
+      screen.getByTestId("mock-contenteditable").textContent = "Link title";
+    });
 
     await waitFor(() => {
       expect(onSearchStateChange).toHaveBeenLastCalledWith({
         activeMatchIndex: -1,
-        matchCount: 0
-      })
-    })
-  })
+        matchCount: 0,
+      });
+    });
+  });
 
-  it('keeps imported markdown replacement out of the undo history', async () => {
+  it("keeps imported markdown replacement out of the undo history", async () => {
     render(
       <MarkdownBlockEditor
         colorScheme="light"
@@ -401,23 +430,23 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     await waitFor(() => {
-      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalled()
-    })
+      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalled();
+    });
 
-    expect(mockBlockNoteState.lastEditor?.transact).toHaveBeenCalled()
-    expect(mockBlockNoteState.lastEditor?.transaction.setMeta).toHaveBeenCalledWith(
-      'addToHistory',
-      false
-    )
-  })
+    expect(mockBlockNoteState.lastEditor?.transact).toHaveBeenCalled();
+    expect(
+      mockBlockNoteState.lastEditor?.transaction.setMeta,
+    ).toHaveBeenCalledWith("addToHistory", false);
+  });
 
-  it('does not rehydrate the editor after a local autosave updates persisted markdown', async () => {
-    const user = userEvent.setup()
+  it("does not rehydrate the editor after a local autosave updates persisted markdown", async () => {
+    const user = userEvent.setup();
     const { rerender } = render(
       <MarkdownBlockEditor
         colorScheme="light"
@@ -430,17 +459,24 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     await waitFor(() => {
-      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(1)
-    })
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
 
-    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
 
-    const editedMarkdown = ['# Original', '', '  indented middle line'].join('\n')
+    const editedMarkdown = ["# Original", "", "  indented middle line"].join(
+      "\n",
+    );
 
     rerender(
       <MarkdownBlockEditor
@@ -454,9 +490,10 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     rerender(
       <MarkdownBlockEditor
@@ -470,18 +507,21 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     await act(async () => {
-      await Promise.resolve()
-    })
+      await Promise.resolve();
+    });
 
-    expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(1)
-  })
+    expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(
+      1,
+    );
+  });
 
-  it('rehydrates the editor when persisted markdown changes without local edits', async () => {
+  it("rehydrates the editor when persisted markdown changes without local edits", async () => {
     const { rerender } = render(
       <MarkdownBlockEditor
         colorScheme="light"
@@ -494,13 +534,16 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     await waitFor(() => {
-      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(1)
-    })
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
 
     rerender(
       <MarkdownBlockEditor
@@ -514,19 +557,22 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     await waitFor(() => {
-      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(2)
-    })
-  })
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(2);
+    });
+  });
 
-  it('passes pasted image files to the provided image upload handler', async () => {
+  it("passes pasted image files to the provided image upload handler", async () => {
     const onImageUpload = vi
       .fn()
-      .mockResolvedValue('file:///workspace/.mde/assets/image.png')
+      .mockResolvedValue("file:///workspace/.mde/assets/image.png");
 
     render(
       <MarkdownBlockEditor
@@ -540,26 +586,28 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
-    const file = new File([new Uint8Array([137, 80, 78, 71])], 'clipboard.png', {
-      type: 'image/png'
-    })
-    const result = await mockBlockNoteState.lastOptions?.uploadFile?.(file)
+    const file = new File(
+      [new Uint8Array([137, 80, 78, 71])],
+      "clipboard.png",
+      {
+        type: "image/png",
+      },
+    );
+    const result = await mockBlockNoteState.lastOptions?.uploadFile?.(file);
 
-    expect(onImageUpload).toHaveBeenCalledWith(file)
-    expect(result).toBe('file:///workspace/.mde/assets/image.png')
-  })
+    expect(onImageUpload).toHaveBeenCalledWith(file);
+    expect(result).toBe("file:///workspace/.mde/assets/image.png");
+  });
 
-  it('passes dark color scheme to BlockNote and Mermaid rendering', async () => {
-    const markdown = [
-      '```mermaid',
-      'flowchart TD',
-      '  A --> B',
-      '```'
-    ].join('\n')
+  it("passes dark color scheme to BlockNote and Mermaid rendering", async () => {
+    const markdown = ["```mermaid", "flowchart TD", "  A --> B", "```"].join(
+      "\n",
+    );
 
     render(
       <MarkdownBlockEditor
@@ -573,31 +621,32 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
-    expect(screen.getByTestId('blocknote-view')).toHaveAttribute(
-      'data-theme',
-      'dark'
-    )
+    expect(screen.getByTestId("blocknote-view")).toHaveAttribute(
+      "data-theme",
+      "dark",
+    );
     await waitFor(() => {
       expect(mockMermaid.initialize).toHaveBeenCalledWith(
-        expect.objectContaining({ theme: 'dark' })
-      )
-    })
-  })
+        expect.objectContaining({ theme: "dark" }),
+      );
+    });
+  });
 
-  it('renders Mermaid flowchart previews and edits the fenced source', async () => {
-    const onMarkdownChange = vi.fn()
+  it("renders Mermaid flowchart previews and edits the fenced source", async () => {
+    const onMarkdownChange = vi.fn();
     const markdown = [
-      '## End-to-End Flow',
-      '',
-      '```mermaid',
-      'flowchart TD',
-      '  A --> B',
-      '```'
-    ].join('\n')
+      "## End-to-End Flow",
+      "",
+      "```mermaid",
+      "flowchart TD",
+      "  A --> B",
+      "```",
+    ].join("\n");
 
     render(
       <MarkdownBlockEditor
@@ -611,29 +660,30 @@ describe('MarkdownBlockEditor accessibility', () => {
         onMarkdownChange={onMarkdownChange}
         onSaveRequest={vi.fn()}
         path="README.md"
+        text={text}
         workspaceRoot="/workspace"
-      />
-    )
+      />,
+    );
 
     await waitFor(() => {
-      expect(screen.getByTestId('mermaid-flowchart-preview-0')).toContainHTML(
-        '<svg'
-      )
-    })
+      expect(screen.getByTestId("mermaid-flowchart-preview-0")).toContainHTML(
+        "<svg",
+      );
+    });
 
     fireEvent.change(screen.getByLabelText(/mermaid source 1/i), {
-      target: { value: 'flowchart LR\n  B --> C' }
-    })
+      target: { value: "flowchart LR\n  B --> C" },
+    });
 
     expect(onMarkdownChange).toHaveBeenLastCalledWith(
       [
-        '## End-to-End Flow',
-        '',
-        '```mermaid',
-        'flowchart LR',
-        '  B --> C',
-        '```'
-      ].join('\n')
-    )
-  })
-})
+        "## End-to-End Flow",
+        "",
+        "```mermaid",
+        "flowchart LR",
+        "  B --> C",
+        "```",
+      ].join("\n"),
+    );
+  });
+});

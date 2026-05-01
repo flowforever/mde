@@ -12,6 +12,12 @@ All production code changes must include automated test coverage at three levels
 
 Do not add or modify production code without adding or updating the relevant UT, IT, and E2E coverage in the same change. If a change is documentation-only or configuration-only, state why runtime tests are not applicable and still run the available verification commands.
 
+## User-Facing Text
+
+All user-visible production text must come from the app language packs and be accessed through the i18n text helpers. This includes operation menus, dialog copy, prompts, placeholders, button labels, aria labels, titles, status messages, and user-facing fallback errors.
+
+Do not hard-code production UI text in components, renderer services, or preload-facing surfaces. Stable protocol identifiers, persisted keys, external product names, test fixture text, and test expectations may remain literal when they are not user-facing production copy.
+
 ## Release Tagging Policy
 
 When pushing a production-ready feature or bug fix to the release branch, publish it as a new release version in the same handoff unless the user explicitly says not to release it:

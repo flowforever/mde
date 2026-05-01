@@ -1,78 +1,83 @@
 import type {
   AvailableUpdate,
-  UpdateDownloadProgress
-} from '../../../shared/update'
+  UpdateDownloadProgress,
+} from "../../../shared/update";
+import type { AppText } from "../i18n/appLanguage";
 
 export type UpdateDialogStatus =
-  | 'available'
-  | 'downloading'
-  | 'failed'
-  | 'ready'
+  | "available"
+  | "downloading"
+  | "failed"
+  | "ready";
 
 interface UpdateDialogProps {
-  readonly errorMessage: string | null
-  readonly onDismiss: () => void
-  readonly onInstall: () => void
-  readonly progress: UpdateDownloadProgress | null
-  readonly status: UpdateDialogStatus
-  readonly update: AvailableUpdate
+  readonly errorMessage: string | null;
+  readonly onDismiss: () => void;
+  readonly onInstall: () => void;
+  readonly progress: UpdateDownloadProgress | null;
+  readonly status: UpdateDialogStatus;
+  readonly text: AppText;
+  readonly update: AvailableUpdate;
 }
 
 const getProgressLabel = (
-  progress: UpdateDownloadProgress | null
+  progress: UpdateDownloadProgress | null,
+  text: AppText,
 ): string => {
   if (!progress) {
-    return 'Preparing download'
+    return text("updates.preparingDownload");
   }
 
   if (progress.percent !== null) {
-    return `${progress.percent}% downloaded`
+    return text("updates.percentDownloaded", { percent: progress.percent });
   }
 
-  return `${progress.downloadedBytes} bytes downloaded`
-}
+  return text("updates.bytesDownloaded", { bytes: progress.downloadedBytes });
+};
 
 const getPrimaryLabel = (
   update: AvailableUpdate,
-  status: UpdateDialogStatus
+  status: UpdateDialogStatus,
+  text: AppText,
 ): string | null => {
-  if (update.installMode === 'open-dmg' && status !== 'ready') {
-    return 'Download and Install'
+  if (update.installMode === "open-dmg" && status !== "ready") {
+    return text("updates.downloadAndInstall");
   }
 
-  if (update.installMode === 'restart-to-install' && status === 'ready') {
-    return 'Restart to Update'
+  if (update.installMode === "restart-to-install" && status === "ready") {
+    return text("updates.restartToUpdate");
   }
 
-  return null
-}
+  return null;
+};
 
 const getStatusCopy = (
   update: AvailableUpdate,
-  status: UpdateDialogStatus
+  status: UpdateDialogStatus,
+  text: AppText,
 ): string => {
-  if (status === 'ready' && update.installMode === 'open-dmg') {
-    return 'The installer has opened. Quit MDE, drag MDE to Applications, replace the old app, then reopen MDE.'
+  if (status === "ready" && update.installMode === "open-dmg") {
+    return text("updates.installerOpened");
   }
 
-  if (status === 'ready') {
-    return 'The update is ready. Restart MDE to finish installation.'
+  if (status === "ready") {
+    return text("updates.ready");
   }
 
-  if (status === 'downloading') {
-    return update.installMode === 'restart-to-install'
-      ? 'MDE is downloading the Windows update in the background.'
-      : 'MDE is downloading the macOS installer.'
+  if (status === "downloading") {
+    return update.installMode === "restart-to-install"
+      ? text("updates.downloadingWindows")
+      : text("updates.downloadingMac");
   }
 
-  if (status === 'failed') {
-    return 'MDE could not finish the update.'
+  if (status === "failed") {
+    return text("updates.failed");
   }
 
-  return update.installMode === 'open-dmg'
-    ? 'Download the macOS installer, then use the opened install window to replace MDE.'
-    : 'MDE will download the Windows update in the background.'
-}
+  return update.installMode === "open-dmg"
+    ? text("updates.installMac")
+    : text("updates.installWindows");
+};
 
 export const UpdateDialog = ({
   errorMessage,
@@ -80,22 +85,23 @@ export const UpdateDialog = ({
   onInstall,
   progress,
   status,
-  update
+  text,
+  update,
 }: UpdateDialogProps): React.JSX.Element => {
-  const primaryLabel = getPrimaryLabel(update, status)
-  const isPrimaryDisabled = status === 'downloading'
+  const primaryLabel = getPrimaryLabel(update, status, text);
+  const isPrimaryDisabled = status === "downloading";
 
   return (
     <div className="update-dialog-backdrop">
       <div
-        aria-label="MDE update"
+        aria-label={text("updates.mdeUpdate")}
         aria-modal="true"
         className="update-dialog"
         role="dialog"
       >
         <div className="update-dialog-header">
           <div>
-            <p className="update-dialog-kicker">Update available</p>
+            <p className="update-dialog-kicker">{text("updates.available")}</p>
             <h2>MDE {update.latestVersion}</h2>
           </div>
           <button
@@ -103,27 +109,28 @@ export const UpdateDialog = ({
             onClick={onDismiss}
             type="button"
           >
-            {status === 'ready' ? 'Done' : 'Later'}
+            {status === "ready" ? text("common.done") : text("common.later")}
           </button>
         </div>
         <div className="update-dialog-content">
           <p className="update-dialog-status">
-            {getStatusCopy(update, status)}
+            {getStatusCopy(update, status, text)}
           </p>
-          {status === 'downloading' ? (
+          {status === "downloading" ? (
             <div className="update-progress" aria-live="polite">
               <div className="update-progress-track">
                 <div
                   className="update-progress-value"
                   style={{
                     width:
-                      progress?.percent !== null && progress?.percent !== undefined
+                      progress?.percent !== null &&
+                      progress?.percent !== undefined
                         ? `${progress.percent}%`
-                        : '18%'
+                        : "18%",
                   }}
                 />
               </div>
-              <span>{getProgressLabel(progress)}</span>
+              <span>{getProgressLabel(progress, text)}</span>
             </div>
           ) : null}
           {errorMessage ? (
@@ -149,5 +156,5 @@ export const UpdateDialog = ({
         </div>
       </div>
     </div>
-  )
-}
+  );
+};

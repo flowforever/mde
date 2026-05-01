@@ -5,33 +5,33 @@ import {
   render,
   screen,
   waitFor,
-  within
-} from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 interface MockMarkdownBlockEditorProps {
-  readonly activeSearchMatchIndex?: number
-  readonly colorScheme: 'dark' | 'light'
-  readonly errorMessage: string | null
-  readonly isDirty: boolean
-  readonly isReadOnly?: boolean
-  readonly isSaving: boolean
-  readonly markdown: string
-  readonly onMarkdownChange: (contents: string) => void
+  readonly activeSearchMatchIndex?: number;
+  readonly colorScheme: "dark" | "light";
+  readonly errorMessage: string | null;
+  readonly isDirty: boolean;
+  readonly isReadOnly?: boolean;
+  readonly isSaving: boolean;
+  readonly markdown: string;
+  readonly onMarkdownChange: (contents: string) => void;
   readonly onSearchStateChange?: (state: {
-    readonly activeMatchIndex: number
-    readonly matchCount: number
-  }) => void
-  readonly path: string
-  readonly searchQuery?: string
+    readonly activeMatchIndex: number;
+    readonly matchCount: number;
+  }) => void;
+  readonly path: string;
+  readonly searchQuery?: string;
 }
 
 const mockEditorState = vi.hoisted(() => ({
-  changeIndex: 0
-}))
+  changeIndex: 0,
+}));
 
-vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
+vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
   const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
     <section aria-label="Mock editor">
       <span>{props.path}</span>
@@ -40,183 +40,242 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
       {props.searchQuery ? (
         <span data-testid="mock-editor-search-query">{props.searchQuery}</span>
       ) : null}
-      {props.isReadOnly ? <span data-testid="mock-editor-readonly">read-only</span> : null}
+      {props.isReadOnly ? (
+        <span data-testid="mock-editor-readonly">read-only</span>
+      ) : null}
       {props.isDirty ? <span>Unsaved changes</span> : null}
       {props.isSaving ? <span>Saving...</span> : null}
       {props.errorMessage ? <p role="alert">{props.errorMessage}</p> : null}
       <button
         onClick={() => {
           if (props.isReadOnly) {
-            return
+            return;
           }
 
-          mockEditorState.changeIndex += 1
-          props.onMarkdownChange(`# Changed ${mockEditorState.changeIndex}`)
+          mockEditorState.changeIndex += 1;
+          props.onMarkdownChange(`# Changed ${mockEditorState.changeIndex}`);
         }}
         type="button"
       >
         Change mock markdown
       </button>
     </section>
-  )
+  );
 
-  return { MarkdownBlockEditor: MockMarkdownBlockEditor }
-})
+  return { MarkdownBlockEditor: MockMarkdownBlockEditor };
+});
 
-import { App } from '../../src/renderer/src/app/App'
-import { APP_THEME_STORAGE_KEY } from '../../src/renderer/src/theme/appThemes'
-import type { AiApi, AiGenerationResult } from '../../src/shared/ai'
-import type { TreeNode } from '../../src/shared/fileTree'
-import type { UpdateApi } from '../../src/shared/update'
-import type { EditorApi } from '../../src/shared/workspace'
+import { App } from "../../src/renderer/src/app/App";
+import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
+import type { AiApi, AiGenerationResult } from "../../src/shared/ai";
+import type { TreeNode } from "../../src/shared/fileTree";
+import type { UpdateApi } from "../../src/shared/update";
+import type { EditorApi } from "../../src/shared/workspace";
 
 const createDeferred = <Value,>(): {
-  readonly promise: Promise<Value>
-  readonly reject: (reason?: unknown) => void
-  readonly resolve: (value: Value) => void
+  readonly promise: Promise<Value>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: Value) => void;
 } => {
-  let resolveDeferred: (value: Value) => void = () => undefined
-  let rejectDeferred: (reason?: unknown) => void = () => undefined
+  let resolveDeferred: (value: Value) => void = () => undefined;
+  let rejectDeferred: (reason?: unknown) => void = () => undefined;
   const promise = new Promise<Value>((resolve, reject) => {
-    resolveDeferred = resolve
-    rejectDeferred = reject
-  })
+    resolveDeferred = resolve;
+    rejectDeferred = reject;
+  });
 
   return {
     promise,
     reject: rejectDeferred,
-    resolve: resolveDeferred
-  }
-}
+    resolve: resolveDeferred,
+  };
+};
 
 const mockSystemThemePreference = (initialMatches: boolean) => {
-  const listeners = new Set<(event: MediaQueryListEvent) => void>()
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
   const mediaQueryList = {
-    addEventListener: vi.fn((_type: string, listener: EventListenerOrEventListenerObject) => {
-      if (typeof listener === 'function') {
-        listeners.add(listener as (event: MediaQueryListEvent) => void)
-      }
-    }),
+    addEventListener: vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject) => {
+        if (typeof listener === "function") {
+          listeners.add(listener as (event: MediaQueryListEvent) => void);
+        }
+      },
+    ),
     addListener: vi.fn((listener: (event: MediaQueryListEvent) => void) => {
-      listeners.add(listener)
+      listeners.add(listener);
     }),
     dispatchEvent: vi.fn(),
     matches: initialMatches,
-    media: '(prefers-color-scheme: dark)',
+    media: "(prefers-color-scheme: dark)",
     onchange: null,
     removeEventListener: vi.fn(
       (_type: string, listener: EventListenerOrEventListenerObject) => {
-        if (typeof listener === 'function') {
-          listeners.delete(listener as (event: MediaQueryListEvent) => void)
+        if (typeof listener === "function") {
+          listeners.delete(listener as (event: MediaQueryListEvent) => void);
         }
-      }
+      },
     ),
     removeListener: vi.fn((listener: (event: MediaQueryListEvent) => void) => {
-        listeners.delete(listener)
-    })
-  } as unknown as MediaQueryList
+      listeners.delete(listener);
+    }),
+  } as unknown as MediaQueryList;
 
-  Object.defineProperty(window, 'matchMedia', {
+  Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: vi.fn().mockReturnValue(mediaQueryList)
-  })
+    value: vi.fn().mockReturnValue(mediaQueryList),
+  });
 
   return {
     setMatches: (matches: boolean) => {
-      Object.defineProperty(mediaQueryList, 'matches', {
+      Object.defineProperty(mediaQueryList, "matches", {
         configurable: true,
-        value: matches
-      })
+        value: matches,
+      });
       listeners.forEach((listener) => {
         listener({
           matches,
-          media: '(prefers-color-scheme: dark)'
-        } as MediaQueryListEvent)
-      })
-    }
-  }
-}
+          media: "(prefers-color-scheme: dark)",
+        } as MediaQueryListEvent);
+      });
+    },
+  };
+};
 
-describe('App shell', () => {
+const mockNavigatorLanguages = (languages: readonly string[]): void => {
+  Object.defineProperty(window.navigator, "languages", {
+    configurable: true,
+    value: languages,
+  });
+  Object.defineProperty(window.navigator, "language", {
+    configurable: true,
+    value: languages[0] ?? "en-US",
+  });
+};
+
+describe("App shell", () => {
   afterEach(() => {
-    cleanup()
-    vi.useRealTimers()
-    mockEditorState.changeIndex = 0
-    localStorage.clear()
-    document.title = 'MDE'
-    Reflect.deleteProperty(window, 'aiApi')
-    Reflect.deleteProperty(window, 'editorApi')
-    Reflect.deleteProperty(window, 'updateApi')
-  })
+    cleanup();
+    vi.useRealTimers();
+    mockEditorState.changeIndex = 0;
+    localStorage.clear();
+    document.title = "MDE";
+    Reflect.deleteProperty(window, "aiApi");
+    Reflect.deleteProperty(window, "editorApi");
+    Reflect.deleteProperty(window, "updateApi");
+    mockNavigatorLanguages(["en-US"]);
+  });
 
-  it('opens a centered workspace popup on initial empty launch', () => {
-    render(<App />)
+  it("uses the system language on first launch and persists Preference language changes", async () => {
+    const user = userEvent.setup();
 
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'manuscript')
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme-family', 'light')
-    expect(screen.getByRole('main')).toHaveAttribute('data-panel-family', 'light')
-    expect(screen.getByRole('button', { name: /open settings/i })).toBeEnabled()
-    expect(
-      screen.getByRole('dialog', { name: /workspace manager/i })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /^open workspace$/i })
-    ).toBeVisible()
-    expect(
-      screen.getByRole('button', { name: /open new workspace/i })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /open markdown file/i })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('searchbox', { name: /search workspaces and files/i })
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
-  })
+    mockNavigatorLanguages(["zh-CN", "en-US"]);
 
-  it('reopens the initial workspace popup from the trigger after dismissal', async () => {
-    const user = userEvent.setup()
-
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: /close workspace popup/i }))
+    render(<App />);
 
     expect(
-      screen.queryByRole('dialog', { name: /workspace manager/i })
-    ).not.toBeInTheDocument()
+      await screen.findByRole("dialog", { name: /工作区管理/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /打开工作区/ })).toBeVisible();
+    expect(document.documentElement.lang).toBe("zh-CN");
 
-    await user.click(screen.getByRole('button', { name: /^open workspace$/i }))
+    await user.click(screen.getByRole("button", { name: /设置/ }));
+    await user.click(screen.getByRole("button", { name: /偏好/ }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /语言/ }),
+      "en",
+    );
+
+    expect(screen.getByRole("heading", { name: /^Settings$/ })).toBeVisible();
+    expect(localStorage.getItem("mde.appLanguagePreference")).toBe("en");
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("opens a centered workspace popup on initial empty launch", () => {
+    render(<App />);
+
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-theme",
+      "manuscript",
+    );
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-theme-family",
+      "light",
+    );
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-panel-family",
+      "light",
+    );
+    expect(
+      screen.getByRole("button", { name: /open settings/i }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("dialog", { name: /workspace manager/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /^open workspace$/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /open new workspace/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /open markdown file/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: /search workspaces and files/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("reopens the initial workspace popup from the trigger after dismissal", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(
+      screen.getByRole("button", { name: /close workspace popup/i }),
+    );
 
     expect(
-      screen.getByRole('dialog', { name: /workspace manager/i })
-    ).toBeInTheDocument()
-  })
+      screen.queryByRole("dialog", { name: /workspace manager/i }),
+    ).not.toBeInTheDocument();
 
-  it('keeps initial empty states visible by text', () => {
-    render(<App />)
+    await user.click(screen.getByRole("button", { name: /^open workspace$/i }));
 
     expect(
-      screen.getByText(/open a folder to browse markdown files/i)
-    ).toBeVisible()
-    expect(screen.getByRole('heading', { name: /select a folder to begin/i }))
-      .toBeVisible()
-  })
+      screen.getByRole("dialog", { name: /workspace manager/i }),
+    ).toBeInTheDocument();
+  });
 
-  it('surfaces a useful error when the preload editor API is missing', async () => {
-    const user = userEvent.setup()
+  it("keeps initial empty states visible by text", () => {
+    render(<App />);
 
-    render(<App />)
+    expect(
+      screen.getByText(/open a folder to browse markdown files/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: /select a folder to begin/i }),
+    ).toBeVisible();
+  });
 
-    await user.click(screen.getByRole('button', { name: /open new workspace/i }))
+  it("surfaces a useful error when the preload editor API is missing", async () => {
+    const user = userEvent.setup();
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/editor api unavailable/i)
-  })
+    render(<App />);
 
-  it('opens a launch path supplied by preload', async () => {
+    await user.click(
+      screen.getByRole("button", { name: /open new workspace/i }),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /editor api unavailable/i,
+    );
+  });
+
+  it("opens a launch path supplied by preload", async () => {
     const editorApi = {
       consumeLaunchPath: vi
         .fn()
-        .mockResolvedValueOnce('/notes/API.md')
+        .mockResolvedValueOnce("/notes/API.md")
         .mockResolvedValue(null),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
@@ -226,49 +285,49 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/notes/API.md',
-        name: 'API.md',
-        openedFilePath: 'API.md',
-        rootPath: '/notes',
-        tree: [{ name: 'API.md', path: 'API.md', type: 'file' }],
-        type: 'file'
+        filePath: "/notes/API.md",
+        name: "API.md",
+        openedFilePath: "API.md",
+        rootPath: "/notes",
+        tree: [{ name: "API.md", path: "API.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# API',
-        path: 'API.md'
+        contents: "# API",
+        path: "API.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
     await waitFor(() => {
-      expect(editorApi.openPath).toHaveBeenCalledWith('/notes/API.md')
-    })
+      expect(editorApi.openPath).toHaveBeenCalledWith("/notes/API.md");
+    });
 
-    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith('API.md', '/notes')
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith("API.md", "/notes");
     expect(
-      await screen.findByRole('button', { name: /manage workspaces/i })
-    ).toHaveTextContent('API.md')
+      await screen.findByRole("button", { name: /manage workspaces/i }),
+    ).toHaveTextContent("API.md");
     await waitFor(() => {
-      expect(document.title).toBe('API.md - /notes')
-    })
+      expect(document.title).toBe("API.md - /notes");
+    });
     expect(
-      screen.queryByRole('dialog', { name: /workspace manager/i })
-    ).not.toBeInTheDocument()
-  })
+      screen.queryByRole("dialog", { name: /workspace manager/i }),
+    ).not.toBeInTheDocument();
+  });
 
-  it('switches to a remembered workspace from the workspace menu', async () => {
-    const user = userEvent.setup()
+  it("switches to a remembered workspace from the workspace menu", async () => {
+    const user = userEvent.setup();
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -278,58 +337,62 @@ describe('App shell', () => {
       onLaunchPath: vi.fn(() => vi.fn()),
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
-      openPath: vi.fn().mockRejectedValue(
-        new Error(
-          "Error invoking remote method 'workspace:open-path': Error: No handler registered for 'workspace:open-path'"
-        )
-      ),
+      openPath: vi
+        .fn()
+        .mockRejectedValue(
+          new Error(
+            "Error invoking remote method 'workspace:open-path': Error: No handler registered for 'workspace:open-path'",
+          ),
+        ),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
-        name: 'Second Workspace',
-        rootPath: '/workspaces/second',
+        name: "Second Workspace",
+        rootPath: "/workspaces/second",
         tree: [],
-        type: 'workspace'
+        type: "workspace",
       }),
       readMarkdownFile: vi.fn(),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.recentWorkspaces',
+      "mde.recentWorkspaces",
       JSON.stringify([
         {
-          name: 'Second Workspace',
-          rootPath: '/workspaces/second',
-          type: 'workspace'
-        }
-      ])
-    )
+          name: "Second Workspace",
+          rootPath: "/workspaces/second",
+          type: "workspace",
+        },
+      ]),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('dialog', { name: /workspace manager/i })
+    await screen.findByRole("dialog", { name: /workspace manager/i });
     await user.click(
-      screen.getByRole('button', {
-        name: /switch to workspace Second Workspace/i
-      })
-    )
+      screen.getByRole("button", {
+        name: /switch to workspace Second Workspace/i,
+      }),
+    );
 
-    expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspaces/second')
-    expect(editorApi.openPath).not.toHaveBeenCalled()
+    expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith(
+      "/workspaces/second",
+    );
+    expect(editorApi.openPath).not.toHaveBeenCalled();
     expect(
-      await screen.findByRole('button', { name: /manage workspaces/i })
-    ).toHaveTextContent('Second Workspace')
-    expect(document.title).toBe('/workspaces/second')
-  })
+      await screen.findByRole("button", { name: /manage workspaces/i }),
+    ).toHaveTextContent("Second Workspace");
+    expect(document.title).toBe("/workspaces/second");
+  });
 
-  it('opens a new workspace dialog selection in another window when one is already active', async () => {
-    const user = userEvent.setup()
+  it("opens a new workspace dialog selection in another window when one is already active", async () => {
+    const user = userEvent.setup();
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -343,49 +406,55 @@ describe('App shell', () => {
       openPathInNewWindow: vi.fn(),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
-        name: 'Current Workspace',
-        rootPath: '/workspaces/current',
+        name: "Current Workspace",
+        rootPath: "/workspaces/current",
         tree: [],
-        type: 'workspace'
+        type: "workspace",
       }),
       openWorkspaceInNewWindow: vi.fn().mockResolvedValue(true),
       readMarkdownFile: vi.fn(),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.activeWorkspace',
+      "mde.activeWorkspace",
       JSON.stringify({
-        name: 'Current Workspace',
-        rootPath: '/workspaces/current',
-        type: 'workspace'
-      })
-    )
+        name: "Current Workspace",
+        rootPath: "/workspaces/current",
+        type: "workspace",
+      }),
+    );
 
-    render(<App />)
+    render(<App />);
 
     expect(
-      await screen.findByRole('button', { name: /manage workspaces/i })
-    ).toHaveTextContent('Current Workspace')
+      await screen.findByRole("button", { name: /manage workspaces/i }),
+    ).toHaveTextContent("Current Workspace");
 
-    await user.click(screen.getByRole('button', { name: /manage workspaces/i }))
-    await user.click(screen.getByRole('button', { name: /open new workspace/i }))
+    await user.click(
+      screen.getByRole("button", { name: /manage workspaces/i }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /open new workspace/i }),
+    );
 
-    expect(editorApi.openWorkspaceInNewWindow).toHaveBeenCalledTimes(1)
-    expect(editorApi.openWorkspace).not.toHaveBeenCalled()
-    expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspaces/current')
+    expect(editorApi.openWorkspaceInNewWindow).toHaveBeenCalledTimes(1);
+    expect(editorApi.openWorkspace).not.toHaveBeenCalled();
+    expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith(
+      "/workspaces/current",
+    );
     expect(
-      screen.getByRole('button', { name: /manage workspaces/i })
-    ).toHaveTextContent('Current Workspace')
-  })
+      screen.getByRole("button", { name: /manage workspaces/i }),
+    ).toHaveTextContent("Current Workspace");
+  });
 
-  it('opens a dropped external path in a new window when a workspace is active', async () => {
+  it("opens a dropped external path in a new window when a workspace is active", async () => {
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -399,59 +468,61 @@ describe('App shell', () => {
       openPathInNewWindow: vi.fn().mockResolvedValue(undefined),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
-        name: 'Current Workspace',
-        rootPath: '/workspaces/current',
+        name: "Current Workspace",
+        rootPath: "/workspaces/current",
         tree: [],
-        type: 'workspace'
+        type: "workspace",
       }),
       openWorkspaceInNewWindow: vi.fn(),
       readMarkdownFile: vi.fn(),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
-    const droppedFile = new File(['# External'], 'external.md', {
-      type: 'text/markdown'
-    })
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+    const droppedFile = new File(["# External"], "external.md", {
+      type: "text/markdown",
+    });
 
-    Object.defineProperty(droppedFile, 'path', {
+    Object.defineProperty(droppedFile, "path", {
       configurable: true,
-      value: '/external/external.md'
-    })
-    Object.defineProperty(window, 'editorApi', {
+      value: "/external/external.md",
+    });
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.activeWorkspace',
+      "mde.activeWorkspace",
       JSON.stringify({
-        name: 'Current Workspace',
-        rootPath: '/workspaces/current',
-        type: 'workspace'
-      })
-    )
+        name: "Current Workspace",
+        rootPath: "/workspaces/current",
+        type: "workspace",
+      }),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('button', { name: /manage workspaces/i })
+    await screen.findByRole("button", { name: /manage workspaces/i });
 
-    fireEvent.drop(screen.getByRole('main'), {
+    fireEvent.drop(screen.getByRole("main"), {
       dataTransfer: {
         files: [droppedFile],
-        getData: vi.fn().mockReturnValue('')
-      }
-    })
+        getData: vi.fn().mockReturnValue(""),
+      },
+    });
 
     await waitFor(() => {
       expect(editorApi.openPathInNewWindow).toHaveBeenCalledWith(
-        '/external/external.md'
-      )
-    })
-    expect(editorApi.openPath).not.toHaveBeenCalledWith('/external/external.md')
-  })
+        "/external/external.md",
+      );
+    });
+    expect(editorApi.openPath).not.toHaveBeenCalledWith(
+      "/external/external.md",
+    );
+  });
 
-  it('switches to a remembered file from the workspace menu without generic openPath IPC', async () => {
-    const user = userEvent.setup()
+  it("switches to a remembered file from the workspace menu without generic openPath IPC", async () => {
+    const user = userEvent.setup();
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -461,66 +532,68 @@ describe('App shell', () => {
       onLaunchPath: vi.fn(() => vi.fn()),
       openFile: vi.fn(),
       openFileByPath: vi.fn().mockResolvedValue({
-        filePath: '/notes/API.md',
-        name: 'API.md',
-        openedFilePath: 'API.md',
-        rootPath: '/notes',
-        tree: [{ name: 'API.md', path: 'API.md', type: 'file' }],
-        type: 'file'
+        filePath: "/notes/API.md",
+        name: "API.md",
+        openedFilePath: "API.md",
+        rootPath: "/notes",
+        tree: [{ name: "API.md", path: "API.md", type: "file" }],
+        type: "file",
       }),
-      openPath: vi.fn().mockRejectedValue(
-        new Error(
-          "Error invoking remote method 'workspace:open-path': Error: No handler registered for 'workspace:open-path'"
-        )
-      ),
+      openPath: vi
+        .fn()
+        .mockRejectedValue(
+          new Error(
+            "Error invoking remote method 'workspace:open-path': Error: No handler registered for 'workspace:open-path'",
+          ),
+        ),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# API',
-        path: 'API.md'
+        contents: "# API",
+        path: "API.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.recentWorkspaces',
+      "mde.recentWorkspaces",
       JSON.stringify([
         {
-          filePath: '/notes/API.md',
-          name: 'API.md',
-          openedFilePath: 'API.md',
-          rootPath: '/notes',
-          type: 'file'
-        }
-      ])
-    )
+          filePath: "/notes/API.md",
+          name: "API.md",
+          openedFilePath: "API.md",
+          rootPath: "/notes",
+          type: "file",
+        },
+      ]),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('dialog', { name: /workspace manager/i })
+    await screen.findByRole("dialog", { name: /workspace manager/i });
     await user.click(
-      screen.getByRole('button', {
-        name: /switch to file API\.md/i
-      })
-    )
+      screen.getByRole("button", {
+        name: /switch to file API\.md/i,
+      }),
+    );
 
-    expect(editorApi.openFileByPath).toHaveBeenCalledWith('/notes/API.md')
-    expect(editorApi.openPath).not.toHaveBeenCalled()
-    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith('API.md', '/notes')
+    expect(editorApi.openFileByPath).toHaveBeenCalledWith("/notes/API.md");
+    expect(editorApi.openPath).not.toHaveBeenCalled();
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith("API.md", "/notes");
     expect(
-      await screen.findByRole('button', { name: /manage workspaces/i })
-    ).toHaveTextContent('API.md')
-    expect(document.title).toBe('API.md - /notes')
-  })
+      await screen.findByRole("button", { name: /manage workspaces/i }),
+    ).toHaveTextContent("API.md");
+    expect(document.title).toBe("API.md - /notes");
+  });
 
-  it('restores the active workspace and last opened file on renderer launch', async () => {
-    const user = userEvent.setup()
+  it("restores the active workspace and last opened file on renderer launch", async () => {
+    const user = userEvent.setup();
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -533,82 +606,82 @@ describe('App shell', () => {
       openPath: vi.fn(),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
-        name: 'Workspace',
-        rootPath: '/workspace',
+        name: "Workspace",
+        rootPath: "/workspace",
         tree: [
-          { name: 'README.md', path: 'README.md', type: 'file' },
+          { name: "README.md", path: "README.md", type: "file" },
           {
             children: [
-              { name: 'intro.md', path: 'docs/intro.md', type: 'file' }
+              { name: "intro.md", path: "docs/intro.md", type: "file" },
             ],
-            name: 'docs',
-            path: 'docs',
-            type: 'directory'
-          }
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
         ],
-        type: 'workspace'
+        type: "workspace",
       }),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Intro',
-        path: 'docs/intro.md'
+        contents: "# Intro",
+        path: "docs/intro.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.activeWorkspace',
+      "mde.activeWorkspace",
       JSON.stringify({
-        name: 'Workspace',
-        rootPath: '/workspace',
-        type: 'workspace'
-      })
-    )
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
     localStorage.setItem(
-      'mde.workspaceFileHistory',
+      "mde.workspaceFileHistory",
       JSON.stringify([
         {
-          lastOpenedFilePath: 'docs/intro.md',
-          recentFilePaths: ['docs/intro.md', 'README.md'],
-          workspaceRoot: '/workspace'
-        }
-      ])
-    )
+          lastOpenedFilePath: "docs/intro.md",
+          recentFilePaths: ["docs/intro.md", "README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
 
-    render(<App />)
+    render(<App />);
 
     await waitFor(() => {
-      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspace')
-    })
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith("/workspace");
+    });
     expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
-      'docs/intro.md',
-      '/workspace'
-    )
-    expect(await screen.findAllByText('docs/intro.md')).not.toHaveLength(0)
+      "docs/intro.md",
+      "/workspace",
+    );
+    expect(await screen.findAllByText("docs/intro.md")).not.toHaveLength(0);
     await user.click(
-      screen.getByRole('button', { name: /open recent file README\.md/i })
-    )
+      screen.getByRole("button", { name: /open recent file README\.md/i }),
+    );
     await waitFor(() => {
       expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
-        'README.md',
-        '/workspace'
-      )
-    })
+        "README.md",
+        "/workspace",
+      );
+    });
     expect(
-      screen.queryByRole('dialog', { name: /workspace manager/i })
-    ).not.toBeInTheDocument()
-  })
+      screen.queryByRole("dialog", { name: /workspace manager/i }),
+    ).not.toBeInTheDocument();
+  });
 
-  it('hydrates and renders at most twenty recent files in the explorer', async () => {
+  it("hydrates and renders at most twenty recent files in the explorer", async () => {
     const recentFilePaths = Array.from(
       { length: 24 },
-      (_value, index) => `docs/recent-${index + 1}.md`
-    )
+      (_value, index) => `docs/recent-${index + 1}.md`,
+    );
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -621,217 +694,231 @@ describe('App shell', () => {
       openPath: vi.fn(),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
-        name: 'Workspace',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'workspace'
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
       }),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Recent 1',
-        path: 'docs/recent-24.md'
+        contents: "# Recent 1",
+        path: "docs/recent-24.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.activeWorkspace',
+      "mde.activeWorkspace",
       JSON.stringify({
-        name: 'Workspace',
-        rootPath: '/workspace',
-        type: 'workspace'
-      })
-    )
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
     localStorage.setItem(
-      'mde.workspaceFileHistory',
+      "mde.workspaceFileHistory",
       JSON.stringify([
         {
-          lastOpenedFilePath: 'docs/recent-24.md',
+          lastOpenedFilePath: "docs/recent-24.md",
           recentFilePaths,
-          workspaceRoot: '/workspace'
-        }
-      ])
-    )
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
 
-    render(<App />)
+    render(<App />);
 
     await waitFor(() => {
-      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspace')
-    })
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith("/workspace");
+    });
 
     expect(
-      await screen.findAllByRole('button', { name: /open recent file/i })
-    ).toHaveLength(20)
+      await screen.findAllByRole("button", { name: /open recent file/i }),
+    ).toHaveLength(20);
     expect(
-      screen.getByRole('button', { name: /open recent file docs\/recent-1\.md/i })
-    ).toBeVisible()
+      screen.getByRole("button", {
+        name: /open recent file docs\/recent-1\.md/i,
+      }),
+    ).toBeVisible();
     expect(
-      screen.getByRole('button', { name: /open recent file docs\/recent-20\.md/i })
-    ).toBeVisible()
+      screen.getByRole("button", {
+        name: /open recent file docs\/recent-20\.md/i,
+      }),
+    ).toBeVisible();
     expect(
-      screen.queryByRole('button', { name: /open recent file docs\/recent-21\.md/i })
-    ).not.toBeInTheDocument()
-  })
+      screen.queryByRole("button", {
+        name: /open recent file docs\/recent-21\.md/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
 
-  it('refreshes the root, expanded folders, and current file ancestors from explorer refresh', async () => {
-    const user = userEvent.setup()
+  it("refreshes the root, expanded folders, and current file ancestors from explorer refresh", async () => {
+    const user = userEvent.setup();
     const nestedChildren: readonly TreeNode[] = [
-      { name: 'deep.md', path: 'docs/nested/deep.md', type: 'file' }
-    ]
+      { name: "deep.md", path: "docs/nested/deep.md", type: "file" },
+    ];
     const docsChildren: readonly TreeNode[] = [
       {
         children: nestedChildren,
-        name: 'nested',
-        path: 'docs/nested',
-        type: 'directory'
+        name: "nested",
+        path: "docs/nested",
+        type: "directory",
       },
-      { name: 'intro.md', path: 'docs/intro.md', type: 'file' }
-    ]
+      { name: "intro.md", path: "docs/intro.md", type: "file" },
+    ];
     const rootTree: readonly TreeNode[] = [
       {
         children: docsChildren,
-        name: 'docs',
-        path: 'docs',
-        type: 'directory'
-      }
-    ]
+        name: "docs",
+        path: "docs",
+        type: "directory",
+      },
+    ];
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
-      listDirectory: vi.fn((directoryPath: string): Promise<readonly TreeNode[]> => {
-        if (directoryPath === 'docs') {
-          return Promise.resolve(docsChildren)
-        }
+      listDirectory: vi.fn(
+        (directoryPath: string): Promise<readonly TreeNode[]> => {
+          if (directoryPath === "docs") {
+            return Promise.resolve(docsChildren);
+          }
 
-        if (directoryPath === 'docs/nested') {
-          return Promise.resolve(nestedChildren)
-        }
+          if (directoryPath === "docs/nested") {
+            return Promise.resolve(nestedChildren);
+          }
 
-        return Promise.resolve(rootTree)
-      }),
+          return Promise.resolve(rootTree);
+        },
+      ),
       onLaunchPath: vi.fn(() => vi.fn()),
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn(),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn().mockResolvedValue({
-        name: 'workspace',
-        rootPath: '/workspace',
+        name: "workspace",
+        rootPath: "/workspace",
         tree: rootTree,
-        type: 'workspace'
+        type: "workspace",
       }),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Deep',
-        path: 'docs/nested/deep.md'
+        contents: "# Deep",
+        path: "docs/nested/deep.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
-      'mde.activeWorkspace',
+      "mde.activeWorkspace",
       JSON.stringify({
-        name: 'workspace',
-        rootPath: '/workspace',
-        type: 'workspace'
-      })
-    )
+        name: "workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
     localStorage.setItem(
-      'mde.workspaceFileHistory',
+      "mde.workspaceFileHistory",
       JSON.stringify([
         {
-          lastOpenedFilePath: 'docs/nested/deep.md',
-          recentFilePaths: ['docs/nested/deep.md'],
-          workspaceRoot: '/workspace'
-        }
-      ])
-    )
+          lastOpenedFilePath: "docs/nested/deep.md",
+          recentFilePaths: ["docs/nested/deep.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
 
-    render(<App />)
+    render(<App />);
 
     await waitFor(() => {
       expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
-        'docs/nested/deep.md',
-        '/workspace'
-      )
-    })
-    await user.click(screen.getByRole('button', { name: /expand docs/i }))
+        "docs/nested/deep.md",
+        "/workspace",
+      );
+    });
+    await user.click(screen.getByRole("button", { name: /expand docs/i }));
 
     await waitFor(() => {
-      expect(editorApi.listDirectory).toHaveBeenCalledWith('docs')
-    })
-    editorApi.listDirectory.mockClear()
+      expect(editorApi.listDirectory).toHaveBeenCalledWith("docs");
+    });
+    editorApi.listDirectory.mockClear();
 
-    await user.click(screen.getByRole('button', { name: /refresh explorer/i }))
+    await user.click(screen.getByRole("button", { name: /refresh explorer/i }));
 
     await waitFor(() => {
       expect(
-        editorApi.listDirectory.mock.calls.map(([directoryPath]) => directoryPath)
-      ).toEqual(['', 'docs', 'docs/nested'])
-    })
-  })
+        editorApi.listDirectory.mock.calls.map(
+          ([directoryPath]) => directoryPath,
+        ),
+      ).toEqual(["", "docs", "docs/nested"]);
+    });
+  });
 
-  it('searches and forgets remembered workspace resources in the popup', async () => {
-    const user = userEvent.setup()
+  it("searches and forgets remembered workspace resources in the popup", async () => {
+    const user = userEvent.setup();
 
     localStorage.setItem(
-      'mde.recentWorkspaces',
+      "mde.recentWorkspaces",
       JSON.stringify([
         ...Array.from({ length: 12 }, (_, index) => ({
           name: `Workspace ${index + 1}`,
           rootPath: `/workspaces/${index + 1}`,
-          type: 'workspace'
+          type: "workspace",
         })),
         {
-          filePath: '/notes/API.md',
-          name: 'API.md',
-          openedFilePath: 'API.md',
-          rootPath: '/notes',
-          type: 'file'
-        }
-      ])
-    )
+          filePath: "/notes/API.md",
+          name: "API.md",
+          openedFilePath: "API.md",
+          rootPath: "/notes",
+          type: "file",
+        },
+      ]),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('dialog', { name: /workspace manager/i })
+    await screen.findByRole("dialog", { name: /workspace manager/i });
     await user.type(
-      screen.getByRole('searchbox', { name: /search workspaces and files/i }),
-      'api'
-    )
+      screen.getByRole("searchbox", { name: /search workspaces and files/i }),
+      "api",
+    );
 
     expect(
-      screen.getByRole('button', { name: /switch to file API\.md/i })
-    ).toBeVisible()
+      screen.getByRole("button", { name: /switch to file API\.md/i }),
+    ).toBeVisible();
     expect(
-      screen.queryByRole('button', { name: /switch to workspace Workspace 1/i })
-    ).not.toBeInTheDocument()
+      screen.queryByRole("button", {
+        name: /switch to workspace Workspace 1/i,
+      }),
+    ).not.toBeInTheDocument();
 
     await user.click(
-      screen.getByRole('button', { name: /remove recent file API\.md/i })
-    )
+      screen.getByRole("button", { name: /remove recent file API\.md/i }),
+    );
 
     expect(
-      screen.queryByRole('button', { name: /switch to file API\.md/i })
-    ).not.toBeInTheDocument()
-    expect(localStorage.getItem('mde.recentWorkspaces')).not.toContain('API.md')
-  })
+      screen.queryByRole("button", { name: /switch to file API\.md/i }),
+    ).not.toBeInTheDocument();
+    expect(localStorage.getItem("mde.recentWorkspaces")).not.toContain(
+      "API.md",
+    );
+  });
 
-  it('opens a standalone markdown file and remembers it from the popup', async () => {
-    const user = userEvent.setup()
-    Object.defineProperty(window, 'matchMedia', {
+  it("opens a standalone markdown file and remembers it from the popup", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(window, "matchMedia", {
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
         addEventListener: vi.fn(),
@@ -841,9 +928,9 @@ describe('App shell', () => {
         media: query,
         onchange: null,
         removeEventListener: vi.fn(),
-        removeListener: vi.fn()
-      }))
-    })
+        removeListener: vi.fn(),
+      })),
+    });
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue(null),
       createFolder: vi.fn(),
@@ -852,196 +939,147 @@ describe('App shell', () => {
       listDirectory: vi.fn(),
       onLaunchPath: vi.fn(() => vi.fn()),
       openFile: vi.fn().mockResolvedValue({
-        filePath: '/notes/API.md',
-        name: 'API.md',
-        openedFilePath: 'API.md',
-        rootPath: '/notes',
-        tree: [{ name: 'API.md', path: 'API.md', type: 'file' }],
-        type: 'file'
+        filePath: "/notes/API.md",
+        name: "API.md",
+        openedFilePath: "API.md",
+        rootPath: "/notes",
+        tree: [{ name: "API.md", path: "API.md", type: "file" }],
+        type: "file",
       }),
       openFileByPath: vi.fn(),
       openPath: vi.fn(),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# API',
-        path: 'API.md'
+        contents: "# API",
+        path: "API.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('dialog', { name: /workspace manager/i })
-    await user.click(screen.getByRole('button', { name: /open markdown file/i }))
+    await screen.findByRole("dialog", { name: /workspace manager/i });
+    await user.click(
+      screen.getByRole("button", { name: /open markdown file/i }),
+    );
 
-    expect(editorApi.openFile).toHaveBeenCalledTimes(1)
-    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith('API.md', '/notes')
+    expect(editorApi.openFile).toHaveBeenCalledTimes(1);
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith("API.md", "/notes");
     expect(
-      await screen.findByRole('button', { name: /manage workspaces/i })
-    ).toHaveTextContent('API.md')
-    expect(localStorage.getItem('mde.recentWorkspaces')).toContain('"type":"file"')
-  })
+      await screen.findByRole("button", { name: /manage workspaces/i }),
+    ).toHaveTextContent("API.md");
+    expect(localStorage.getItem("mde.recentWorkspaces")).toContain(
+      '"type":"file"',
+    );
+  });
 
-  it('shows a macOS update dialog and opens the downloaded installer', async () => {
-    const user = userEvent.setup()
+  it("shows a macOS update dialog and opens the downloaded installer", async () => {
+    const user = userEvent.setup();
     const updateApi = {
       checkForUpdates: vi.fn().mockResolvedValue({
-        currentVersion: '1.1.1',
+        currentVersion: "1.1.1",
         update: {
-          assetName: 'MDE-1.2.0-mac-arm64.dmg',
+          assetName: "MDE-1.2.0-mac-arm64.dmg",
           assetSize: 456,
-          currentVersion: '1.1.1',
-          installMode: 'open-dmg',
-          latestVersion: '1.2.0',
-          publishedAt: '2026-04-29T09:11:32.622Z',
-          releaseName: 'MDE 1.2.0',
-          releaseNotes: 'Editor update improvements.',
-          releaseUrl: 'https://github.com/flowforever/mde/releases/tag/v1.2.0'
+          currentVersion: "1.1.1",
+          installMode: "open-dmg",
+          latestVersion: "1.2.0",
+          publishedAt: "2026-04-29T09:11:32.622Z",
+          releaseName: "MDE 1.2.0",
+          releaseNotes: "Editor update improvements.",
+          releaseUrl: "https://github.com/flowforever/mde/releases/tag/v1.2.0",
         },
-        updateAvailable: true
+        updateAvailable: true,
       }),
       downloadAndOpenUpdate: vi.fn().mockResolvedValue({
-        filePath: '/Users/test/Library/Application Support/MDE/updates/MDE-1.2.0-mac-arm64.dmg',
-        version: '1.2.0'
+        filePath:
+          "/Users/test/Library/Application Support/MDE/updates/MDE-1.2.0-mac-arm64.dmg",
+        version: "1.2.0",
       }),
       installWindowsUpdate: vi.fn(),
       onUpdateAvailable: vi.fn(() => vi.fn()),
       onUpdateDownloadProgress: vi.fn(() => vi.fn()),
-      onUpdateReady: vi.fn(() => vi.fn())
-    } satisfies UpdateApi
+      onUpdateReady: vi.fn(() => vi.fn()),
+    } satisfies UpdateApi;
 
-    Object.defineProperty(window, 'updateApi', {
+    Object.defineProperty(window, "updateApi", {
       configurable: true,
-      value: updateApi
-    })
+      value: updateApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
     expect(
-      await screen.findByRole('dialog', { name: /mde update/i })
-    ).toBeVisible()
-    expect(screen.getByText(/editor update improvements/i)).toBeVisible()
+      await screen.findByRole("dialog", { name: /mde update/i }),
+    ).toBeVisible();
+    expect(screen.getByText(/editor update improvements/i)).toBeVisible();
 
     await user.click(
-      screen.getByRole('button', { name: /download and install/i })
-    )
+      screen.getByRole("button", { name: /download and install/i }),
+    );
 
     await waitFor(() => {
-      expect(updateApi.downloadAndOpenUpdate).toHaveBeenCalledTimes(1)
-    })
-    expect(screen.getByText(/installer has opened/i)).toBeVisible()
-    expect(screen.getByText(/drag MDE to Applications/i)).toBeVisible()
-  })
+      expect(updateApi.downloadAndOpenUpdate).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText(/installer has opened/i)).toBeVisible();
+    expect(screen.getByText(/drag MDE to Applications/i)).toBeVisible();
+  });
 
-  it('checks for updates from the unified settings panel', async () => {
-    const user = userEvent.setup()
+  it("checks for updates from the unified settings panel", async () => {
+    const user = userEvent.setup();
     const updateApi = {
       checkForUpdates: vi.fn().mockResolvedValue({
-        currentVersion: '1.2.12',
-        message: 'MDE is up to date.',
-        updateAvailable: false
+        currentVersion: "1.2.12",
+        message: "MDE is up to date.",
+        updateAvailable: false,
       }),
       downloadAndOpenUpdate: vi.fn(),
       installWindowsUpdate: vi.fn(),
       onUpdateAvailable: vi.fn(() => vi.fn()),
       onUpdateDownloadProgress: vi.fn(() => vi.fn()),
-      onUpdateReady: vi.fn(() => vi.fn())
-    } satisfies UpdateApi
+      onUpdateReady: vi.fn(() => vi.fn()),
+    } satisfies UpdateApi;
 
-    Object.defineProperty(window, 'updateApi', {
+    Object.defineProperty(window, "updateApi", {
       configurable: true,
-      value: updateApi
-    })
+      value: updateApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
     await waitFor(() => {
-      expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1)
-    })
-    updateApi.checkForUpdates.mockClear()
+      expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+    updateApi.checkForUpdates.mockClear();
 
-    await user.click(screen.getByRole('button', { name: /open settings/i }))
-    await user.click(screen.getByRole('button', { name: /check update/i }))
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    await user.click(screen.getByRole("button", { name: /check update/i }));
 
-    expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
-    expect(screen.getByText(/current version/i)).toBeVisible()
-
-    await user.click(screen.getByRole('button', { name: /check for updates/i }))
-
-    await waitFor(() => {
-      expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1)
-    })
-    expect(screen.getByText(/mde is up to date/i)).toBeVisible()
-  })
-
-  it('toggles the editor between centered and full-width views', async () => {
-    const user = userEvent.setup()
-    const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
-      createFolder: vi.fn(),
-      createMarkdownFile: vi.fn(),
-      deleteEntry: vi.fn(),
-      listDirectory: vi.fn(),
-      onLaunchPath: vi.fn(() => vi.fn()),
-      openFile: vi.fn(),
-      openFileByPath: vi.fn(),
-      openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
-      }),
-      openWorkspace: vi.fn(),
-      openWorkspaceByPath: vi.fn(),
-      readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
-      }),
-      renameEntry: vi.fn(),
-      saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
-
-    Object.defineProperty(window, 'editorApi', {
-      configurable: true,
-      value: editorApi
-    })
-
-    render(<App />)
-
-    const editorPane = screen.getByRole('region', { name: /editor/i })
-    const fullWidthButton = await screen.findByRole('button', {
-      name: /use full-width editor view/i
-    })
-
-    expect(editorPane).not.toHaveClass('is-editor-full-width')
-
-    await user.click(fullWidthButton)
-
-    expect(editorPane).toHaveClass('is-editor-full-width')
-    expect(localStorage.getItem('mde.editorViewMode')).toBe('full-width')
+    expect(screen.getByRole("dialog", { name: /settings/i })).toBeVisible();
+    expect(screen.getByText(/current version/i)).toBeVisible();
 
     await user.click(
-      screen.getByRole('button', { name: /use centered editor view/i })
-    )
+      screen.getByRole("button", { name: /check for updates/i }),
+    );
 
-    expect(editorPane).not.toHaveClass('is-editor-full-width')
-    expect(localStorage.getItem('mde.editorViewMode')).toBe('centered')
-  })
+    await waitFor(() => {
+      expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText(/mde is up to date/i)).toBeVisible();
+  });
 
-  it('restores the remembered full-width editor view on launch', async () => {
+  it("toggles the editor between centered and full-width views", async () => {
+    const user = userEvent.setup();
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1050,46 +1088,54 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
+        contents: "# Original",
+        path: "README.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
-    localStorage.setItem('mde.editorViewMode', 'full-width')
+      value: editorApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    expect(screen.getByRole('region', { name: /editor/i })).toHaveClass(
-      'is-editor-full-width'
-    )
-    expect(
-      await screen.findByRole('button', {
-        name: /use centered editor view/i
-      })
-    ).toBeVisible()
-  })
+    const editorPane = screen.getByRole("region", { name: /editor/i });
+    const fullWidthButton = await screen.findByRole("button", {
+      name: /use full-width editor view/i,
+    });
 
-  it('shows AI actions for detected CLIs and renders read-only generated results', async () => {
-    const user = userEvent.setup()
+    expect(editorPane).not.toHaveClass("is-editor-full-width");
+
+    await user.click(fullWidthButton);
+
+    expect(editorPane).toHaveClass("is-editor-full-width");
+    expect(localStorage.getItem("mde.editorViewMode")).toBe("full-width");
+
+    await user.click(
+      screen.getByRole("button", { name: /use centered editor view/i }),
+    );
+
+    expect(editorPane).not.toHaveClass("is-editor-full-width");
+    expect(localStorage.getItem("mde.editorViewMode")).toBe("centered");
+  });
+
+  it("restores the remembered full-width editor view on launch", async () => {
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1098,161 +1144,241 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
+        contents: "# Original",
+        path: "README.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem("mde.editorViewMode", "full-width");
+
+    render(<App />);
+
+    expect(screen.getByRole("region", { name: /editor/i })).toHaveClass(
+      "is-editor-full-width",
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: /use centered editor view/i,
+      }),
+    ).toBeVisible();
+  });
+
+  it("shows AI actions for detected CLIs and renders read-only generated results", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
     const aiApi = {
       detectTools: vi.fn().mockResolvedValue({
-        tools: [{ commandPath: '/fake/codex', id: 'codex', name: 'Codex' }]
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      generateAppLanguagePack: vi.fn().mockResolvedValue({
+        entries: [
+          { key: "settings.title", text: "Ajustes" },
+          { key: "workspace.openWorkspace", text: "Abrir workspace" },
+        ],
+        language: "Spanish",
+        tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
       }),
       summarizeMarkdown: vi
         .fn()
         .mockResolvedValueOnce({
           cached: false,
-          contents: '## Summary\n\n- Original summarized.',
-          kind: 'summary',
-          path: '.mde/translations/README-summary.md',
-          tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
+          contents: "## Summary\n\n- Original summarized.",
+          kind: "summary",
+          path: ".mde/translations/README-summary.md",
+          tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
         })
         .mockResolvedValueOnce({
           cached: false,
-          contents: '## Summary\n\n- Shorter original summary.',
-          kind: 'summary',
-          path: '.mde/translations/README-summary.md',
-          tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
+          contents: "## Summary\n\n- Shorter original summary.",
+          kind: "summary",
+          path: ".mde/translations/README-summary.md",
+          tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
         }),
       translateMarkdown: vi.fn().mockResolvedValue({
         cached: false,
-        contents: '# English\n\nOriginal translated.',
-        kind: 'translation',
-        language: 'English',
-        path: '.mde/translations/README.English.md',
-        tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
-      })
-    } satisfies AiApi
+        contents: "# English\n\nOriginal translated.",
+        kind: "translation",
+        language: "English",
+        path: ".mde/translations/README.English.md",
+        tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
+      }),
+    } satisfies AiApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
-    Object.defineProperty(window, 'aiApi', {
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
       configurable: true,
-      value: aiApi
-    })
+      value: aiApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    const summaryButton = await screen.findByRole('button', {
-      name: /summarize markdown/i
-    })
+    const summaryButton = await screen.findByRole("button", {
+      name: /summarize markdown/i,
+    });
 
-    await user.click(summaryButton)
+    await user.click(summaryButton);
 
     expect(aiApi.summarizeMarkdown).toHaveBeenCalledWith(
-      'README.md',
-      '# Original',
-      '/workspace',
+      "README.md",
+      "# Original",
+      "/workspace",
       undefined,
-      undefined
-    )
-    const summaryResult = await screen.findByRole('region', {
-      name: /ai result/i
-    })
+      undefined,
+    );
+    const summaryResult = await screen.findByRole("region", {
+      name: /ai result/i,
+    });
 
-    expect(summaryResult).toHaveTextContent('Original summarized')
-    expect(within(summaryResult).getByTestId('mock-editor-readonly')).toBeVisible()
+    expect(summaryResult).toHaveTextContent("Original summarized");
     expect(
-      screen.getByRole('textbox', { name: /refine summary instruction/i })
-    ).toBeVisible()
+      within(summaryResult).getByTestId("mock-editor-readonly"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: /refine summary instruction/i }),
+    ).toBeVisible();
 
     await user.type(
-      screen.getByRole('textbox', { name: /refine summary instruction/i }),
-      'Make it shorter'
-    )
-    await user.click(screen.getByRole('button', { name: /regenerate summary/i }))
+      screen.getByRole("textbox", { name: /refine summary instruction/i }),
+      "Make it shorter",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /regenerate summary/i }),
+    );
 
     expect(aiApi.summarizeMarkdown).toHaveBeenLastCalledWith(
-      'README.md',
-      '# Original',
-      '/workspace',
-      'Make it shorter',
-      undefined
-    )
+      "README.md",
+      "# Original",
+      "/workspace",
+      "Make it shorter",
+      undefined,
+    );
     expect(
-      await screen.findByRole('region', { name: /ai result/i })
-    ).toHaveTextContent('Shorter original summary')
+      await screen.findByRole("region", { name: /ai result/i }),
+    ).toHaveTextContent("Shorter original summary");
 
     await user.click(
-      screen.getByRole('button', { name: /translate markdown/i })
-    )
-    await user.click(screen.getByRole('menuitem', { name: /English/i }))
+      screen.getByRole("button", { name: /translate markdown/i }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: /English/i }));
 
     expect(aiApi.translateMarkdown).toHaveBeenCalledWith(
-      'README.md',
-      '# Original',
-      'English',
-      '/workspace',
-      undefined
-    )
+      "README.md",
+      "# Original",
+      "English",
+      "/workspace",
+      undefined,
+    );
     expect(
-      await screen.findByRole('region', { name: /ai result/i })
-    ).toHaveTextContent('Original translated')
+      await screen.findByRole("region", { name: /ai result/i }),
+    ).toHaveTextContent("Original translated");
     expect(
-      screen.queryByRole('textbox', { name: /refine summary instruction/i })
-    ).not.toBeInTheDocument()
+      screen.queryByRole("textbox", { name: /refine summary instruction/i }),
+    ).not.toBeInTheDocument();
 
     await user.click(
-      screen.getByRole('button', { name: /translate markdown/i })
-    )
+      screen.getByRole("button", { name: /translate markdown/i }),
+    );
     await user.type(
-      screen.getByRole('textbox', { name: /custom translation language/i }),
-      'Japanese'
-    )
+      screen.getByRole("textbox", { name: /custom translation language/i }),
+      "Japanese",
+    );
     await user.click(
-      screen.getByRole('button', { name: /add translation language/i })
-    )
+      screen.getByRole("button", { name: /add translation language/i }),
+    );
 
     expect(aiApi.translateMarkdown).toHaveBeenLastCalledWith(
-      'README.md',
-      '# Original',
-      'Japanese',
-      '/workspace',
-      undefined
-    )
-    expect(localStorage.getItem('mde.customTranslationLanguages')).toContain(
-      'Japanese'
-    )
+      "README.md",
+      "# Original",
+      "Japanese",
+      "/workspace",
+      undefined,
+    );
+    expect(localStorage.getItem("mde.customTranslationLanguages")).toContain(
+      "Japanese",
+    );
 
     await user.click(
-      screen.getByRole('button', { name: /translate markdown/i })
-    )
+      screen.getByRole("button", { name: /translate markdown/i }),
+    );
     await user.click(
-      screen.getByRole('button', { name: /remove custom language Japanese/i })
-    )
+      screen.getByRole("button", { name: /remove custom language Japanese/i }),
+    );
 
-    expect(localStorage.getItem('mde.customTranslationLanguages')).not.toContain(
-      'Japanese'
-    )
-  })
+    expect(
+      localStorage.getItem("mde.customTranslationLanguages"),
+    ).not.toContain("Japanese");
 
-  it('opens current editor search from the action bar and keyboard shortcut', async () => {
-    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    await user.click(screen.getByRole("button", { name: /preference/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /custom app language/i }),
+      "Spanish",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /generate language pack/i }),
+    );
+
+    await waitFor(() => {
+      expect(aiApi.generateAppLanguagePack).toHaveBeenCalled();
+    });
+    expect(localStorage.getItem("mde.customAppLanguagePacks")).toContain(
+      "Spanish",
+    );
+    expect(localStorage.getItem("mde.appLanguagePreference")).toBe(
+      "custom:spanish",
+    );
+  });
+
+  it("opens current editor search from the action bar and keyboard shortcut", async () => {
+    const user = userEvent.setup();
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1261,81 +1387,81 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
+        contents: "# Original",
+        path: "README.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
     const aiApi = {
       detectTools: vi.fn().mockResolvedValue({
-        tools: [{ commandPath: '/fake/codex', id: 'codex', name: 'Codex' }]
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
       }),
       summarizeMarkdown: vi.fn(),
-      translateMarkdown: vi.fn()
-    } satisfies AiApi
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
-    Object.defineProperty(window, 'aiApi', {
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
       configurable: true,
-      value: aiApi
-    })
+      value: aiApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    const searchButton = await screen.findByRole('button', {
-      name: /search current markdown/i
-    })
-    const summaryButton = await screen.findByRole('button', {
-      name: /summarize markdown/i
-    })
+    const searchButton = await screen.findByRole("button", {
+      name: /search current markdown/i,
+    });
+    const summaryButton = await screen.findByRole("button", {
+      name: /summarize markdown/i,
+    });
 
     expect(
       searchButton.compareDocumentPosition(summaryButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy()
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
-    await user.click(searchButton)
+    await user.click(searchButton);
     await user.type(
-      screen.getByRole('searchbox', { name: /search current markdown/i }),
-      'Original{Enter}'
-    )
+      screen.getByRole("searchbox", { name: /search current markdown/i }),
+      "Original{Enter}",
+    );
 
-    expect(screen.getByTestId('mock-editor-search-query')).toHaveTextContent(
-      'Original'
-    )
+    expect(screen.getByTestId("mock-editor-search-query")).toHaveTextContent(
+      "Original",
+    );
 
-    await user.keyboard('{Escape}')
+    await user.keyboard("{Escape}");
     expect(
-      screen.queryByRole('searchbox', { name: /search current markdown/i })
-    ).not.toBeInTheDocument()
+      screen.queryByRole("searchbox", { name: /search current markdown/i }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: 'f', metaKey: true })
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
     await waitFor(() => {
       expect(
-        screen.getByRole('searchbox', { name: /search current markdown/i })
-      ).toHaveFocus()
-    })
-  })
+        screen.getByRole("searchbox", { name: /search current markdown/i }),
+      ).toHaveFocus();
+    });
+  });
 
-  it('opens a global workspace search result and keeps the query highlighted', async () => {
-    const user = userEvent.setup()
+  it("opens a global workspace search result and keeps the query highlighted", async () => {
+    const user = userEvent.setup();
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1344,99 +1470,103 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
         tree: [
-          { name: 'README.md', path: 'README.md', type: 'file' },
+          { name: "README.md", path: "README.md", type: "file" },
           {
-            children: [{ name: 'guide.md', path: 'docs/guide.md', type: 'file' }],
-            name: 'docs',
-            path: 'docs',
-            type: 'directory'
-          }
+            children: [
+              { name: "guide.md", path: "docs/guide.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
         ],
-        type: 'workspace'
+        type: "workspace",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockImplementation((filePath: string) =>
         Promise.resolve(
-          filePath === 'docs/guide.md'
+          filePath === "docs/guide.md"
             ? {
-                contents: '# Guide\n\nAlpha details',
-                path: 'docs/guide.md'
+                contents: "# Guide\n\nAlpha details",
+                path: "docs/guide.md",
               }
             : {
-                contents: '# Original',
-                path: 'README.md'
-              }
-        )
+                contents: "# Original",
+                path: "README.md",
+              },
+        ),
       ),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
       searchWorkspaceMarkdown: vi.fn().mockResolvedValue({
         limited: false,
-        query: 'alpha',
+        query: "alpha",
         results: [
           {
-            matches: [{ columnNumber: 1, lineNumber: 3, preview: 'Alpha details' }],
-            path: 'docs/guide.md'
-          }
-        ]
+            matches: [
+              { columnNumber: 1, lineNumber: 3, preview: "Alpha details" },
+            ],
+            path: "docs/guide.md",
+          },
+        ],
       }),
-      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('button', { name: /search workspace contents/i })
-    fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true })
+    await screen.findByRole("button", { name: /search workspace contents/i });
+    fireEvent.keyDown(window, { key: "f", metaKey: true, shiftKey: true });
 
     await waitFor(() => {
       expect(
-        screen.getByRole('searchbox', { name: /search workspace contents/i })
-      ).toHaveFocus()
-    })
+        screen.getByRole("searchbox", { name: /search workspace contents/i }),
+      ).toHaveFocus();
+    });
     await user.type(
-      screen.getByRole('searchbox', { name: /search workspace contents/i }),
-      'alpha'
-    )
+      screen.getByRole("searchbox", { name: /search workspace contents/i }),
+      "alpha",
+    );
     await waitFor(() => {
       expect(editorApi.searchWorkspaceMarkdown).toHaveBeenCalledWith(
-        'alpha',
-        '/workspace'
-      )
-    })
+        "alpha",
+        "/workspace",
+      );
+    });
 
     await user.click(
-      await screen.findByRole('button', {
-        name: /open search result docs\/guide\.md line 3/i
-      })
-    )
+      await screen.findByRole("button", {
+        name: /open search result docs\/guide\.md line 3/i,
+      }),
+    );
 
     expect(editorApi.readMarkdownFile).toHaveBeenLastCalledWith(
-      'docs/guide.md',
-      '/workspace'
-    )
-    expect(await screen.findByTestId('mock-editor-search-query')).toHaveTextContent(
-      'alpha'
-    )
+      "docs/guide.md",
+      "/workspace",
+    );
+    expect(
+      await screen.findByTestId("mock-editor-search-query"),
+    ).toHaveTextContent("alpha");
     await waitFor(() => {
-      expect(document.title).toBe('guide.md - /workspace')
-    })
-  })
+      expect(document.title).toBe("guide.md - /workspace");
+    });
+  });
 
-  it('persists the selected AI CLI and sends it with AI actions', async () => {
-    const user = userEvent.setup()
+  it("persists the selected AI CLI and sends it with AI actions", async () => {
+    const user = userEvent.setup();
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1445,90 +1575,96 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
+        contents: "# Original",
+        path: "README.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
     const aiApi = {
       detectTools: vi.fn().mockResolvedValue({
         tools: [
-          { commandPath: '/fake/codex', id: 'codex', name: 'Codex' },
-          { commandPath: '/fake/claude', id: 'claude', name: 'Claude Code' }
-        ]
+          { commandPath: "/fake/codex", id: "codex", name: "Codex" },
+          { commandPath: "/fake/claude", id: "claude", name: "Claude Code" },
+        ],
       }),
       summarizeMarkdown: vi.fn().mockResolvedValue({
         cached: false,
-        contents: '## Summary\n\n- Original summarized.',
-        kind: 'summary',
-        path: '.mde/translations/README-summary.md',
-        tool: { commandPath: '/fake/claude', id: 'claude', name: 'Claude Code' }
+        contents: "## Summary\n\n- Original summarized.",
+        kind: "summary",
+        path: ".mde/translations/README-summary.md",
+        tool: {
+          commandPath: "/fake/claude",
+          id: "claude",
+          name: "Claude Code",
+        },
       }),
-      translateMarkdown: vi.fn()
-    } satisfies AiApi
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
-    Object.defineProperty(window, 'aiApi', {
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
       configurable: true,
-      value: aiApi
-    })
+      value: aiApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    await screen.findByRole('button', { name: /summarize markdown/i })
-    await user.click(screen.getByRole('button', { name: /open settings/i }))
-    await user.click(screen.getByRole('button', { name: /^ai$/i }))
+    await screen.findByRole("button", { name: /summarize markdown/i });
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    await user.click(screen.getByRole("button", { name: /^ai$/i }));
     await user.selectOptions(
-      screen.getByRole('combobox', { name: /ai cli/i }),
-      'claude'
-    )
+      screen.getByRole("combobox", { name: /ai cli/i }),
+      "claude",
+    );
     await user.type(
-      screen.getByRole('textbox', { name: /default model name/i }),
-      'claude-sonnet-4-6'
-    )
-    await user.click(screen.getByRole('button', { name: /close settings/i }))
-    await user.click(screen.getByRole('button', { name: /summarize markdown/i }))
+      screen.getByRole("textbox", { name: /default model name/i }),
+      "claude-sonnet-4-6",
+    );
+    await user.click(screen.getByRole("button", { name: /close settings/i }));
+    await user.click(
+      screen.getByRole("button", { name: /summarize markdown/i }),
+    );
 
-    expect(localStorage.getItem('mde.aiCliSettings')).toBe(
+    expect(localStorage.getItem("mde.aiCliSettings")).toBe(
       JSON.stringify({
         modelNames: {
-          claude: 'claude-sonnet-4-6'
+          claude: "claude-sonnet-4-6",
         },
-        selectedToolId: 'claude'
-      })
-    )
+        selectedToolId: "claude",
+      }),
+    );
     expect(aiApi.summarizeMarkdown).toHaveBeenCalledWith(
-      'README.md',
-      '# Original',
-      '/workspace',
+      "README.md",
+      "# Original",
+      "/workspace",
       undefined,
       {
-        modelName: 'claude-sonnet-4-6',
-        toolId: 'claude'
-      }
-    )
-  })
+        modelName: "claude-sonnet-4-6",
+        toolId: "claude",
+      },
+    );
+  });
 
-  it('keeps AI button state scoped to the active Markdown file', async () => {
-    const user = userEvent.setup()
-    const translation = createDeferred<AiGenerationResult>()
+  it("keeps AI button state scoped to the active Markdown file", async () => {
+    const user = userEvent.setup();
+    const translation = createDeferred<AiGenerationResult>();
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1537,219 +1673,241 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
         tree: [
-          { name: 'README.md', path: 'README.md', type: 'file' },
-          { name: 'notes.md', path: 'notes.md', type: 'file' }
+          { name: "README.md", path: "README.md", type: "file" },
+          { name: "notes.md", path: "notes.md", type: "file" },
         ],
-        type: 'file'
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn((filePath: string) =>
         Promise.resolve({
-          contents: filePath === 'notes.md' ? '# Notes' : '# Original',
-          path: filePath
-        })
+          contents: filePath === "notes.md" ? "# Notes" : "# Original",
+          path: filePath,
+        }),
       ),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
     const aiApi = {
       detectTools: vi.fn().mockResolvedValue({
-        tools: [{ commandPath: '/fake/codex', id: 'codex', name: 'Codex' }]
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
       }),
       summarizeMarkdown: vi.fn(),
-      translateMarkdown: vi.fn().mockReturnValue(translation.promise)
-    } satisfies AiApi
+      translateMarkdown: vi.fn().mockReturnValue(translation.promise),
+    } satisfies AiApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
-    Object.defineProperty(window, 'aiApi', {
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
       configurable: true,
-      value: aiApi
-    })
+      value: aiApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    expect(await screen.findByText('# Original')).toBeVisible()
-
-    await user.click(screen.getByRole('button', { name: /translate markdown/i }))
-    await user.click(screen.getByRole('menuitem', { name: /English/i }))
-
-    expect(
-      screen.getByRole('button', { name: /summarize markdown/i })
-    ).toHaveAttribute('aria-busy', 'false')
-    expect(
-      screen.getByRole('button', { name: /translate markdown/i })
-    ).toHaveAttribute('aria-busy', 'true')
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(await screen.findByText("# Original")).toBeVisible();
 
     await user.click(
-      screen.getByRole('button', { name: /notes\.md Markdown file/i })
-    )
+      screen.getByRole("button", { name: /translate markdown/i }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: /English/i }));
 
-    expect(await screen.findByText('# Notes')).toBeVisible()
     expect(
-      screen.getByRole('button', { name: /summarize markdown/i })
-    ).toHaveAttribute('aria-busy', 'false')
+      screen.getByRole("button", { name: /summarize markdown/i }),
+    ).toHaveAttribute("aria-busy", "false");
     expect(
-      screen.getByRole('button', { name: /translate markdown/i })
-    ).toHaveAttribute('aria-busy', 'false')
-    expect(screen.queryByTestId('ai-action-spinner')).not.toBeInTheDocument()
+      screen.getByRole("button", { name: /translate markdown/i }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /notes\.md Markdown file/i }),
+    );
+
+    expect(await screen.findByText("# Notes")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /summarize markdown/i }),
+    ).toHaveAttribute("aria-busy", "false");
+    expect(
+      screen.getByRole("button", { name: /translate markdown/i }),
+    ).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByTestId("ai-action-spinner")).not.toBeInTheDocument();
 
     await act(async () => {
       translation.resolve({
         cached: false,
-        contents: '# English\n\nOriginal translated.',
-        kind: 'translation',
-        language: 'English',
-        path: '.mde/translations/README.English.md',
-        tool: { commandPath: '/fake/codex', id: 'codex', name: 'Codex' }
-      })
-      await Promise.resolve()
-    })
+        contents: "# English\n\nOriginal translated.",
+        kind: "translation",
+        language: "English",
+        path: ".mde/translations/README.English.md",
+        tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
+      });
+      await Promise.resolve();
+    });
 
     expect(
-      screen.queryByRole('region', { name: /ai result/i })
-    ).not.toBeInTheDocument()
-    expect(screen.getByText('# Notes')).toBeVisible()
-  })
+      screen.queryByRole("region", { name: /ai result/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("# Notes")).toBeVisible();
+  });
 
-  it('opens the theme settings panel and persists the selected theme', async () => {
-    const user = userEvent.setup()
+  it("opens the theme settings panel and persists the selected theme", async () => {
+    const user = userEvent.setup();
 
     localStorage.setItem(
       APP_THEME_STORAGE_KEY,
       JSON.stringify({
-        lastDarkThemeId: 'cedar',
-        lastLightThemeId: 'porcelain',
-        mode: 'dark'
-      })
-    )
+        lastDarkThemeId: "cedar",
+        lastLightThemeId: "porcelain",
+        mode: "dark",
+      }),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'cedar')
-    await user.click(screen.getByRole('button', { name: /change theme/i }))
+    expect(screen.getByRole("main")).toHaveAttribute("data-theme", "cedar");
+    await user.click(screen.getByRole("button", { name: /change theme/i }));
 
     expect(
-      screen.getByRole('switch', { name: /follow system appearance/i })
-    ).not.toBeChecked()
+      screen.getByRole("switch", { name: /follow system appearance/i }),
+    ).not.toBeChecked();
 
-    expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
-    expect(screen.getByRole('button', { name: /^theme$/i }))
-      .toHaveAttribute('aria-current', 'page')
-    const colorwayPicker = screen.getByRole('radiogroup', {
-      name: /theme colorways/i
-    })
+    expect(screen.getByRole("dialog", { name: /settings/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^theme$/i })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    const colorwayPicker = screen.getByRole("radiogroup", {
+      name: /theme colorways/i,
+    });
 
-    expect(within(colorwayPicker).queryByText(/^Dark$/i)).not.toBeInTheDocument()
-    expect(within(colorwayPicker).queryByText(/Light panel/i))
-      .not.toBeInTheDocument()
-    expect(within(colorwayPicker).queryByText(/Dark panel/i))
-      .not.toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /glacier/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /cedar/i })).toBeChecked()
+    expect(
+      within(colorwayPicker).queryByText(/^Dark$/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(colorwayPicker).queryByText(/Light panel/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(colorwayPicker).queryByText(/Dark panel/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /glacier/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cedar/i })).toBeChecked();
 
-    await user.click(screen.getByRole('radio', { name: /sage paper/i }))
+    await user.click(screen.getByRole("radio", { name: /sage paper/i }));
 
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'sage-paper')
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme-family', 'light')
-    expect(screen.getByRole('main')).toHaveAttribute('data-panel-family', 'light')
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-theme",
+      "sage-paper",
+    );
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-theme-family",
+      "light",
+    );
+    expect(screen.getByRole("main")).toHaveAttribute(
+      "data-panel-family",
+      "light",
+    );
     expect(localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
       JSON.stringify({
-        lastDarkThemeId: 'cedar',
-        lastLightThemeId: 'sage-paper',
-        mode: 'light'
-      })
-    )
-  })
+        lastDarkThemeId: "cedar",
+        lastLightThemeId: "sage-paper",
+        mode: "light",
+      }),
+    );
+  });
 
-  it('updates follow-system themes when the OS appearance changes', () => {
-    const systemTheme = mockSystemThemePreference(false)
+  it("updates follow-system themes when the OS appearance changes", () => {
+    const systemTheme = mockSystemThemePreference(false);
 
     localStorage.setItem(
       APP_THEME_STORAGE_KEY,
       JSON.stringify({
-        lastDarkThemeId: 'moss',
-        lastLightThemeId: 'porcelain',
-        mode: 'system'
-      })
-    )
+        lastDarkThemeId: "moss",
+        lastLightThemeId: "porcelain",
+        mode: "system",
+      }),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'porcelain')
+    expect(screen.getByRole("main")).toHaveAttribute("data-theme", "porcelain");
 
     act(() => {
-      systemTheme.setMatches(true)
-    })
+      systemTheme.setMatches(true);
+    });
 
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'moss')
+    expect(screen.getByRole("main")).toHaveAttribute("data-theme", "moss");
     expect(localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
       JSON.stringify({
-        lastDarkThemeId: 'moss',
-        lastLightThemeId: 'porcelain',
-        mode: 'system'
-      })
-    )
-  })
+        lastDarkThemeId: "moss",
+        lastLightThemeId: "porcelain",
+        mode: "system",
+      }),
+    );
+  });
 
-  it('selects only the current system family while keeping follow-system enabled', async () => {
-    const user = userEvent.setup()
-    mockSystemThemePreference(false)
+  it("selects only the current system family while keeping follow-system enabled", async () => {
+    const user = userEvent.setup();
+    mockSystemThemePreference(false);
     localStorage.setItem(
       APP_THEME_STORAGE_KEY,
       JSON.stringify({
-        lastDarkThemeId: 'moss',
-        lastLightThemeId: 'porcelain',
-        mode: 'system'
-      })
-    )
+        lastDarkThemeId: "moss",
+        lastLightThemeId: "porcelain",
+        mode: "system",
+      }),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    await user.click(screen.getByRole('button', { name: /change theme/i }))
+    await user.click(screen.getByRole("button", { name: /change theme/i }));
 
-    expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
-    const colorwayPicker = screen.getByRole('radiogroup', {
-      name: /theme colorways/i
-    })
+    expect(screen.getByRole("dialog", { name: /settings/i })).toBeVisible();
+    const colorwayPicker = screen.getByRole("radiogroup", {
+      name: /theme colorways/i,
+    });
 
-    expect(within(colorwayPicker).queryByText(/^Dark$/i)).not.toBeInTheDocument()
-    expect(within(colorwayPicker).queryByText(/Light panel/i))
-      .not.toBeInTheDocument()
-    expect(within(colorwayPicker).queryByText(/Dark panel/i))
-      .not.toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: /blue hour/i }))
-      .not.toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /glacier/i })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('radio', { name: /binder/i }))
-
-    expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'binder')
     expect(
-      screen.getByRole('switch', { name: /follow system appearance/i })
-    ).toBeChecked()
+      within(colorwayPicker).queryByText(/^Dark$/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(colorwayPicker).queryByText(/Light panel/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(colorwayPicker).queryByText(/Dark panel/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /blue hour/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /glacier/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /binder/i }));
+
+    expect(screen.getByRole("main")).toHaveAttribute("data-theme", "binder");
+    expect(
+      screen.getByRole("switch", { name: /follow system appearance/i }),
+    ).toBeChecked();
     expect(localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(
       JSON.stringify({
-        lastDarkThemeId: 'moss',
-        lastLightThemeId: 'binder',
-        mode: 'system'
-      })
-    )
-  })
+        lastDarkThemeId: "moss",
+        lastLightThemeId: "binder",
+        mode: "system",
+      }),
+    );
+  });
 
-  it('passes the resolved color scheme to the Markdown editor', async () => {
+  it("passes the resolved color scheme to the Markdown editor", async () => {
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1758,47 +1916,47 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
+        contents: "# Original",
+        path: "README.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn()
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
     localStorage.setItem(
       APP_THEME_STORAGE_KEY,
       JSON.stringify({
-        lastDarkThemeId: 'blue-hour',
-        lastLightThemeId: 'manuscript',
-        mode: 'dark'
-      })
-    )
+        lastDarkThemeId: "blue-hour",
+        lastLightThemeId: "manuscript",
+        mode: "dark",
+      }),
+    );
 
-    render(<App />)
+    render(<App />);
 
-    expect(await screen.findByTestId('mock-editor-color-scheme')).toHaveTextContent(
-      'dark'
-    )
-  })
+    expect(
+      await screen.findByTestId("mock-editor-color-scheme"),
+    ).toHaveTextContent("dark");
+  });
 
-  it('auto-saves the latest dirty editor contents after five idle seconds', async () => {
+  it("auto-saves the latest dirty editor contents after five idle seconds", async () => {
     const editorApi = {
-      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
@@ -1807,110 +1965,110 @@ describe('App shell', () => {
       openFile: vi.fn(),
       openFileByPath: vi.fn(),
       openPath: vi.fn().mockResolvedValue({
-        filePath: '/workspace/README.md',
-        name: 'README.md',
-        openedFilePath: 'README.md',
-        rootPath: '/workspace',
-        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
-        type: 'file'
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
       }),
       openWorkspace: vi.fn(),
       openWorkspaceByPath: vi.fn(),
       readMarkdownFile: vi.fn().mockResolvedValue({
-        contents: '# Original',
-        path: 'README.md'
+        contents: "# Original",
+        path: "README.md",
       }),
       renameEntry: vi.fn(),
       saveImageAsset: vi.fn(),
-      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
-    } satisfies EditorApi
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
 
-    Object.defineProperty(window, 'editorApi', {
+    Object.defineProperty(window, "editorApi", {
       configurable: true,
-      value: editorApi
-    })
+      value: editorApi,
+    });
 
-    render(<App />)
+    render(<App />);
 
-    const changeButton = await screen.findByRole('button', {
-      name: /change mock markdown/i
-    })
+    const changeButton = await screen.findByRole("button", {
+      name: /change mock markdown/i,
+    });
 
-    vi.useFakeTimers()
-    fireEvent.click(changeButton)
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000)
-    })
-
-    fireEvent.click(changeButton)
+    vi.useFakeTimers();
+    fireEvent.click(changeButton);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4999)
-    })
+      await vi.advanceTimersByTimeAsync(3000);
+    });
 
-    expect(editorApi.writeMarkdownFile).not.toHaveBeenCalled()
+    fireEvent.click(changeButton);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1)
-    })
+      await vi.advanceTimersByTimeAsync(4999);
+    });
+
+    expect(editorApi.writeMarkdownFile).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
 
     expect(editorApi.writeMarkdownFile).toHaveBeenCalledWith(
-      'README.md',
-      '# Changed 2',
-      '/workspace'
-    )
-  })
+      "README.md",
+      "# Changed 2",
+      "/workspace",
+    );
+  });
 
-  it('resizes the explorer sidebar from the drag separator', () => {
-    render(<App />)
+  it("resizes the explorer sidebar from the drag separator", () => {
+    render(<App />);
 
-    const shell = screen.getByRole('main')
-    const resizeHandle = screen.getByRole('separator', {
-      name: /resize explorer sidebar/i
-    })
+    const shell = screen.getByRole("main");
+    const resizeHandle = screen.getByRole("separator", {
+      name: /resize explorer sidebar/i,
+    });
 
-    expect(resizeHandle).toHaveAttribute('aria-valuenow', '288')
-    expect(shell.style.getPropertyValue('--explorer-width')).toBe('288px')
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "288");
+    expect(shell.style.getPropertyValue("--explorer-width")).toBe("288px");
 
-    fireEvent.pointerDown(resizeHandle, { clientX: 288, pointerId: 1 })
-    const pointerMove = new Event('pointermove')
+    fireEvent.pointerDown(resizeHandle, { clientX: 288, pointerId: 1 });
+    const pointerMove = new Event("pointermove");
 
-    Object.defineProperty(pointerMove, 'clientX', { value: 360 })
-    window.dispatchEvent(pointerMove)
-    fireEvent.pointerUp(window)
+    Object.defineProperty(pointerMove, "clientX", { value: 360 });
+    window.dispatchEvent(pointerMove);
+    fireEvent.pointerUp(window);
 
-    expect(resizeHandle).toHaveAttribute('aria-valuenow', '360')
-    expect(shell.style.getPropertyValue('--explorer-width')).toBe('360px')
-  })
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "360");
+    expect(shell.style.getPropertyValue("--explorer-width")).toBe("360px");
+  });
 
-  it('toggles the explorer sidebar between collapsed and expanded states', async () => {
-    const user = userEvent.setup()
+  it("toggles the explorer sidebar between collapsed and expanded states", async () => {
+    const user = userEvent.setup();
 
-    render(<App />)
-
-    await user.click(
-      screen.getByRole('button', { name: /collapse explorer sidebar/i })
-    )
-
-    expect(screen.getByRole('main')).toHaveClass('is-explorer-collapsed')
-    expect(
-      screen.queryByRole('button', { name: /^open workspace$/i })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('separator', { name: /resize explorer sidebar/i })
-    ).not.toBeInTheDocument()
+    render(<App />);
 
     await user.click(
-      screen.getByRole('button', { name: /expand explorer sidebar/i })
-    )
+      screen.getByRole("button", { name: /collapse explorer sidebar/i }),
+    );
 
-    expect(screen.getByRole('main')).not.toHaveClass('is-explorer-collapsed')
+    expect(screen.getByRole("main")).toHaveClass("is-explorer-collapsed");
     expect(
-      screen.getByRole('button', { name: /^open workspace$/i })
-    ).toBeVisible()
+      screen.queryByRole("button", { name: /^open workspace$/i }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('separator', { name: /resize explorer sidebar/i })
-    ).toBeVisible()
-  })
-})
+      screen.queryByRole("separator", { name: /resize explorer sidebar/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /expand explorer sidebar/i }),
+    );
+
+    expect(screen.getByRole("main")).not.toHaveClass("is-explorer-collapsed");
+    expect(
+      screen.getByRole("button", { name: /^open workspace$/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("separator", { name: /resize explorer sidebar/i }),
+    ).toBeVisible();
+  });
+});

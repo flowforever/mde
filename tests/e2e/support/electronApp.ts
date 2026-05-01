@@ -40,7 +40,7 @@ export const launchElectronApp = async (
   }
   const e2eUserDataPath = await mkdtemp(join(tmpdir(), 'mde-e2e-user-data-'))
   const app = await electron.launch({
-    args: ['out/main/index.js', ...options.args ?? []],
+    args: ['out/main/index.js', '--lang=en-US', ...options.args ?? []],
     env: {
       ...process.env,
       ...options.env,
@@ -87,6 +87,18 @@ export const launchElectronApp = async (
   })
 
   const window = await app.firstWindow()
+  await window.waitForLoadState('domcontentloaded', { timeout: 20_000 })
+  await window.evaluate(() => {
+    globalThis.localStorage.setItem('mde.appLanguagePreference', 'en')
+    globalThis.localStorage.removeItem('mde.customAppLanguagePacks')
+  })
+  await window.reload({ waitUntil: 'domcontentloaded', timeout: 20_000 })
+  await window.waitForLoadState('domcontentloaded', { timeout: 20_000 })
+  await window.locator('.app-shell').waitFor({
+    state: 'visible',
+    timeout: 20_000
+  })
+
   const mainDiagnostics = await app.evaluate(() => {
     const diagnostics = globalThis.__mdeStartupDiagnostics as
       | StartupDiagnostics

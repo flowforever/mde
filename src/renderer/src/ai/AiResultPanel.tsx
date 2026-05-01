@@ -1,16 +1,18 @@
-import { LoaderCircle, X } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { LoaderCircle, X } from "lucide-react";
+import { type FormEvent, useState } from "react";
 
-import type { AiGenerationResult } from '../../../shared/ai'
-import { MarkdownBlockEditor } from '../editor/MarkdownBlockEditor'
+import type { AiGenerationResult } from "../../../shared/ai";
+import { MarkdownBlockEditor } from "../editor/MarkdownBlockEditor";
+import type { AppText } from "../i18n/appLanguage";
 
 interface AiResultPanelProps {
-  readonly colorScheme: 'dark' | 'light'
-  readonly isRegeneratingSummary: boolean
-  readonly onClose: () => void
-  readonly onRegenerateSummary: (instruction: string) => void
-  readonly result: AiGenerationResult
-  readonly workspaceRoot: string
+  readonly colorScheme: "dark" | "light";
+  readonly isRegeneratingSummary: boolean;
+  readonly onClose: () => void;
+  readonly onRegenerateSummary: (instruction: string) => void;
+  readonly result: AiGenerationResult;
+  readonly text: AppText;
+  readonly workspaceRoot: string;
 }
 
 export const AiResultPanel = ({
@@ -19,46 +21,54 @@ export const AiResultPanel = ({
   onClose,
   onRegenerateSummary,
   result,
-  workspaceRoot
+  text,
+  workspaceRoot,
 }: AiResultPanelProps): React.JSX.Element => {
-  const [summaryInstruction, setSummaryInstruction] = useState('')
+  const [summaryInstruction, setSummaryInstruction] = useState("");
   const resultTitle =
-    result.kind === 'summary'
-      ? 'Summary'
-      : `Translation${result.language ? `: ${result.language}` : ''}`
-  const submitSummaryInstruction = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault()
-    const instruction = summaryInstruction.trim()
+    result.kind === "summary"
+      ? text("ai.summary")
+      : result.language
+        ? text("ai.translationWithLanguage", { language: result.language })
+        : text("ai.translation");
+  const submitSummaryInstruction = (
+    event: FormEvent<HTMLFormElement>,
+  ): void => {
+    event.preventDefault();
+    const instruction = summaryInstruction.trim();
 
     if (instruction.length === 0 || isRegeneratingSummary) {
-      return
+      return;
     }
 
-    onRegenerateSummary(instruction)
-    setSummaryInstruction('')
-  }
+    onRegenerateSummary(instruction);
+    setSummaryInstruction("");
+  };
 
   return (
-    <section aria-label="AI result" className="ai-result-panel">
+    <section aria-label={text("ai.aiResult")} className="ai-result-panel">
       <header className="ai-result-header">
         <div className="ai-result-heading">
           <span>{resultTitle}</span>
           <span>
-            {result.cached ? 'Cached' : `Generated with ${result.tool.name}`} ·
-            read-only
+            {result.cached
+              ? text("ai.cachedReadOnly")
+              : text("ai.generatedReadOnly", { toolName: result.tool.name })}
           </span>
         </div>
         <button
-          aria-label="Close AI result"
+          aria-label={text("ai.closeResult")}
           className="ai-result-close-button"
           onClick={onClose}
-          title="Close AI result"
+          title={text("ai.closeResult")}
           type="button"
         >
           <X aria-hidden="true" size={15} strokeWidth={2} />
         </button>
       </header>
-      <p className="ai-result-path">Saved to {result.path}</p>
+      <p className="ai-result-path">
+        {text("ai.savedTo", { path: result.path })}
+      </p>
       <div className="ai-result-editor-scroll">
         <MarkdownBlockEditor
           colorScheme={colorScheme}
@@ -69,25 +79,28 @@ export const AiResultPanel = ({
           isSaving={false}
           key={`${result.kind}:${result.path}:${result.contents}`}
           markdown={result.contents}
-          onImageUpload={() => Promise.reject(new Error('AI result is read-only'))}
+          onImageUpload={() =>
+            Promise.reject(new Error(text("errors.readOnlyAiResult")))
+          }
           onMarkdownChange={() => undefined}
           onSaveRequest={() => undefined}
           path={result.path}
+          text={text}
           workspaceRoot={workspaceRoot}
         />
       </div>
-      {result.kind === 'summary' ? (
+      {result.kind === "summary" ? (
         <form
-          aria-label="Refine summary"
+          aria-label={text("ai.refineSummary")}
           className="ai-summary-refine-bar"
           onSubmit={submitSummaryInstruction}
         >
           <input
-            aria-label="Refine summary instruction"
+            aria-label={text("ai.refineSummaryInstruction")}
             onChange={(event) => {
-              setSummaryInstruction(event.target.value)
+              setSummaryInstruction(event.target.value);
             }}
-            placeholder="Ask MDE to regenerate the summary..."
+            placeholder={text("ai.regenerateSummaryPlaceholder")}
             type="text"
             value={summaryInstruction}
           />
@@ -100,14 +113,14 @@ export const AiResultPanel = ({
                   size={15}
                   strokeWidth={2}
                 />
-                <span>Regenerating</span>
+                <span>{text("ai.regenerating")}</span>
               </>
             ) : (
-              'Regenerate summary'
+              text("ai.regenerateSummary")
             )}
           </button>
         </form>
       ) : null}
     </section>
-  )
-}
+  );
+};

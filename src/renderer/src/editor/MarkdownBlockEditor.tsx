@@ -6,108 +6,110 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
-  useState
-} from 'react'
-import type { Block } from '@blocknote/core'
-import { BlockNoteView } from '@blocknote/mantine'
-import '@blocknote/core/fonts/inter.css'
-import '@blocknote/mantine/style.css'
-import { useCreateBlockNote } from '@blocknote/react'
+  useState,
+} from "react";
+import type { Block } from "@blocknote/core";
+import { BlockNoteView } from "@blocknote/mantine";
+import "@blocknote/core/fonts/inter.css";
+import "@blocknote/mantine/style.css";
+import { useCreateBlockNote } from "@blocknote/react";
 
-import { replaceMermaidBlocksFromSource } from './flowchartMarkdown'
-import { MermaidFlowchartPanel } from './MermaidFlowchartPanel'
-import { replaceEditorDocumentWithoutUndoHistory } from './editorHydration'
+import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
+import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
+import { replaceEditorDocumentWithoutUndoHistory } from "./editorHydration";
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
   prepareMarkdownForEditor,
-  prepareMarkdownForStorage
-} from './markdownTransforms'
+  prepareMarkdownForStorage,
+} from "./markdownTransforms";
+import type { AppText } from "../i18n/appLanguage";
 
 interface MarkdownBlockEditorProps {
-  readonly activeSearchMatchIndex?: number
-  readonly colorScheme: 'dark' | 'light'
-  readonly draftMarkdown: string
-  readonly errorMessage: string | null
-  readonly isDirty: boolean
-  readonly isReadOnly?: boolean
-  readonly isSaving: boolean
-  readonly markdown: string
-  readonly onImageUpload: (file: File) => Promise<string>
-  readonly onMarkdownChange: (contents: string) => void
-  readonly onSaveRequest: (contents: string) => void | Promise<void>
+  readonly activeSearchMatchIndex?: number;
+  readonly colorScheme: "dark" | "light";
+  readonly draftMarkdown: string;
+  readonly errorMessage: string | null;
+  readonly isDirty: boolean;
+  readonly isReadOnly?: boolean;
+  readonly isSaving: boolean;
+  readonly markdown: string;
+  readonly onImageUpload: (file: File) => Promise<string>;
+  readonly onMarkdownChange: (contents: string) => void;
+  readonly onSaveRequest: (contents: string) => void | Promise<void>;
   readonly onSearchStateChange?: (state: {
-    readonly activeMatchIndex: number
-    readonly matchCount: number
-  }) => void
-  readonly path: string
-  readonly searchQuery?: string
-  readonly workspaceRoot: string
+    readonly activeMatchIndex: number;
+    readonly matchCount: number;
+  }) => void;
+  readonly path: string;
+  readonly searchQuery?: string;
+  readonly text: AppText;
+  readonly workspaceRoot: string;
 }
 
 export interface MarkdownBlockEditorHandle {
-  readonly getMarkdown: () => Promise<string>
+  readonly getMarkdown: () => Promise<string>;
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback
+  error instanceof Error ? error.message : fallback;
 
 interface HighlightRegistry {
-  readonly delete: (name: string) => void
-  readonly set: (name: string, highlight: unknown) => void
+  readonly delete: (name: string) => void;
+  readonly set: (name: string, highlight: unknown) => void;
 }
 
 interface HighlightRuntime {
   readonly CSS?: {
-    readonly highlights?: HighlightRegistry
-  }
-  readonly Highlight?: new (...ranges: Range[]) => unknown
+    readonly highlights?: HighlightRegistry;
+  };
+  readonly Highlight?: new (...ranges: Range[]) => unknown;
 }
 
-const SEARCH_MATCH_HIGHLIGHT_NAME = 'mde-editor-search-match'
-const SEARCH_ACTIVE_HIGHLIGHT_NAME = 'mde-editor-search-active'
+const SEARCH_MATCH_HIGHLIGHT_NAME = "mde-editor-search-match";
+const SEARCH_ACTIVE_HIGHLIGHT_NAME = "mde-editor-search-active";
 
 const createSearchRanges = (
   container: HTMLElement,
-  query: string
+  query: string,
 ): readonly Range[] => {
-  const normalizedQuery = query.trim()
+  const normalizedQuery = query.trim();
 
   if (normalizedQuery.length === 0) {
-    return []
+    return [];
   }
 
-  const lowerQuery = normalizedQuery.toLocaleLowerCase()
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-  const ranges: Range[] = []
-  let node = walker.nextNode()
+  const lowerQuery = normalizedQuery.toLocaleLowerCase();
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const ranges: Range[] = [];
+  let node = walker.nextNode();
 
   while (node) {
-    const text = node.textContent ?? ''
-    const lowerText = text.toLocaleLowerCase()
-    let index = lowerText.indexOf(lowerQuery)
+    const text = node.textContent ?? "";
+    const lowerText = text.toLocaleLowerCase();
+    let index = lowerText.indexOf(lowerQuery);
 
     while (index !== -1) {
-      const range = document.createRange()
+      const range = document.createRange();
 
-      range.setStart(node, index)
-      range.setEnd(node, index + normalizedQuery.length)
-      ranges.push(range)
-      index = lowerText.indexOf(lowerQuery, index + normalizedQuery.length)
+      range.setStart(node, index);
+      range.setEnd(node, index + normalizedQuery.length);
+      ranges.push(range);
+      index = lowerText.indexOf(lowerQuery, index + normalizedQuery.length);
     }
 
-    node = walker.nextNode()
+    node = walker.nextNode();
   }
 
-  return ranges
-}
+  return ranges;
+};
 
 const clearSearchHighlights = (): void => {
-  const registry = (globalThis as HighlightRuntime).CSS?.highlights
+  const registry = (globalThis as HighlightRuntime).CSS?.highlights;
 
-  registry?.delete(SEARCH_MATCH_HIGHLIGHT_NAME)
-  registry?.delete(SEARCH_ACTIVE_HIGHLIGHT_NAME)
-}
+  registry?.delete(SEARCH_MATCH_HIGHLIGHT_NAME);
+  registry?.delete(SEARCH_ACTIVE_HIGHLIGHT_NAME);
+};
 
 export const MarkdownBlockEditor = forwardRef<
   MarkdownBlockEditorHandle,
@@ -127,61 +129,64 @@ export const MarkdownBlockEditor = forwardRef<
     onSaveRequest,
     onSearchStateChange = () => undefined,
     path,
-    searchQuery = '',
-    workspaceRoot
+    searchQuery = "",
+    text,
+    workspaceRoot,
   },
-  ref
+  ref,
 ): React.JSX.Element {
   const editor = useCreateBlockNote(
     {
-      uploadFile: onImageUpload
+      uploadFile: onImageUpload,
     },
-    [onImageUpload]
-  )
-  const isHydratingRef = useRef(false)
-  const hasLocalChangesRef = useRef(false)
-  const latestDraftMarkdownRef = useRef(draftMarkdown)
-  const shellRef = useRef<HTMLDivElement | null>(null)
-  const [parseErrorMessage, setParseErrorMessage] = useState<string | null>(null)
+    [onImageUpload],
+  );
+  const isHydratingRef = useRef(false);
+  const hasLocalChangesRef = useRef(false);
+  const latestDraftMarkdownRef = useRef(draftMarkdown);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [parseErrorMessage, setParseErrorMessage] = useState<string | null>(
+    null,
+  );
   const [serializationErrorMessage, setSerializationErrorMessage] = useState<
     string | null
-  >(null)
-  const [searchRevision, setSearchRevision] = useState(0)
+  >(null);
+  const [searchRevision, setSearchRevision] = useState(0);
   const assetContext = useMemo(
     () => ({
       markdownFilePath: path,
-      workspaceRoot
+      workspaceRoot,
     }),
-    [path, workspaceRoot]
-  )
+    [path, workspaceRoot],
+  );
   const editorMarkdown = useMemo(
     () => prepareMarkdownForEditor(markdown, assetContext),
-    [assetContext, markdown]
-  )
+    [assetContext, markdown],
+  );
 
-  const serializeMarkdown = useCallback(
-    async (): Promise<string> => {
-      const exportedMarkdown = await exportBlocksToMarkdown(editor, editor.document)
-      const portableMarkdown = prepareMarkdownForStorage(
-        exportedMarkdown,
-        assetContext
-      )
+  const serializeMarkdown = useCallback(async (): Promise<string> => {
+    const exportedMarkdown = await exportBlocksToMarkdown(
+      editor,
+      editor.document,
+    );
+    const portableMarkdown = prepareMarkdownForStorage(
+      exportedMarkdown,
+      assetContext,
+    );
 
-      return replaceMermaidBlocksFromSource(portableMarkdown, draftMarkdown)
-    },
-    [assetContext, draftMarkdown, editor]
-  )
+    return replaceMermaidBlocksFromSource(portableMarkdown, draftMarkdown);
+  }, [assetContext, draftMarkdown, editor]);
 
   useImperativeHandle(
     ref,
     () => ({
-      getMarkdown: serializeMarkdown
+      getMarkdown: serializeMarkdown,
     }),
-    [serializeMarkdown]
-  )
+    [serializeMarkdown],
+  );
 
   useEffect(() => {
-    let isCurrent = true
+    let isCurrent = true;
 
     const loadMarkdown = async (): Promise<void> => {
       try {
@@ -189,166 +194,174 @@ export const MarkdownBlockEditor = forwardRef<
           hasLocalChangesRef.current &&
           markdown === latestDraftMarkdownRef.current
         ) {
-          return
+          return;
         }
 
-        const blocks = await importMarkdownToBlocks(editor, editorMarkdown)
+        const blocks = await importMarkdownToBlocks(editor, editorMarkdown);
 
         if (!isCurrent) {
-          return
+          return;
         }
 
-        isHydratingRef.current = true
-        replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[])
-        setParseErrorMessage(null)
+        isHydratingRef.current = true;
+        replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[]);
+        setParseErrorMessage(null);
         window.setTimeout(() => {
           if (isCurrent) {
-            isHydratingRef.current = false
+            isHydratingRef.current = false;
           }
-        }, 0)
+        }, 0);
       } catch (error) {
         if (isCurrent) {
-          isHydratingRef.current = false
-          setParseErrorMessage(getErrorMessage(error, 'Unable to parse Markdown'))
+          isHydratingRef.current = false;
+          setParseErrorMessage(
+            getErrorMessage(error, text("errors.markdownParseFailed")),
+          );
         }
       }
-    }
+    };
 
-    void loadMarkdown()
+    void loadMarkdown();
 
     return () => {
-      isCurrent = false
-      isHydratingRef.current = false
-    }
-  }, [editor, editorMarkdown, markdown])
+      isCurrent = false;
+      isHydratingRef.current = false;
+    };
+  }, [editor, editorMarkdown, markdown, text]);
 
   useEffect(() => {
-    latestDraftMarkdownRef.current = draftMarkdown
-  }, [draftMarkdown])
+    latestDraftMarkdownRef.current = draftMarkdown;
+  }, [draftMarkdown]);
 
   useEffect(() => {
-    hasLocalChangesRef.current = false
-  }, [markdown, path, workspaceRoot])
+    hasLocalChangesRef.current = false;
+  }, [markdown, path, workspaceRoot]);
 
   useEffect(() => {
     if (searchQuery.trim().length === 0) {
-      return
+      return;
     }
 
     const surfaceElement = shellRef.current?.querySelector<HTMLElement>(
-      '.markdown-editor-surface'
-    )
+      ".markdown-editor-surface",
+    );
 
     if (!surfaceElement) {
-      return
+      return;
     }
 
     const observer = new MutationObserver(() => {
-      setSearchRevision((currentRevision) => currentRevision + 1)
-    })
+      setSearchRevision((currentRevision) => currentRevision + 1);
+    });
 
     observer.observe(surfaceElement, {
       characterData: true,
       childList: true,
-      subtree: true
-    })
+      subtree: true,
+    });
 
     return () => {
-      observer.disconnect()
-    }
-  }, [searchQuery])
+      observer.disconnect();
+    };
+  }, [searchQuery]);
 
   useEffect(() => {
-    const surfaceElement = shellRef.current?.querySelector<HTMLElement>(
-      '.markdown-editor-surface'
-    ) ?? null
+    const surfaceElement =
+      shellRef.current?.querySelector<HTMLElement>(
+        ".markdown-editor-surface",
+      ) ?? null;
     const ranges = surfaceElement
       ? createSearchRanges(surfaceElement, searchQuery)
-      : []
+      : [];
     const activeMatchIndex =
       ranges.length === 0
         ? -1
-        : Math.min(Math.max(activeSearchMatchIndex, 0), ranges.length - 1)
-    const runtime = globalThis as HighlightRuntime
-    const Highlight = runtime.Highlight
-    const registry = runtime.CSS?.highlights
+        : Math.min(Math.max(activeSearchMatchIndex, 0), ranges.length - 1);
+    const runtime = globalThis as HighlightRuntime;
+    const Highlight = runtime.Highlight;
+    const registry = runtime.CSS?.highlights;
 
     onSearchStateChange({
       activeMatchIndex,
-      matchCount: ranges.length
-    })
-    clearSearchHighlights()
+      matchCount: ranges.length,
+    });
+    clearSearchHighlights();
 
     if (!Highlight || !registry || searchQuery.trim().length === 0) {
-      return clearSearchHighlights
+      return clearSearchHighlights;
     }
 
     const activeRange =
       activeMatchIndex >= 0 && activeMatchIndex < ranges.length
         ? ranges[activeMatchIndex]
-        : null
+        : null;
     const inactiveRanges = activeRange
       ? ranges.filter((range) => range !== activeRange)
-      : ranges
+      : ranges;
 
-    registry.set(SEARCH_MATCH_HIGHLIGHT_NAME, new Highlight(...inactiveRanges))
+    registry.set(SEARCH_MATCH_HIGHLIGHT_NAME, new Highlight(...inactiveRanges));
 
     if (ranges.length > 0 && activeMatchIndex >= 0) {
       registry.set(
         SEARCH_ACTIVE_HIGHLIGHT_NAME,
-        activeRange ? new Highlight(activeRange) : new Highlight()
-      )
-      const activeElement = activeRange?.startContainer.parentElement
+        activeRange ? new Highlight(activeRange) : new Highlight(),
+      );
+      const activeElement = activeRange?.startContainer.parentElement;
 
-      if (typeof activeElement?.scrollIntoView === 'function') {
+      if (typeof activeElement?.scrollIntoView === "function") {
         activeElement.scrollIntoView({
-          block: 'center',
-          inline: 'nearest'
-        })
+          block: "center",
+          inline: "nearest",
+        });
       }
     }
 
-    return clearSearchHighlights
-  }, [activeSearchMatchIndex, onSearchStateChange, searchQuery, searchRevision])
+    return clearSearchHighlights;
+  }, [
+    activeSearchMatchIndex,
+    onSearchStateChange,
+    searchQuery,
+    searchRevision,
+  ]);
 
   const saveMarkdown = useCallback(async (): Promise<void> => {
     if (isReadOnly || isSaving || !hasLocalChangesRef.current) {
-      return
+      return;
     }
 
     try {
-      const contents = await serializeMarkdown()
+      const contents = await serializeMarkdown();
 
       if (contents === markdown) {
-        hasLocalChangesRef.current = false
-        return
+        hasLocalChangesRef.current = false;
+        return;
       }
 
-      setSerializationErrorMessage(null)
-      await onSaveRequest(contents)
-      hasLocalChangesRef.current = false
+      setSerializationErrorMessage(null);
+      await onSaveRequest(contents);
+      hasLocalChangesRef.current = false;
     } catch (error) {
       setSerializationErrorMessage(
-        getErrorMessage(error, 'Unable to serialize Markdown')
-      )
+        getErrorMessage(error, text("errors.markdownSerializeFailed")),
+      );
     }
-  }, [isReadOnly, isSaving, markdown, onSaveRequest, serializeMarkdown])
+  }, [isReadOnly, isSaving, markdown, onSaveRequest, serializeMarkdown, text]);
 
   const saveMarkdownOnBlur = useCallback(
     (event: ReactFocusEvent<HTMLDivElement>): void => {
-      const nextFocusedElement = event.relatedTarget
+      const nextFocusedElement = event.relatedTarget;
 
       if (
         nextFocusedElement instanceof Node &&
         event.currentTarget.contains(nextFocusedElement)
       ) {
-        return
+        return;
       }
 
-      void saveMarkdown()
+      void saveMarkdown();
     },
-    [saveMarkdown]
-  )
+    [saveMarkdown],
+  );
 
   return (
     <div
@@ -366,7 +379,7 @@ export const MarkdownBlockEditor = forwardRef<
               className="markdown-editor-save-state"
               role="status"
             >
-              Saving...
+              {text("editor.saving")}
             </span>
           ) : isDirty ? (
             <span
@@ -374,7 +387,7 @@ export const MarkdownBlockEditor = forwardRef<
               className="markdown-editor-dirty-state"
               role="status"
             >
-              Unsaved changes
+              {text("editor.unsavedChanges")}
             </span>
           ) : null}
         </div>
@@ -399,6 +412,7 @@ export const MarkdownBlockEditor = forwardRef<
           colorScheme={colorScheme}
           markdown={draftMarkdown}
           onMarkdownChange={onMarkdownChange}
+          text={text}
         />
       ) : null}
       <BlockNoteView
@@ -408,30 +422,30 @@ export const MarkdownBlockEditor = forwardRef<
         editor={editor}
         onChange={(changedEditor) => {
           if (isReadOnly || isHydratingRef.current) {
-            return
+            return;
           }
 
-          hasLocalChangesRef.current = true
+          hasLocalChangesRef.current = true;
           void exportBlocksToMarkdown(changedEditor, changedEditor.document)
             .then((contents) => {
               const portableContents = prepareMarkdownForStorage(
                 contents,
-                assetContext
-              )
+                assetContext,
+              );
 
-              setSerializationErrorMessage(null)
+              setSerializationErrorMessage(null);
               onMarkdownChange(
-                replaceMermaidBlocksFromSource(portableContents, draftMarkdown)
-              )
+                replaceMermaidBlocksFromSource(portableContents, draftMarkdown),
+              );
             })
             .catch((error: unknown) => {
               setSerializationErrorMessage(
-                getErrorMessage(error, 'Unable to serialize Markdown')
-              )
-            })
+                getErrorMessage(error, text("errors.markdownSerializeFailed")),
+              );
+            });
         }}
         theme={colorScheme}
       />
     </div>
-  )
-})
+  );
+});

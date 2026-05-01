@@ -138,8 +138,21 @@ const openMarkdownFile = async (window: Page): Promise<void> => {
 const resetThemePreference = async (window: Page): Promise<void> => {
   await window.evaluate(() => {
     globalThis.localStorage.removeItem('mde.themePreference')
-    globalThis.location.reload()
   })
+  await window.reload({ waitUntil: 'domcontentloaded' })
+  await window.locator('.app-shell').waitFor({ state: 'visible' })
+}
+
+const setAppLanguagePreference = async (
+  window: Page,
+  languageId: string
+): Promise<void> => {
+  await window.evaluate((nextLanguageId) => {
+    globalThis.localStorage.setItem('mde.appLanguagePreference', nextLanguageId)
+    globalThis.localStorage.removeItem('mde.customAppLanguagePacks')
+  }, languageId)
+  await window.reload({ waitUntil: 'domcontentloaded' })
+  await window.locator('.app-shell').waitFor({ state: 'visible' })
 }
 
 const focusTextEndInEditor = async (
@@ -309,6 +322,55 @@ test('selects and persists a manual theme from settings', async () => {
     ).not.toBeChecked()
     await expect(window.getByRole('button', { name: /open settings/i }))
       .toBeEnabled()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('switches the app language from Preference settings and persists it', async () => {
+  const { app, startupDiagnostics, window } = await launchElectronApp()
+
+  try {
+    await setAppLanguagePreference(window, 'en')
+    await expect(window.getByRole('button', { name: /close workspace popup/i }))
+      .toBeVisible()
+    await window.getByRole('button', { name: /close workspace popup/i }).click()
+
+    expect(await window.evaluate(() => document.documentElement.lang)).toBe('en')
+    await window.getByRole('button', { name: /open settings/i }).click()
+    await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
+    await window.getByRole('button', { name: /^Preference$/ }).click()
+
+    const languageSelect = window.getByRole('combobox', { name: /^Language$/ })
+
+    await expect(languageSelect).toHaveValue('en')
+    await languageSelect.selectOption('zh')
+
+    await expect(window.getByRole('dialog', { name: /^设置$/ })).toBeVisible()
+    await expect(window.getByRole('button', { name: /^偏好$/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    await expect(window.getByRole('combobox', { name: /^语言$/ })).toHaveValue('zh')
+    expect(await window.evaluate(() => document.documentElement.lang)).toBe(
+      'zh-CN'
+    )
+    expect(
+      await window.evaluate(() =>
+        globalThis.localStorage.getItem('mde.appLanguagePreference')
+      )
+    ).toBe('zh')
+
+    await window.evaluate(() => {
+      globalThis.location.reload()
+    })
+
+    await expect(window.getByRole('button', { name: /打开设置/ })).toBeEnabled()
+    await expect(window.getByRole('heading', { name: /^打开工作区$/ })).toBeVisible()
+    expect(await window.evaluate(() => document.documentElement.lang)).toBe(
+      'zh-CN'
+    )
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

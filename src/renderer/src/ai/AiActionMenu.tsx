@@ -1,25 +1,27 @@
-import { FileText, Languages, LoaderCircle, Plus, X } from 'lucide-react'
-import type { FormEvent } from 'react'
+import { FileText, Languages, LoaderCircle, Plus, X } from "lucide-react";
+import type { FormEvent } from "react";
 
-import { DEFAULT_AI_TRANSLATION_LANGUAGES } from './aiLanguages'
+import { DEFAULT_AI_TRANSLATION_LANGUAGES } from "./aiLanguages";
+import type { AppText } from "../i18n/appLanguage";
 
 export type AiActionBusyState =
-  | 'idle'
-  | 'refining-summary'
-  | 'summarizing'
-  | 'translating'
+  | "idle"
+  | "refining-summary"
+  | "summarizing"
+  | "translating";
 
 interface AiActionMenuProps {
-  readonly busyState: AiActionBusyState
-  readonly customLanguageInput: string
-  readonly customLanguages: readonly string[]
-  readonly isTranslateMenuOpen: boolean
-  readonly onAddCustomLanguage: () => void
-  readonly onCustomLanguageInputChange: (value: string) => void
-  readonly onForgetCustomLanguage: (language: string) => void
-  readonly onSummarize: () => void
-  readonly onToggleTranslateMenu: () => void
-  readonly onTranslate: (language: string) => void
+  readonly busyState: AiActionBusyState;
+  readonly customLanguageInput: string;
+  readonly customLanguages: readonly string[];
+  readonly isTranslateMenuOpen: boolean;
+  readonly onAddCustomLanguage: () => void;
+  readonly onCustomLanguageInputChange: (value: string) => void;
+  readonly onForgetCustomLanguage: (language: string) => void;
+  readonly onSummarize: () => void;
+  readonly onToggleTranslateMenu: () => void;
+  readonly onTranslate: (language: string) => void;
+  readonly text: AppText;
 }
 
 export const AiActionMenu = ({
@@ -32,23 +34,24 @@ export const AiActionMenu = ({
   onForgetCustomLanguage,
   onSummarize,
   onToggleTranslateMenu,
-  onTranslate
+  onTranslate,
+  text,
 }: AiActionMenuProps): React.JSX.Element => {
   const submitCustomLanguage = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault()
-    const language = customLanguageInput.trim()
+    event.preventDefault();
+    const language = customLanguageInput.trim();
 
-    onAddCustomLanguage()
+    onAddCustomLanguage();
     if (language.length > 0) {
-      onTranslate(language)
+      onTranslate(language);
     }
-  }
-  const isBusy = busyState !== 'idle'
-  const isSummarizing = busyState === 'summarizing'
-  const isTranslating = busyState === 'translating'
+  };
+  const isBusy = busyState !== "idle";
+  const isSummarizing = busyState === "summarizing";
+  const isTranslating = busyState === "translating";
   const renderActionIcon = (
     isSpinning: boolean,
-    icon: React.JSX.Element
+    icon: React.JSX.Element,
   ): React.JSX.Element =>
     isSpinning ? (
       <LoaderCircle
@@ -60,44 +63,44 @@ export const AiActionMenu = ({
       />
     ) : (
       icon
-    )
+    );
 
   return (
     <>
       <button
-        aria-label="Summarize Markdown"
+        aria-label={text("ai.summarizeMarkdown")}
         aria-busy={isSummarizing}
         className="editor-action-button"
         disabled={isBusy}
         onClick={onSummarize}
-        title="Summarize Markdown"
+        title={text("ai.summarizeMarkdown")}
         type="button"
       >
         {renderActionIcon(
           isSummarizing,
-          <FileText aria-hidden="true" size={17} strokeWidth={2} />
+          <FileText aria-hidden="true" size={17} strokeWidth={2} />,
         )}
       </button>
       <div className="editor-translate-menu-shell">
         <button
           aria-expanded={isTranslateMenuOpen}
           aria-haspopup="menu"
-          aria-label="Translate Markdown"
+          aria-label={text("ai.translateMarkdown")}
           aria-busy={isTranslating}
           className="editor-action-button"
           disabled={isBusy}
           onClick={onToggleTranslateMenu}
-          title="Translate Markdown"
+          title={text("ai.translateMarkdown")}
           type="button"
         >
           {renderActionIcon(
             isTranslating,
-            <Languages aria-hidden="true" size={17} strokeWidth={2} />
+            <Languages aria-hidden="true" size={17} strokeWidth={2} />,
           )}
         </button>
         {isTranslateMenuOpen ? (
           <div
-            aria-label="Translation languages"
+            aria-label={text("ai.translationLanguages")}
             className="editor-translate-menu"
             role="menu"
           >
@@ -107,7 +110,7 @@ export const AiActionMenu = ({
                   className="editor-translate-menu-item"
                   key={language}
                   onClick={() => {
-                    onTranslate(language)
+                    onTranslate(language);
                   }}
                   role="menuitem"
                   type="button"
@@ -120,7 +123,7 @@ export const AiActionMenu = ({
                   <button
                     className="editor-translate-menu-item"
                     onClick={() => {
-                      onTranslate(language)
+                      onTranslate(language);
                     }}
                     role="menuitem"
                     type="button"
@@ -128,12 +131,14 @@ export const AiActionMenu = ({
                     {language}
                   </button>
                   <button
-                    aria-label={`Remove custom language ${language}`}
+                    aria-label={text("ai.removeCustomLanguageNamed", {
+                      language,
+                    })}
                     className="editor-translate-remove-button"
                     onClick={() => {
-                      onForgetCustomLanguage(language)
+                      onForgetCustomLanguage(language);
                     }}
-                    title="Remove custom language"
+                    title={text("ai.removeCustomLanguage")}
                     type="button"
                   >
                     <X aria-hidden="true" size={14} strokeWidth={2} />
@@ -142,21 +147,21 @@ export const AiActionMenu = ({
               ))}
             </div>
             <form
-              aria-label="Add custom translation language"
+              aria-label={text("ai.addCustomTranslationLanguage")}
               className="editor-translate-custom-form"
               onSubmit={submitCustomLanguage}
             >
               <input
-                aria-label="Custom translation language"
+                aria-label={text("ai.customTranslationLanguage")}
                 onChange={(event) => {
-                  onCustomLanguageInputChange(event.target.value)
+                  onCustomLanguageInputChange(event.target.value);
                 }}
-                placeholder="Other language"
+                placeholder={text("ai.otherLanguage")}
                 type="text"
                 value={customLanguageInput}
               />
               <button
-                aria-label="Add translation language"
+                aria-label={text("ai.addTranslationLanguage")}
                 className="editor-translate-add-button"
                 type="submit"
               >
@@ -167,5 +172,5 @@ export const AiActionMenu = ({
         ) : null}
       </div>
     </>
-  )
-}
+  );
+};

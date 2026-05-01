@@ -1,11 +1,17 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AiActionMenu } from '../../src/renderer/src/ai/AiActionMenu'
+import { AiActionMenu } from "../../src/renderer/src/ai/AiActionMenu";
+import {
+  BUILT_IN_APP_LANGUAGE_PACKS,
+  createAppText,
+} from "../../src/renderer/src/i18n/appLanguage";
 
-type BusyState = 'idle' | 'refining-summary' | 'summarizing' | 'translating'
+type BusyState = "idle" | "refining-summary" | "summarizing" | "translating";
 
 const renderAiActionMenu = (busyState: BusyState): void => {
+  const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+
   render(
     <AiActionMenu
       busyState={busyState}
@@ -18,67 +24,68 @@ const renderAiActionMenu = (busyState: BusyState): void => {
       onSummarize={vi.fn()}
       onToggleTranslateMenu={vi.fn()}
       onTranslate={vi.fn()}
-    />
-  )
-}
+      text={text}
+    />,
+  );
+};
 
-describe('AiActionMenu', () => {
+describe("AiActionMenu", () => {
   afterEach(() => {
-    cleanup()
-  })
+    cleanup();
+  });
 
-  it('shows a spinner only on the summary button while summarizing', () => {
-    renderAiActionMenu('summarizing')
+  it("shows a spinner only on the summary button while summarizing", () => {
+    renderAiActionMenu("summarizing");
 
-    const summaryButton = screen.getByRole('button', {
-      name: /summarize markdown/i
-    })
-    const translateButton = screen.getByRole('button', {
-      name: /translate markdown/i
-    })
+    const summaryButton = screen.getByRole("button", {
+      name: /summarize markdown/i,
+    });
+    const translateButton = screen.getByRole("button", {
+      name: /translate markdown/i,
+    });
 
-    expect(summaryButton).toHaveAttribute('aria-busy', 'true')
-    expect(translateButton).toHaveAttribute('aria-busy', 'false')
+    expect(summaryButton).toHaveAttribute("aria-busy", "true");
+    expect(translateButton).toHaveAttribute("aria-busy", "false");
     expect(
-      within(summaryButton).getByTestId('ai-action-spinner')
-    ).toBeInTheDocument()
+      within(summaryButton).getByTestId("ai-action-spinner"),
+    ).toBeInTheDocument();
     expect(
-      within(translateButton).queryByTestId('ai-action-spinner')
-    ).not.toBeInTheDocument()
-  })
+      within(translateButton).queryByTestId("ai-action-spinner"),
+    ).not.toBeInTheDocument();
+  });
 
-  it('shows a spinner only on the translate button while translating', () => {
-    renderAiActionMenu('translating')
+  it("shows a spinner only on the translate button while translating", () => {
+    renderAiActionMenu("translating");
 
-    const summaryButton = screen.getByRole('button', {
-      name: /summarize markdown/i
-    })
-    const translateButton = screen.getByRole('button', {
-      name: /translate markdown/i
-    })
+    const summaryButton = screen.getByRole("button", {
+      name: /summarize markdown/i,
+    });
+    const translateButton = screen.getByRole("button", {
+      name: /translate markdown/i,
+    });
 
-    expect(summaryButton).toHaveAttribute('aria-busy', 'false')
-    expect(translateButton).toHaveAttribute('aria-busy', 'true')
+    expect(summaryButton).toHaveAttribute("aria-busy", "false");
+    expect(translateButton).toHaveAttribute("aria-busy", "true");
     expect(
-      within(summaryButton).queryByTestId('ai-action-spinner')
-    ).not.toBeInTheDocument()
+      within(summaryButton).queryByTestId("ai-action-spinner"),
+    ).not.toBeInTheDocument();
     expect(
-      within(translateButton).getByTestId('ai-action-spinner')
-    ).toBeInTheDocument()
-  })
+      within(translateButton).getByTestId("ai-action-spinner"),
+    ).toBeInTheDocument();
+  });
 
-  it('does not spin top-level AI action buttons while refining a summary', () => {
-    renderAiActionMenu('refining-summary')
+  it("does not spin top-level AI action buttons while refining a summary", () => {
+    renderAiActionMenu("refining-summary");
 
-    const summaryButton = screen.getByRole('button', {
-      name: /summarize markdown/i
-    })
-    const translateButton = screen.getByRole('button', {
-      name: /translate markdown/i
-    })
+    const summaryButton = screen.getByRole("button", {
+      name: /summarize markdown/i,
+    });
+    const translateButton = screen.getByRole("button", {
+      name: /translate markdown/i,
+    });
 
-    expect(summaryButton).toHaveAttribute('aria-busy', 'false')
-    expect(translateButton).toHaveAttribute('aria-busy', 'false')
-    expect(screen.queryByTestId('ai-action-spinner')).not.toBeInTheDocument()
-  })
-})
+    expect(summaryButton).toHaveAttribute("aria-busy", "false");
+    expect(translateButton).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByTestId("ai-action-spinner")).not.toBeInTheDocument();
+  });
+});

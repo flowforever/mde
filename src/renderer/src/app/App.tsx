@@ -5,42 +5,43 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
-  useState
-} from 'react'
+  useState,
+} from "react";
 import {
   AlignHorizontalSpaceAround,
   Search,
   StretchHorizontal,
-  X
-} from 'lucide-react'
+  X,
+} from "lucide-react";
 
-import type { AiApi, AiGenerationResult, AiTool } from '../../../shared/ai'
+import type { AiApi, AiGenerationResult, AiTool } from "../../../shared/ai";
 import type {
   EditorApi,
   Workspace,
-  WorkspaceSearchResult
-} from '../../../shared/workspace'
+  WorkspaceSearchResult,
+} from "../../../shared/workspace";
 import type {
   AvailableUpdate,
   UpdateApi,
   UpdateCheckResult,
-  UpdateDownloadProgress
-} from '../../../shared/update'
-import packageJson from '../../../../package.json'
-import { appReducer, createInitialAppState } from './appReducer'
+  UpdateDownloadProgress,
+} from "../../../shared/update";
+import packageJson from "../../../../package.json";
+import { appReducer, createInitialAppState } from "./appReducer";
 import {
   MarkdownBlockEditor,
-  type MarkdownBlockEditorHandle
-} from '../editor/MarkdownBlockEditor'
+  type MarkdownBlockEditorHandle,
+} from "../editor/MarkdownBlockEditor";
 import {
   readEditorViewMode,
-  writeEditorViewMode
-} from '../editor/editorViewMode'
-import { getNextSearchMatchIndex } from '../search/editorSearch'
-import { ExplorerPane } from '../explorer/ExplorerPane'
-import { UpdateDialog, type UpdateDialogStatus } from './UpdateDialog'
+  writeEditorViewMode,
+} from "../editor/editorViewMode";
+import { getNextSearchMatchIndex } from "../search/editorSearch";
+import { ExplorerPane } from "../explorer/ExplorerPane";
+import { UpdateDialog, type UpdateDialogStatus } from "./UpdateDialog";
 import {
   disableSystemThemePreference,
   enableSystemThemePreference,
@@ -50,8 +51,8 @@ import {
   writeThemePreference,
   type AppThemeFamily,
   type AppThemeId,
-  type ThemePreference
-} from '../theme/appThemes'
+  type ThemePreference,
+} from "../theme/appThemes";
 import {
   forgetRecentWorkspace,
   readActiveWorkspace,
@@ -59,8 +60,8 @@ import {
   rememberWorkspace,
   type RecentWorkspace,
   writeActiveWorkspace,
-  writeRecentWorkspaces
-} from '../workspaces/recentWorkspaces'
+  writeRecentWorkspaces,
+} from "../workspaces/recentWorkspaces";
 import {
   getWorkspaceLastOpenedFile,
   getWorkspaceRecentFiles,
@@ -69,1000 +70,1095 @@ import {
   removeWorkspaceFileHistoryEntry,
   renameWorkspaceFileHistoryEntry,
   type WorkspaceFileHistory,
-  writeWorkspaceFileHistory
-} from '../workspaces/workspaceFileHistory'
-import type { TreeNode } from '../../../shared/fileTree'
-import { AiActionMenu, type AiActionBusyState } from '../ai/AiActionMenu'
-import { AiResultPanel } from '../ai/AiResultPanel'
+  writeWorkspaceFileHistory,
+} from "../workspaces/workspaceFileHistory";
+import type { TreeNode } from "../../../shared/fileTree";
+import { AiActionMenu, type AiActionBusyState } from "../ai/AiActionMenu";
+import { AiResultPanel } from "../ai/AiResultPanel";
 import {
   forgetCustomAiTranslationLanguage,
   readCustomAiTranslationLanguages,
-  rememberCustomAiTranslationLanguage
-} from '../ai/aiLanguages'
+  rememberCustomAiTranslationLanguage,
+} from "../ai/aiLanguages";
 import {
   readAiCliSettings,
   resolveAiGenerationOptions,
   writeAiCliSettings,
-  type AiCliSettings
-} from '../ai/aiSettings'
+  type AiCliSettings,
+} from "../ai/aiSettings";
+import {
+  createAppLanguagePackEntries,
+  createAppText,
+  createCustomAppLanguagePack,
+  getAppLanguagePack,
+  getSelectableAppLanguagePacks,
+  readAppLanguagePreference,
+  readCustomAppLanguagePacks,
+  writeAppLanguagePreference,
+  writeCustomAppLanguagePacks,
+} from "../i18n/appLanguage";
 
 declare global {
   interface Window {
-    readonly aiApi?: AiApi
-    readonly editorApi?: EditorApi
-    readonly updateApi?: UpdateApi
+    readonly aiApi?: AiApi;
+    readonly editorApi?: EditorApi;
+    readonly updateApi?: UpdateApi;
   }
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error ? error.message : fallback
+  error instanceof Error ? error.message : fallback;
 
 const findNodeByPath = (
   nodes: readonly TreeNode[],
-  targetPath: string
+  targetPath: string,
 ): TreeNode | null => {
   for (const node of nodes) {
     if (node.path === targetPath) {
-      return node
+      return node;
     }
 
-    if (node.type === 'directory') {
-      const childNode = findNodeByPath(node.children, targetPath)
+    if (node.type === "directory") {
+      const childNode = findNodeByPath(node.children, targetPath);
 
       if (childNode) {
-        return childNode
+        return childNode;
       }
     }
   }
 
-  return null
-}
+  return null;
+};
 
 const findFileNodeByPath = (
   nodes: readonly TreeNode[],
-  targetPath: string
+  targetPath: string,
 ): TreeNode | null => {
-  const node = findNodeByPath(nodes, targetPath)
+  const node = findNodeByPath(nodes, targetPath);
 
-  return node?.type === 'file' ? node : null
-}
+  return node?.type === "file" ? node : null;
+};
 
 const hasDirectoryNode = (
   nodes: readonly TreeNode[],
-  targetPath: string
-): boolean => findNodeByPath(nodes, targetPath)?.type === 'directory'
+  targetPath: string,
+): boolean => findNodeByPath(nodes, targetPath)?.type === "directory";
 
 const replaceDirectoryChildren = (
   nodes: readonly TreeNode[],
   targetPath: string,
-  children: readonly TreeNode[]
+  children: readonly TreeNode[],
 ): readonly TreeNode[] =>
   nodes.map((node) => {
-    if (node.type !== 'directory') {
-      return node
+    if (node.type !== "directory") {
+      return node;
     }
 
     if (node.path === targetPath) {
       return {
         ...node,
-        children
-      }
+        children,
+      };
     }
 
     return {
       ...node,
-      children: replaceDirectoryChildren(node.children, targetPath, children)
-    }
-  })
+      children: replaceDirectoryChildren(node.children, targetPath, children),
+    };
+  });
 
 const getDirectoryDepth = (directoryPath: string): number =>
-  directoryPath.split('/').filter((segment) => segment.length > 0).length
+  directoryPath.split("/").filter((segment) => segment.length > 0).length;
 
 const sortDirectoryPaths = (
-  directoryPaths: readonly string[]
+  directoryPaths: readonly string[],
 ): readonly string[] =>
   Array.from(new Set(directoryPaths))
     .filter((directoryPath) => directoryPath.length > 0)
     .sort(
       (leftPath, rightPath) =>
         getDirectoryDepth(leftPath) - getDirectoryDepth(rightPath) ||
-        leftPath.localeCompare(rightPath)
-    )
+        leftPath.localeCompare(rightPath),
+    );
 
 const getParentPath = (entryPath: string): string => {
-  const separatorIndex = entryPath.lastIndexOf('/')
+  const separatorIndex = entryPath.lastIndexOf("/");
 
-  return separatorIndex === -1 ? '' : entryPath.slice(0, separatorIndex)
-}
+  return separatorIndex === -1 ? "" : entryPath.slice(0, separatorIndex);
+};
 
 const joinWorkspacePath = (parentPath: string, entryName: string): string =>
-  parentPath ? `${parentPath}/${entryName}` : entryName
+  parentPath ? `${parentPath}/${entryName}` : entryName;
 
 const ensureMarkdownExtension = (filePath: string): string =>
-  filePath.toLowerCase().endsWith('.md') ? filePath : `${filePath}.md`
+  filePath.toLowerCase().endsWith(".md") ? filePath : `${filePath}.md`;
 
-const EXPLORER_WIDTH_DEFAULT = 288
-const EXPLORER_WIDTH_MIN = 220
-const EXPLORER_WIDTH_MAX = 440
-const AUTO_SAVE_IDLE_DELAY_MS = 5000
-const SYSTEM_DARK_COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)'
-const APP_VERSION = packageJson.version
-type ActiveAiActionBusyState = Exclude<AiActionBusyState, 'idle'>
+const EXPLORER_WIDTH_DEFAULT = 288;
+const EXPLORER_WIDTH_MIN = 220;
+const EXPLORER_WIDTH_MAX = 440;
+const AUTO_SAVE_IDLE_DELAY_MS = 5000;
+const SYSTEM_DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+const APP_VERSION = packageJson.version;
+type ActiveAiActionBusyState = Exclude<AiActionBusyState, "idle">;
 
 interface ScopedAiGenerationResult {
-  readonly documentKey: string
-  readonly result: AiGenerationResult
+  readonly documentKey: string;
+  readonly result: AiGenerationResult;
 }
 
 interface ScopedAiErrorMessage {
-  readonly documentKey: string
-  readonly message: string
+  readonly documentKey: string;
+  readonly message: string;
 }
 
 interface EditorSearchState {
-  readonly activeMatchIndex: number
-  readonly matchCount: number
+  readonly activeMatchIndex: number;
+  readonly matchCount: number;
 }
 
 const clampExplorerWidth = (width: number): number =>
-  Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
+  Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)));
 
 const createAiDocumentKey = (workspaceRoot: string, filePath: string): string =>
-  `${workspaceRoot}\u0000${filePath}`
+  `${workspaceRoot}\u0000${filePath}`;
 
 const normalizeNativePath = (filePath: string): string =>
-  filePath.replace(/\\/g, '/').replace(/\/+$/u, '')
+  filePath.replace(/\\/g, "/").replace(/\/+$/u, "");
 
 const getRelativeWorkspacePath = (
   resourcePath: string,
-  workspaceRoot: string
+  workspaceRoot: string,
 ): string | null => {
-  const normalizedResourcePath = normalizeNativePath(resourcePath)
-  const normalizedWorkspaceRoot = normalizeNativePath(workspaceRoot)
+  const normalizedResourcePath = normalizeNativePath(resourcePath);
+  const normalizedWorkspaceRoot = normalizeNativePath(workspaceRoot);
 
   if (normalizedResourcePath === normalizedWorkspaceRoot) {
-    return ''
+    return "";
   }
 
   if (!normalizedResourcePath.startsWith(`${normalizedWorkspaceRoot}/`)) {
-    return null
+    return null;
   }
 
-  return normalizedResourcePath.slice(normalizedWorkspaceRoot.length + 1)
-}
+  return normalizedResourcePath.slice(normalizedWorkspaceRoot.length + 1);
+};
 
 const getDroppedResourcePath = (
-  event: ReactDragEvent<HTMLElement>
+  event: ReactDragEvent<HTMLElement>,
 ): string | null => {
-  const [firstFile] = Array.from(event.dataTransfer.files)
-  const nativeFilePath = (firstFile as File & { readonly path?: string } | undefined)
-    ?.path
+  const [firstFile] = Array.from(event.dataTransfer.files);
+  const nativeFilePath = (
+    firstFile as (File & { readonly path?: string }) | undefined
+  )?.path;
 
   if (nativeFilePath) {
-    return nativeFilePath
+    return nativeFilePath;
   }
 
-  const uriList = event.dataTransfer.getData('text/uri-list')
+  const uriList = event.dataTransfer.getData("text/uri-list");
   const firstUri = uriList
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
-    .find((line) => line.length > 0 && !line.startsWith('#'))
+    .find((line) => line.length > 0 && !line.startsWith("#"));
 
-  if (!firstUri?.startsWith('file://')) {
-    return null
+  if (!firstUri?.startsWith("file://")) {
+    return null;
   }
 
   try {
-    const url = new URL(firstUri)
+    const url = new URL(firstUri);
 
-    return decodeURIComponent(url.pathname)
+    return decodeURIComponent(url.pathname);
   } catch {
-    return null
+    return null;
   }
-}
+};
 
 const removeAiDocumentEntry = <Value,>(
   entries: Readonly<Record<string, Value>>,
-  documentKey: string
+  documentKey: string,
 ): Record<string, Value> =>
   Object.fromEntries(
-    Object.entries(entries).filter(([candidateKey]) => candidateKey !== documentKey)
-  ) as Record<string, Value>
+    Object.entries(entries).filter(
+      ([candidateKey]) => candidateKey !== documentKey,
+    ),
+  ) as Record<string, Value>;
 
 const getWindowTitle = (
   workspace: Workspace | null,
-  loadedFilePath?: string | null
+  loadedFilePath?: string | null,
 ): string => {
   if (!workspace) {
-    return 'MDE'
+    return "MDE";
   }
 
   const titleFilePath =
     loadedFilePath ??
-    (workspace.type === 'file' ? workspace.openedFilePath ?? workspace.name : null)
+    (workspace.type === "file"
+      ? (workspace.openedFilePath ?? workspace.name)
+      : null);
 
   if (titleFilePath) {
-    return `${titleFilePath.split('/').at(-1) ?? titleFilePath} - ${workspace.rootPath}`
+    return `${titleFilePath.split("/").at(-1) ?? titleFilePath} - ${workspace.rootPath}`;
   }
 
-  return workspace.rootPath
-}
+  return workspace.rootPath;
+};
 
 const createRecentWorkspace = (workspace: Workspace): RecentWorkspace =>
-  workspace.type === 'file' && workspace.filePath && workspace.openedFilePath
+  workspace.type === "file" && workspace.filePath && workspace.openedFilePath
     ? {
         filePath: workspace.filePath,
         name: workspace.name,
         openedFilePath: workspace.openedFilePath,
         rootPath: workspace.rootPath,
-        type: 'file'
+        type: "file",
       }
     : {
         name: workspace.name,
         rootPath: workspace.rootPath,
-        type: 'workspace'
-      }
+        type: "workspace",
+      };
 
 const readSystemThemeFamily = (): AppThemeFamily => {
   try {
     return window.matchMedia?.(SYSTEM_DARK_COLOR_SCHEME_QUERY).matches
-      ? 'dark'
-      : 'light'
+      ? "dark"
+      : "light";
   } catch {
-    return 'light'
+    return "light";
   }
-}
+};
 
 export const App = (): React.JSX.Element => {
-  const [state, dispatch] = useReducer(appReducer, undefined, createInitialAppState)
-  const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT)
-  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false)
-  const [editorViewMode, setEditorViewMode] = useState(readEditorViewMode)
-  const [themePreference, setThemePreference] = useState(readThemePreference)
-  const [systemThemeFamily, setSystemThemeFamily] =
-    useState<AppThemeFamily>(readSystemThemeFamily)
-  const [isResizingExplorer, setIsResizingExplorer] = useState(false)
+  const [state, dispatch] = useReducer(
+    appReducer,
+    undefined,
+    createInitialAppState,
+  );
+  const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT);
+  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
+  const [editorViewMode, setEditorViewMode] = useState(readEditorViewMode);
+  const [themePreference, setThemePreference] = useState(readThemePreference);
+  const [customAppLanguagePacks, setCustomAppLanguagePacks] = useState(
+    readCustomAppLanguagePacks,
+  );
+  const [appLanguageId, setAppLanguageId] = useState(() =>
+    readAppLanguagePreference(globalThis.localStorage),
+  );
+  const [systemThemeFamily, setSystemThemeFamily] = useState<AppThemeFamily>(
+    readSystemThemeFamily,
+  );
+  const [isResizingExplorer, setIsResizingExplorer] = useState(false);
   const [hasResolvedInitialLaunchPath, setHasResolvedInitialLaunchPath] =
-    useState(() => !window.editorApi)
-  const [recentWorkspaces, setRecentWorkspaces] = useState(
-    readRecentWorkspaces
-  )
+    useState(() => !window.editorApi);
+  const [recentWorkspaces, setRecentWorkspaces] =
+    useState(readRecentWorkspaces);
   const [workspaceFileHistory, setWorkspaceFileHistory] = useState(
-    readWorkspaceFileHistory
-  )
-  const [aiTools, setAiTools] = useState<readonly AiTool[]>([])
+    readWorkspaceFileHistory,
+  );
+  const [aiTools, setAiTools] = useState<readonly AiTool[]>([]);
   const [aiSettings, setAiSettings] = useState(() =>
-    readAiCliSettings(globalThis.localStorage)
-  )
-  const [aiResult, setAiResult] = useState<ScopedAiGenerationResult | null>(null)
+    readAiCliSettings(globalThis.localStorage),
+  );
+  const [aiResult, setAiResult] = useState<ScopedAiGenerationResult | null>(
+    null,
+  );
   const [aiErrorMessage, setAiErrorMessage] =
-    useState<ScopedAiErrorMessage | null>(null)
+    useState<ScopedAiErrorMessage | null>(null);
   const [aiBusyStatesByDocument, setAiBusyStatesByDocument] = useState<
     Record<string, ActiveAiActionBusyState>
-  >({})
-  const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false)
+  >({});
+  const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false);
   const [customAiTranslationLanguages, setCustomAiTranslationLanguages] =
-    useState(readCustomAiTranslationLanguages)
-  const [customAiTranslationLanguageInput, setCustomAiTranslationLanguageInput] =
-    useState('')
-  const [isEditorSearchOpen, setIsEditorSearchOpen] = useState(false)
-  const [editorSearchQuery, setEditorSearchQuery] = useState('')
-  const [editorSearchState, setEditorSearchState] = useState<EditorSearchState>({
-    activeMatchIndex: -1,
-    matchCount: 0
-  })
+    useState(readCustomAiTranslationLanguages);
+  const [
+    customAiTranslationLanguageInput,
+    setCustomAiTranslationLanguageInput,
+  ] = useState("");
+  const [isEditorSearchOpen, setIsEditorSearchOpen] = useState(false);
+  const [editorSearchQuery, setEditorSearchQuery] = useState("");
+  const [editorSearchState, setEditorSearchState] = useState<EditorSearchState>(
+    {
+      activeMatchIndex: -1,
+      matchCount: 0,
+    },
+  );
   const [availableUpdate, setAvailableUpdate] =
-    useState<AvailableUpdate | null>(null)
-  const [updateStatus, setUpdateStatus] =
-    useState<UpdateDialogStatus | null>(null)
+    useState<AvailableUpdate | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateDialogStatus | null>(
+    null,
+  );
   const [updateProgress, setUpdateProgress] =
-    useState<UpdateDownloadProgress | null>(null)
+    useState<UpdateDownloadProgress | null>(null);
   const [updateErrorMessage, setUpdateErrorMessage] = useState<string | null>(
-    null
-  )
-  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false)
-  const appShellRef = useRef<HTMLElement | null>(null)
-  const editorRef = useRef<MarkdownBlockEditorHandle | null>(null)
-  const editorSearchInputRef = useRef<HTMLInputElement | null>(null)
-  const hasConsumedInitialLaunchPathRef = useRef(false)
+    null,
+  );
+  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
+  const appShellRef = useRef<HTMLElement | null>(null);
+  const editorRef = useRef<MarkdownBlockEditorHandle | null>(null);
+  const editorSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const hasConsumedInitialLaunchPathRef = useRef(false);
+  const appLanguagePack = useMemo(
+    () => getAppLanguagePack(appLanguageId, customAppLanguagePacks),
+    [appLanguageId, customAppLanguagePacks],
+  );
+  const selectableAppLanguagePacks = useMemo(
+    () => getSelectableAppLanguagePacks(customAppLanguagePacks),
+    [customAppLanguagePacks],
+  );
+  const text = useMemo(() => createAppText(appLanguagePack), [appLanguagePack]);
 
   const rememberOpenedWorkspace = useCallback((workspace: Workspace): void => {
-    writeActiveWorkspace(globalThis.localStorage, createRecentWorkspace(workspace))
+    writeActiveWorkspace(
+      globalThis.localStorage,
+      createRecentWorkspace(workspace),
+    );
     setRecentWorkspaces((currentWorkspaces) => {
-      const nextWorkspaces = rememberWorkspace(currentWorkspaces, workspace)
+      const nextWorkspaces = rememberWorkspace(currentWorkspaces, workspace);
 
-      writeRecentWorkspaces(globalThis.localStorage, nextWorkspaces)
+      writeRecentWorkspaces(globalThis.localStorage, nextWorkspaces);
 
-      return nextWorkspaces
-    })
-  }, [])
+      return nextWorkspaces;
+    });
+  }, []);
 
-  const updateWorkspaceFileHistory = useCallback((
-    createNextHistory: (history: WorkspaceFileHistory) => WorkspaceFileHistory
-  ): void => {
-    setWorkspaceFileHistory((currentHistory) => {
-      const nextHistory = createNextHistory(currentHistory)
+  const updateWorkspaceFileHistory = useCallback(
+    (
+      createNextHistory: (
+        history: WorkspaceFileHistory,
+      ) => WorkspaceFileHistory,
+    ): void => {
+      setWorkspaceFileHistory((currentHistory) => {
+        const nextHistory = createNextHistory(currentHistory);
 
-      writeWorkspaceFileHistory(nextHistory)
+        writeWorkspaceFileHistory(nextHistory);
 
-      return nextHistory
-    })
-  }, [])
+        return nextHistory;
+      });
+    },
+    [],
+  );
 
-  const updateThemePreference = useCallback((
-    createNextPreference: (preference: ThemePreference) => ThemePreference
-  ): void => {
-    setThemePreference((currentPreference) => {
-      const nextPreference = createNextPreference(currentPreference)
+  const updateThemePreference = useCallback(
+    (
+      createNextPreference: (preference: ThemePreference) => ThemePreference,
+    ): void => {
+      setThemePreference((currentPreference) => {
+        const nextPreference = createNextPreference(currentPreference);
 
-      writeThemePreference(globalThis.localStorage, nextPreference)
+        writeThemePreference(globalThis.localStorage, nextPreference);
 
-      return nextPreference
-    })
-  }, [])
+        return nextPreference;
+      });
+    },
+    [],
+  );
 
   const updateAiSettings = useCallback((settings: AiCliSettings): void => {
-    writeAiCliSettings(globalThis.localStorage, settings)
-    setAiSettings(settings)
-  }, [])
+    writeAiCliSettings(globalThis.localStorage, settings);
+    setAiSettings(settings);
+  }, []);
+
+  const selectAppLanguage = useCallback((languageId: string): void => {
+    writeAppLanguagePreference(globalThis.localStorage, languageId);
+    setAppLanguageId(languageId);
+  }, []);
 
   const clearAiResultState = useCallback((): void => {
-    setAiResult(null)
-    setAiErrorMessage(null)
-    setAiBusyStatesByDocument({})
-    setIsTranslateMenuOpen(false)
-  }, [])
+    setAiResult(null);
+    setAiErrorMessage(null);
+    setAiBusyStatesByDocument({});
+    setIsTranslateMenuOpen(false);
+  }, []);
 
   const closeAiMenus = useCallback((): void => {
-    setIsTranslateMenuOpen(false)
-  }, [])
+    setIsTranslateMenuOpen(false);
+  }, []);
 
   const openEditorSearch = useCallback((query?: string): void => {
     if (query !== undefined) {
-      setEditorSearchQuery(query)
+      setEditorSearchQuery(query);
       setEditorSearchState({
         activeMatchIndex: query.trim().length > 0 ? 0 : -1,
-        matchCount: 0
-      })
+        matchCount: 0,
+      });
     }
 
-    setIsEditorSearchOpen(true)
+    setIsEditorSearchOpen(true);
     window.setTimeout(() => {
-      editorSearchInputRef.current?.focus()
-      editorSearchInputRef.current?.select()
-    }, 0)
-  }, [])
+      editorSearchInputRef.current?.focus();
+      editorSearchInputRef.current?.select();
+    }, 0);
+  }, []);
 
   const closeEditorSearch = useCallback((): void => {
-    setIsEditorSearchOpen(false)
-    setEditorSearchQuery('')
+    setIsEditorSearchOpen(false);
+    setEditorSearchQuery("");
     setEditorSearchState({
       activeMatchIndex: -1,
-      matchCount: 0
-    })
-  }, [])
+      matchCount: 0,
+    });
+  }, []);
 
   const cycleEditorSearchMatch = useCallback((): void => {
     setEditorSearchState((currentState) => ({
       ...currentState,
       activeMatchIndex: getNextSearchMatchIndex(
         currentState.activeMatchIndex,
-        currentState.matchCount
-      )
-    }))
-  }, [])
+        currentState.matchCount,
+      ),
+    }));
+  }, []);
 
-  const searchWorkspaceMarkdown = useCallback(async (
-    query: string
-  ): Promise<WorkspaceSearchResult> => {
-    const workspaceRoot = state.workspace?.rootPath
+  const searchWorkspaceMarkdown = useCallback(
+    async (query: string): Promise<WorkspaceSearchResult> => {
+      const workspaceRoot = state.workspace?.rootPath;
 
-    if (!workspaceRoot) {
-      throw new Error('Open a workspace before searching')
-    }
+      if (!workspaceRoot) {
+        throw new Error(text("errors.openWorkspaceBeforeSearch"));
+      }
 
-    if (!window.editorApi?.searchWorkspaceMarkdown) {
-      throw new Error('Workspace search is unavailable. Restart the app and try again.')
-    }
+      if (!window.editorApi?.searchWorkspaceMarkdown) {
+        throw new Error(text("errors.workspaceSearchUnavailable"));
+      }
 
-    return window.editorApi.searchWorkspaceMarkdown(query, workspaceRoot)
-  }, [state.workspace?.rootPath])
+      return window.editorApi.searchWorkspaceMarkdown(query, workspaceRoot);
+    },
+    [state.workspace?.rootPath, text],
+  );
 
   const clearAiDocumentResult = useCallback((documentKey: string): void => {
     setAiResult((currentResult) =>
-      currentResult?.documentKey === documentKey ? null : currentResult
-    )
-  }, [])
+      currentResult?.documentKey === documentKey ? null : currentResult,
+    );
+  }, []);
 
   const clearAiDocumentError = useCallback((documentKey: string): void => {
     setAiErrorMessage((currentError) =>
-      currentError?.documentKey === documentKey ? null : currentError
-    )
-  }, [])
+      currentError?.documentKey === documentKey ? null : currentError,
+    );
+  }, []);
 
-  const setAiDocumentBusyState = useCallback((
-    documentKey: string,
-    busyState: ActiveAiActionBusyState
-  ): void => {
-    setAiBusyStatesByDocument((currentStates) => ({
-      ...currentStates,
-      [documentKey]: busyState
-    }))
-  }, [])
+  const setAiDocumentBusyState = useCallback(
+    (documentKey: string, busyState: ActiveAiActionBusyState): void => {
+      setAiBusyStatesByDocument((currentStates) => ({
+        ...currentStates,
+        [documentKey]: busyState,
+      }));
+    },
+    [],
+  );
 
   const clearAiDocumentBusyState = useCallback((documentKey: string): void => {
     setAiBusyStatesByDocument((currentStates) =>
-      removeAiDocumentEntry(currentStates, documentKey)
-    )
-  }, [])
+      removeAiDocumentEntry(currentStates, documentKey),
+    );
+  }, []);
 
-  const rememberOpenedFile = useCallback((
-    workspaceRoot: string,
-    filePath: string
-  ): void => {
-    updateWorkspaceFileHistory((currentHistory) =>
-      rememberWorkspaceFile(currentHistory, workspaceRoot, filePath)
-    )
-  }, [updateWorkspaceFileHistory])
+  const rememberOpenedFile = useCallback(
+    (workspaceRoot: string, filePath: string): void => {
+      updateWorkspaceFileHistory((currentHistory) =>
+        rememberWorkspaceFile(currentHistory, workspaceRoot, filePath),
+      );
+    },
+    [updateWorkspaceFileHistory],
+  );
 
-  const completeWorkspaceOpen = useCallback((workspace: Workspace): void => {
-    clearAiResultState()
-    closeEditorSearch()
-    dispatch({ type: 'workspace/opened', workspace })
-    rememberOpenedWorkspace(workspace)
-  }, [clearAiResultState, closeEditorSearch, rememberOpenedWorkspace])
+  const completeWorkspaceOpen = useCallback(
+    (workspace: Workspace): void => {
+      clearAiResultState();
+      closeEditorSearch();
+      dispatch({ type: "workspace/opened", workspace });
+      rememberOpenedWorkspace(workspace);
+    },
+    [clearAiResultState, closeEditorSearch, rememberOpenedWorkspace],
+  );
 
-  const loadFile = useCallback(async (
-    filePath: string,
-    expectedWorkspaceRoot?: string
-  ): Promise<void> => {
-    const workspaceRoot = expectedWorkspaceRoot ?? state.workspace?.rootPath
+  const loadFile = useCallback(
+    async (filePath: string, expectedWorkspaceRoot?: string): Promise<void> => {
+      const workspaceRoot = expectedWorkspaceRoot ?? state.workspace?.rootPath;
 
-    if (!workspaceRoot) {
-      dispatch({
-        filePath,
-        message: 'Open a workspace before reading files',
-        type: 'file/load-failed',
-        workspaceRoot: ''
-      })
-      return
-    }
-
-    closeAiMenus()
-    dispatch({ type: 'file/load-started', filePath, workspaceRoot })
-
-    try {
-      if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+      if (!workspaceRoot) {
+        dispatch({
+          filePath,
+          message: text("errors.openWorkspaceBeforeFiles"),
+          type: "file/load-failed",
+          workspaceRoot: "",
+        });
+        return;
       }
 
-      const file = await window.editorApi.readMarkdownFile(filePath, workspaceRoot)
+      closeAiMenus();
+      dispatch({ type: "file/load-started", filePath, workspaceRoot });
 
-      dispatch({ type: 'file/loaded', file, workspaceRoot })
-      rememberOpenedFile(workspaceRoot, file.path)
-    } catch (error) {
-      dispatch({
-        filePath,
-        message: getErrorMessage(error, 'Unable to read file'),
-        type: 'file/load-failed',
-        workspaceRoot
-      })
-    }
-  }, [closeAiMenus, rememberOpenedFile, state.workspace?.rootPath])
+      try {
+        if (!window.editorApi) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
 
-  const openWorkspaceSearchResult = useCallback((
-    filePath: string,
-    query: string
-  ): void => {
-    openEditorSearch(query)
-    void loadFile(filePath)
-  }, [loadFile, openEditorSearch])
+        const file = await window.editorApi.readMarkdownFile(
+          filePath,
+          workspaceRoot,
+        );
 
-  const loadWorkspaceDefaultFile = useCallback(async (
-    workspace: Workspace
-  ): Promise<void> => {
-    if (workspace.type === 'file' && workspace.openedFilePath) {
-      await loadFile(workspace.openedFilePath, workspace.rootPath)
-      return
-    }
+        dispatch({ type: "file/loaded", file, workspaceRoot });
+        rememberOpenedFile(workspaceRoot, file.path);
+      } catch (error) {
+        dispatch({
+          filePath,
+          message: getErrorMessage(error, text("errors.readFileFailed")),
+          type: "file/load-failed",
+          workspaceRoot,
+        });
+      }
+    },
+    [closeAiMenus, rememberOpenedFile, state.workspace?.rootPath, text],
+  );
 
-    const lastOpenedFilePath = getWorkspaceLastOpenedFile(
-      workspaceFileHistory,
-      workspace.rootPath
-    )
+  const openWorkspaceSearchResult = useCallback(
+    (filePath: string, query: string): void => {
+      openEditorSearch(query);
+      void loadFile(filePath);
+    },
+    [loadFile, openEditorSearch],
+  );
 
-    if (
-      !lastOpenedFilePath ||
-      !findFileNodeByPath(workspace.tree, lastOpenedFilePath)
-    ) {
-      return
-    }
+  const loadWorkspaceDefaultFile = useCallback(
+    async (workspace: Workspace): Promise<void> => {
+      if (workspace.type === "file" && workspace.openedFilePath) {
+        await loadFile(workspace.openedFilePath, workspace.rootPath);
+        return;
+      }
 
-    await loadFile(lastOpenedFilePath, workspace.rootPath)
-  }, [loadFile, workspaceFileHistory])
+      const lastOpenedFilePath = getWorkspaceLastOpenedFile(
+        workspaceFileHistory,
+        workspace.rootPath,
+      );
 
-  const updateExplorerWidthFromPointer = useCallback((clientX: number): void => {
-    const shellLeft = appShellRef.current?.getBoundingClientRect().left ?? 0
+      if (
+        !lastOpenedFilePath ||
+        !findFileNodeByPath(workspace.tree, lastOpenedFilePath)
+      ) {
+        return;
+      }
 
-    setExplorerWidth(clampExplorerWidth(clientX - shellLeft))
-  }, [])
+      await loadFile(lastOpenedFilePath, workspace.rootPath);
+    },
+    [loadFile, workspaceFileHistory],
+  );
+
+  const updateExplorerWidthFromPointer = useCallback(
+    (clientX: number): void => {
+      const shellLeft = appShellRef.current?.getBoundingClientRect().left ?? 0;
+
+      setExplorerWidth(clampExplorerWidth(clientX - shellLeft));
+    },
+    [],
+  );
 
   useEffect(() => {
-    document.title = getWindowTitle(state.workspace, state.loadedFile?.path)
-  }, [state.loadedFile?.path, state.workspace])
+    document.title = getWindowTitle(state.workspace, state.loadedFile?.path);
+  }, [state.loadedFile?.path, state.workspace]);
 
   useEffect(() => {
-    const aiApi = window.aiApi
+    document.documentElement.lang = appLanguagePack.locale;
+  }, [appLanguagePack.locale]);
+
+  useEffect(() => {
+    const aiApi = window.aiApi;
 
     if (!aiApi) {
-      return
+      return;
     }
 
-    let isCancelled = false
+    let isCancelled = false;
 
-    void aiApi.detectTools().then((result) => {
-      if (!isCancelled) {
-        setAiTools(result.tools)
-      }
-    }).catch((error: unknown) => {
-      console.warn('MDE AI CLI detection failed', error)
-    })
+    void aiApi
+      .detectTools()
+      .then((result) => {
+        if (!isCancelled) {
+          setAiTools(result.tools);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn("MDE AI CLI detection failed", error);
+      });
 
     return () => {
-      isCancelled = true
-    }
-  }, [])
+      isCancelled = true;
+    };
+  }, []);
 
-  const showAvailableUpdate = useCallback((
-    update: AvailableUpdate,
-    status?: UpdateDialogStatus
-  ): void => {
-    setAvailableUpdate(update)
-    setUpdateErrorMessage(null)
-    setUpdateProgress(null)
-    setIsUpdateDismissed(false)
-    setUpdateStatus(
-      status ??
-        (update.installMode === 'restart-to-install'
-          ? 'downloading'
-          : 'available')
-    )
-  }, [])
+  const showAvailableUpdate = useCallback(
+    (update: AvailableUpdate, status?: UpdateDialogStatus): void => {
+      setAvailableUpdate(update);
+      setUpdateErrorMessage(null);
+      setUpdateProgress(null);
+      setIsUpdateDismissed(false);
+      setUpdateStatus(
+        status ??
+          (update.installMode === "restart-to-install"
+            ? "downloading"
+            : "available"),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
-    let mediaQueryList: MediaQueryList
+    let mediaQueryList: MediaQueryList;
 
     try {
-      mediaQueryList = window.matchMedia(SYSTEM_DARK_COLOR_SCHEME_QUERY)
+      mediaQueryList = window.matchMedia(SYSTEM_DARK_COLOR_SCHEME_QUERY);
     } catch {
-      return
+      return;
     }
 
     const updateSystemThemeFamily = (
-      eventOrQueryList: MediaQueryList | MediaQueryListEvent
+      eventOrQueryList: MediaQueryList | MediaQueryListEvent,
     ): void => {
-      setSystemThemeFamily(eventOrQueryList.matches ? 'dark' : 'light')
-    }
+      setSystemThemeFamily(eventOrQueryList.matches ? "dark" : "light");
+    };
 
-    updateSystemThemeFamily(mediaQueryList)
-    mediaQueryList.addEventListener?.('change', updateSystemThemeFamily)
-    mediaQueryList.addListener?.(updateSystemThemeFamily)
+    updateSystemThemeFamily(mediaQueryList);
+    mediaQueryList.addEventListener?.("change", updateSystemThemeFamily);
+    mediaQueryList.addListener?.(updateSystemThemeFamily);
 
     return () => {
-      mediaQueryList.removeEventListener?.('change', updateSystemThemeFamily)
-      mediaQueryList.removeListener?.(updateSystemThemeFamily)
-    }
-  }, [])
+      mediaQueryList.removeEventListener?.("change", updateSystemThemeFamily);
+      mediaQueryList.removeListener?.(updateSystemThemeFamily);
+    };
+  }, []);
 
   useEffect(() => {
-    const updateApi = window.updateApi
+    const updateApi = window.updateApi;
 
     if (!updateApi) {
-      return
+      return;
     }
 
-    let isCancelled = false
+    let isCancelled = false;
 
     const showUpdate = (
       update: AvailableUpdate,
-      status?: UpdateDialogStatus
+      status?: UpdateDialogStatus,
     ): void => {
       if (isCancelled) {
-        return
+        return;
       }
 
-      showAvailableUpdate(update, status)
-    }
+      showAvailableUpdate(update, status);
+    };
 
     const unsubscribeProgress = updateApi.onUpdateDownloadProgress(
       (progress) => {
         if (isCancelled) {
-          return
+          return;
         }
 
-        setUpdateProgress(progress)
-        setUpdateStatus('downloading')
-      }
-    )
+        setUpdateProgress(progress);
+        setUpdateStatus("downloading");
+      },
+    );
     const unsubscribeAvailable = updateApi.onUpdateAvailable((update) => {
-      showUpdate(update)
-    })
+      showUpdate(update);
+    });
     const unsubscribeReady = updateApi.onUpdateReady((update) => {
-      showUpdate(update, 'ready')
-    })
+      showUpdate(update, "ready");
+    });
 
-    void updateApi.checkForUpdates().then((result) => {
-      if (result.updateAvailable && result.update) {
-        showUpdate(result.update)
-      }
-    }).catch((error: unknown) => {
-      console.warn('MDE update check failed', error)
-    })
+    void updateApi
+      .checkForUpdates()
+      .then((result) => {
+        if (result.updateAvailable && result.update) {
+          showUpdate(result.update);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn("MDE update check failed", error);
+      });
 
     return () => {
-      isCancelled = true
-      unsubscribeProgress()
-      unsubscribeAvailable()
-      unsubscribeReady()
-    }
-  }, [showAvailableUpdate])
+      isCancelled = true;
+      unsubscribeProgress();
+      unsubscribeAvailable();
+      unsubscribeReady();
+    };
+  }, [showAvailableUpdate]);
 
   useEffect(() => {
     if (!isResizingExplorer) {
-      return
+      return;
     }
 
     const updateWidth = (event: PointerEvent): void => {
-      updateExplorerWidthFromPointer(event.clientX)
-    }
+      updateExplorerWidthFromPointer(event.clientX);
+    };
     const stopResizing = (): void => {
-      setIsResizingExplorer(false)
-    }
+      setIsResizingExplorer(false);
+    };
 
-    document.body.classList.add('is-resizing-explorer')
-    window.addEventListener('pointermove', updateWidth)
-    window.addEventListener('pointerup', stopResizing)
-    window.addEventListener('pointercancel', stopResizing)
+    document.body.classList.add("is-resizing-explorer");
+    window.addEventListener("pointermove", updateWidth);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
 
     return () => {
-      document.body.classList.remove('is-resizing-explorer')
-      window.removeEventListener('pointermove', updateWidth)
-      window.removeEventListener('pointerup', stopResizing)
-      window.removeEventListener('pointercancel', stopResizing)
-    }
-  }, [isResizingExplorer, updateExplorerWidthFromPointer])
+      document.body.classList.remove("is-resizing-explorer");
+      window.removeEventListener("pointermove", updateWidth);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+  }, [isResizingExplorer, updateExplorerWidthFromPointer]);
 
   const openWorkspace = async (): Promise<void> => {
-    dispatch({ type: 'workspace/open-started' })
+    dispatch({ type: "workspace/open-started" });
 
     try {
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
       if (state.workspace && window.editorApi.openWorkspaceInNewWindow) {
-        const didOpen = await window.editorApi.openWorkspaceInNewWindow()
+        const didOpen = await window.editorApi.openWorkspaceInNewWindow();
 
-        dispatch({ type: 'workspace/open-cancelled' })
+        dispatch({ type: "workspace/open-cancelled" });
 
         if (!didOpen) {
-          return
+          return;
         }
 
-        return
+        return;
       }
 
-      const workspace = await window.editorApi.openWorkspace()
+      const workspace = await window.editorApi.openWorkspace();
 
       if (!workspace) {
-        dispatch({ type: 'workspace/open-cancelled' })
-        return
+        dispatch({ type: "workspace/open-cancelled" });
+        return;
       }
 
-      completeWorkspaceOpen(workspace)
-      await loadWorkspaceDefaultFile(workspace)
+      completeWorkspaceOpen(workspace);
+      await loadWorkspaceDefaultFile(workspace);
     } catch (error) {
       dispatch({
-        type: 'workspace/open-failed',
-        message: getErrorMessage(error, 'Unable to open workspace')
-      })
+        type: "workspace/open-failed",
+        message: getErrorMessage(error, text("errors.openWorkspaceFailed")),
+      });
     }
-  }
+  };
 
   const openFile = async (): Promise<void> => {
-    dispatch({ type: 'workspace/open-started' })
+    dispatch({ type: "workspace/open-started" });
 
     try {
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
       if (state.workspace && window.editorApi.openFileInNewWindow) {
-        const didOpen = await window.editorApi.openFileInNewWindow()
+        const didOpen = await window.editorApi.openFileInNewWindow();
 
-        dispatch({ type: 'workspace/open-cancelled' })
+        dispatch({ type: "workspace/open-cancelled" });
 
         if (!didOpen) {
-          return
+          return;
         }
 
-        return
+        return;
       }
 
-      const workspace = await window.editorApi.openFile()
+      const workspace = await window.editorApi.openFile();
 
       if (!workspace) {
-        dispatch({ type: 'workspace/open-cancelled' })
-        return
+        dispatch({ type: "workspace/open-cancelled" });
+        return;
       }
 
-      completeWorkspaceOpen(workspace)
-      await loadWorkspaceDefaultFile(workspace)
+      completeWorkspaceOpen(workspace);
+      await loadWorkspaceDefaultFile(workspace);
     } catch (error) {
       dispatch({
-        type: 'workspace/open-failed',
-        message: getErrorMessage(error, 'Unable to open file')
-      })
+        type: "workspace/open-failed",
+        message: getErrorMessage(error, text("errors.openFileFailed")),
+      });
     }
-  }
+  };
 
-  const openWorkspaceInNewWindow = useCallback(async (
-    workspace: RecentWorkspace
-  ): Promise<void> => {
-    try {
-      if (!window.editorApi?.openPathInNewWindow) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+  const openWorkspaceInNewWindow = useCallback(
+    async (workspace: RecentWorkspace): Promise<void> => {
+      try {
+        if (!window.editorApi?.openPathInNewWindow) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
+
+        await window.editorApi.openPathInNewWindow(
+          workspace.type === "file" ? workspace.filePath : workspace.rootPath,
+        );
+      } catch (error) {
+        dispatch({
+          type: "workspace/operation-failed",
+          workspaceRoot: state.workspace?.rootPath ?? "",
+          message: getErrorMessage(
+            error,
+            text("errors.openWorkspaceInNewWindowFailed"),
+          ),
+        });
       }
+    },
+    [state.workspace?.rootPath, text],
+  );
 
-      await window.editorApi.openPathInNewWindow(
-        workspace.type === 'file' ? workspace.filePath : workspace.rootPath
-      )
-    } catch (error) {
-      dispatch({
-        type: 'workspace/operation-failed',
-        workspaceRoot: state.workspace?.rootPath ?? '',
-        message: getErrorMessage(error, 'Unable to open workspace in new window')
-      })
-    }
-  }, [state.workspace?.rootPath])
+  const switchWorkspace = useCallback(
+    async (workspace: RecentWorkspace): Promise<void> => {
+      dispatch({ type: "workspace/open-started" });
 
-  const switchWorkspace = useCallback(async (
-    workspace: RecentWorkspace
-  ): Promise<void> => {
-    dispatch({ type: 'workspace/open-started' })
+      try {
+        if (!window.editorApi) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
 
-    try {
-      if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        const openedWorkspace =
+          workspace.type === "file"
+            ? await window.editorApi.openFileByPath(workspace.filePath)
+            : await window.editorApi.openWorkspaceByPath(workspace.rootPath);
+
+        completeWorkspaceOpen(openedWorkspace);
+        await loadWorkspaceDefaultFile(openedWorkspace);
+      } catch (error) {
+        dispatch({
+          type: "workspace/open-failed",
+          message: getErrorMessage(error, text("errors.switchWorkspaceFailed")),
+        });
       }
+    },
+    [completeWorkspaceOpen, loadWorkspaceDefaultFile, text],
+  );
 
-      const openedWorkspace =
-        workspace.type === 'file'
-          ? await window.editorApi.openFileByPath(workspace.filePath)
-          : await window.editorApi.openWorkspaceByPath(workspace.rootPath)
+  const openPath = useCallback(
+    async (resourcePath: string): Promise<void> => {
+      dispatch({ type: "workspace/open-started" });
 
-      completeWorkspaceOpen(openedWorkspace)
-      await loadWorkspaceDefaultFile(openedWorkspace)
-    } catch (error) {
-      dispatch({
-        type: 'workspace/open-failed',
-        message: getErrorMessage(error, 'Unable to switch workspace')
-      })
-    }
-  }, [completeWorkspaceOpen, loadWorkspaceDefaultFile])
+      try {
+        if (!window.editorApi) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
 
-  const openPath = useCallback(async (resourcePath: string): Promise<void> => {
-    dispatch({ type: 'workspace/open-started' })
+        const workspace = await window.editorApi.openPath(resourcePath);
 
-    try {
-      if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        completeWorkspaceOpen(workspace);
+        await loadWorkspaceDefaultFile(workspace);
+      } catch (error) {
+        dispatch({
+          message: getErrorMessage(error, text("errors.openLaunchPathFailed")),
+          type: "workspace/open-failed",
+        });
       }
-
-      const workspace = await window.editorApi.openPath(resourcePath)
-
-      completeWorkspaceOpen(workspace)
-      await loadWorkspaceDefaultFile(workspace)
-    } catch (error) {
-      dispatch({
-        message: getErrorMessage(error, 'Unable to open launch path'),
-        type: 'workspace/open-failed'
-      })
-    }
-  }, [completeWorkspaceOpen, loadWorkspaceDefaultFile])
+    },
+    [completeWorkspaceOpen, loadWorkspaceDefaultFile, text],
+  );
 
   useEffect(() => {
-    const editorApi = window.editorApi
+    const editorApi = window.editorApi;
 
     if (!editorApi || hasConsumedInitialLaunchPathRef.current) {
-      return
+      return;
     }
 
-    let isCancelled = false
+    let isCancelled = false;
 
-    hasConsumedInitialLaunchPathRef.current = true
+    hasConsumedInitialLaunchPathRef.current = true;
     void editorApi.consumeLaunchPath().then((resourcePath) => {
       if (isCancelled) {
-        return
+        return;
       }
 
       if (resourcePath) {
         void openPath(resourcePath).finally(() => {
           if (!isCancelled) {
-            setHasResolvedInitialLaunchPath(true)
+            setHasResolvedInitialLaunchPath(true);
           }
-        })
-        return
+        });
+        return;
       }
 
-      const activeWorkspace = readActiveWorkspace(globalThis.localStorage)
+      const activeWorkspace = readActiveWorkspace(globalThis.localStorage);
 
       if (activeWorkspace) {
         void switchWorkspace(activeWorkspace).finally(() => {
           if (!isCancelled) {
-            setHasResolvedInitialLaunchPath(true)
+            setHasResolvedInitialLaunchPath(true);
           }
-        })
-        return
+        });
+        return;
       }
 
-      setHasResolvedInitialLaunchPath(true)
-    })
+      setHasResolvedInitialLaunchPath(true);
+    });
 
     const unsubscribe = editorApi.onLaunchPath((resourcePath) => {
-      void openPath(resourcePath)
-    })
+      void openPath(resourcePath);
+    });
 
     return () => {
-      isCancelled = true
-      unsubscribe()
-    }
-  }, [openPath, switchWorkspace])
+      isCancelled = true;
+      unsubscribe();
+    };
+  }, [openPath, switchWorkspace]);
 
   const forgetWorkspace = (workspace: RecentWorkspace): void => {
     setRecentWorkspaces((currentWorkspaces) => {
-      const nextWorkspaces = forgetRecentWorkspace(currentWorkspaces, workspace)
+      const nextWorkspaces = forgetRecentWorkspace(
+        currentWorkspaces,
+        workspace,
+      );
 
-      writeRecentWorkspaces(globalThis.localStorage, nextWorkspaces)
+      writeRecentWorkspaces(globalThis.localStorage, nextWorkspaces);
 
-      return nextWorkspaces
-    })
-  }
+      return nextWorkspaces;
+    });
+  };
 
   const refreshWorkspaceTree = useCallback(
     async (
       workspaceRoot?: string,
-      directoryPaths: readonly string[] = []
+      directoryPaths: readonly string[] = [],
     ): Promise<void> => {
-      const scopedWorkspaceRoot = workspaceRoot ?? state.workspace?.rootPath
+      const scopedWorkspaceRoot = workspaceRoot ?? state.workspace?.rootPath;
 
       if (!scopedWorkspaceRoot) {
-        return
+        return;
       }
 
       try {
         if (!window.editorApi) {
-          throw new Error('Editor API unavailable. Restart the app and try again.')
+          throw new Error(text("errors.editorApiUnavailable"));
         }
 
-        let tree = await window.editorApi.listDirectory('')
+        let tree = await window.editorApi.listDirectory("");
 
         for (const directoryPath of sortDirectoryPaths(directoryPaths)) {
           if (!hasDirectoryNode(tree, directoryPath)) {
-            continue
+            continue;
           }
 
           tree = replaceDirectoryChildren(
             tree,
             directoryPath,
-            await window.editorApi.listDirectory(directoryPath)
-          )
+            await window.editorApi.listDirectory(directoryPath),
+          );
         }
 
         dispatch({
           tree,
-          type: 'workspace/tree-refreshed',
-          workspaceRoot: scopedWorkspaceRoot
-        })
+          type: "workspace/tree-refreshed",
+          workspaceRoot: scopedWorkspaceRoot,
+        });
       } catch (error) {
         dispatch({
-          message: getErrorMessage(error, 'Unable to refresh workspace'),
-          type: 'workspace/operation-failed',
-          workspaceRoot: scopedWorkspaceRoot
-        })
+          message: getErrorMessage(
+            error,
+            text("errors.refreshWorkspaceFailed"),
+          ),
+          type: "workspace/operation-failed",
+          workspaceRoot: scopedWorkspaceRoot,
+        });
       }
     },
-    [state.workspace?.rootPath]
-  )
+    [state.workspace?.rootPath, text],
+  );
 
-  const openDroppedPath = useCallback(async (
-    resourcePath: string
-  ): Promise<void> => {
-    const workspaceRoot = state.workspace?.rootPath ?? null
-    const relativeWorkspacePath =
-      workspaceRoot ? getRelativeWorkspacePath(resourcePath, workspaceRoot) : null
+  const openDroppedPath = useCallback(
+    async (resourcePath: string): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath ?? null;
+      const relativeWorkspacePath = workspaceRoot
+        ? getRelativeWorkspacePath(resourcePath, workspaceRoot)
+        : null;
 
-    if (
-      workspaceRoot &&
-      relativeWorkspacePath?.toLowerCase().endsWith('.md')
-    ) {
-      await loadFile(relativeWorkspacePath, workspaceRoot)
-      return
-    }
+      if (
+        workspaceRoot &&
+        relativeWorkspacePath?.toLowerCase().endsWith(".md")
+      ) {
+        await loadFile(relativeWorkspacePath, workspaceRoot);
+        return;
+      }
 
-    if (workspaceRoot && relativeWorkspacePath !== null) {
-      await refreshWorkspaceTree(workspaceRoot)
-      return
-    }
+      if (workspaceRoot && relativeWorkspacePath !== null) {
+        await refreshWorkspaceTree(workspaceRoot);
+        return;
+      }
 
-    if (workspaceRoot && window.editorApi?.openPathInNewWindow) {
-      await window.editorApi.openPathInNewWindow(resourcePath)
-      return
-    }
+      if (workspaceRoot && window.editorApi?.openPathInNewWindow) {
+        await window.editorApi.openPathInNewWindow(resourcePath);
+        return;
+      }
 
-    await openPath(resourcePath)
-  }, [loadFile, openPath, refreshWorkspaceTree, state.workspace?.rootPath])
+      await openPath(resourcePath);
+    },
+    [loadFile, openPath, refreshWorkspaceTree, state.workspace?.rootPath],
+  );
 
   const saveCurrentFile = useCallback(
     async (serializedMarkdown?: string): Promise<void> => {
-      const loadedFile = state.loadedFile
-      const workspaceRoot = state.workspace?.rootPath
+      const loadedFile = state.loadedFile;
+      const workspaceRoot = state.workspace?.rootPath;
 
       if (!loadedFile || !workspaceRoot) {
-        return
+        return;
       }
 
       dispatch({
         filePath: loadedFile.path,
-        type: 'file/save-started',
-        workspaceRoot
-      })
+        type: "file/save-started",
+        workspaceRoot,
+      });
 
       try {
         if (!window.editorApi) {
-          throw new Error('Editor API unavailable. Restart the app and try again.')
+          throw new Error(text("errors.editorApiUnavailable"));
         }
 
         const contents =
           serializedMarkdown ??
           state.draftMarkdown ??
           (await editorRef.current?.getMarkdown()) ??
-          loadedFile.contents
+          loadedFile.contents;
 
         await window.editorApi.writeMarkdownFile(
           loadedFile.path,
           contents,
-          workspaceRoot
-        )
+          workspaceRoot,
+        );
         dispatch({
           contents,
           filePath: loadedFile.path,
-          type: 'file/save-succeeded',
-          workspaceRoot
-        })
+          type: "file/save-succeeded",
+          workspaceRoot,
+        });
       } catch (error) {
         dispatch({
           filePath: loadedFile.path,
-          message: getErrorMessage(error, 'Unable to save file'),
-          type: 'file/save-failed',
-          workspaceRoot
-        })
+          message: getErrorMessage(error, text("errors.saveFileFailed")),
+          type: "file/save-failed",
+          workspaceRoot,
+        });
       }
     },
-    [state.draftMarkdown, state.loadedFile, state.workspace?.rootPath]
-  )
+    [state.draftMarkdown, state.loadedFile, state.workspace?.rootPath, text],
+  );
 
   const uploadImageAsset = useCallback(
     async (file: File): Promise<string> => {
-      const loadedFilePath = state.loadedFile?.path
-      const workspaceRoot = state.workspace?.rootPath
+      const loadedFilePath = state.loadedFile?.path;
+      const workspaceRoot = state.workspace?.rootPath;
 
       if (!loadedFilePath || !workspaceRoot) {
-        throw new Error('Open a Markdown file before pasting images')
+        throw new Error(text("errors.openMarkdownBeforeImagePaste"));
       }
 
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
       const result = await window.editorApi.saveImageAsset(
@@ -1070,155 +1166,178 @@ export const App = (): React.JSX.Element => {
         file.name,
         file.type,
         await file.arrayBuffer(),
-        workspaceRoot
-      )
+        workspaceRoot,
+      );
 
-      await refreshWorkspaceTree(workspaceRoot)
+      await refreshWorkspaceTree(workspaceRoot);
 
-      return result.fileUrl
+      return result.fileUrl;
     },
-    [refreshWorkspaceTree, state.loadedFile?.path, state.workspace?.rootPath]
-  )
+    [
+      refreshWorkspaceTree,
+      state.loadedFile?.path,
+      state.workspace?.rootPath,
+      text,
+    ],
+  );
 
   const getLatestMarkdownForAi = useCallback(async (): Promise<string> => {
-    const loadedFile = state.loadedFile
+    const loadedFile = state.loadedFile;
 
     if (!loadedFile) {
-      throw new Error('Open a Markdown file before using AI actions')
+      throw new Error(text("errors.openMarkdownBeforeAi"));
     }
 
     const contents =
       (await editorRef.current?.getMarkdown()) ??
       state.draftMarkdown ??
-      loadedFile.contents
+      loadedFile.contents;
 
     if (contents !== loadedFile.contents) {
-      await saveCurrentFile(contents)
+      await saveCurrentFile(contents);
     }
 
-    return contents
-  }, [saveCurrentFile, state.draftMarkdown, state.loadedFile])
+    return contents;
+  }, [saveCurrentFile, state.draftMarkdown, state.loadedFile, text]);
 
-  const summarizeMarkdown = useCallback(async (
-    instruction?: string
-  ): Promise<void> => {
-    const aiApi = window.aiApi
-    const loadedFile = state.loadedFile
-    const workspaceRoot = state.workspace?.rootPath
+  const summarizeMarkdown = useCallback(
+    async (instruction?: string): Promise<void> => {
+      const aiApi = window.aiApi;
+      const loadedFile = state.loadedFile;
+      const workspaceRoot = state.workspace?.rootPath;
 
-    if (!aiApi || !loadedFile || !workspaceRoot) {
-      return
-    }
+      if (!aiApi || !loadedFile || !workspaceRoot) {
+        return;
+      }
 
-    const documentKey = createAiDocumentKey(workspaceRoot, loadedFile.path)
-    const trimmedInstruction = instruction?.trim()
-    const normalizedInstruction =
-      trimmedInstruction && trimmedInstruction.length > 0
-        ? trimmedInstruction
-        : undefined
+      const documentKey = createAiDocumentKey(workspaceRoot, loadedFile.path);
+      const trimmedInstruction = instruction?.trim();
+      const normalizedInstruction =
+        trimmedInstruction && trimmedInstruction.length > 0
+          ? trimmedInstruction
+          : undefined;
 
-    setAiDocumentBusyState(
-      documentKey,
-      normalizedInstruction ? 'refining-summary' : 'summarizing'
-    )
-    clearAiDocumentError(documentKey)
-
-    if (!normalizedInstruction) {
-      clearAiDocumentResult(documentKey)
-    }
-
-    try {
-      const markdown = await getLatestMarkdownForAi()
-      const generationOptions = resolveAiGenerationOptions(aiSettings, aiTools)
-      const result = await aiApi.summarizeMarkdown(
-        loadedFile.path,
-        markdown,
-        workspaceRoot,
-        normalizedInstruction,
-        generationOptions
-      )
-
-      setAiResult({ documentKey, result })
-    } catch (error) {
-      setAiErrorMessage({
+      setAiDocumentBusyState(
         documentKey,
-        message: getErrorMessage(error, 'Unable to summarize Markdown')
-      })
-    } finally {
-      clearAiDocumentBusyState(documentKey)
-    }
-  }, [
-    clearAiDocumentBusyState,
-    clearAiDocumentError,
-    clearAiDocumentResult,
-    getLatestMarkdownForAi,
-    aiSettings,
-    aiTools,
-    setAiDocumentBusyState,
-    state.loadedFile,
-    state.workspace?.rootPath
-  ])
+        normalizedInstruction ? "refining-summary" : "summarizing",
+      );
+      clearAiDocumentError(documentKey);
 
-  const translateMarkdown = useCallback(async (language: string): Promise<void> => {
-    const aiApi = window.aiApi
-    const loadedFile = state.loadedFile
-    const workspaceRoot = state.workspace?.rootPath
+      if (!normalizedInstruction) {
+        clearAiDocumentResult(documentKey);
+      }
 
-    if (!aiApi || !loadedFile || !workspaceRoot) {
-      return
-    }
+      try {
+        const markdown = await getLatestMarkdownForAi();
+        const generationOptions = resolveAiGenerationOptions(
+          aiSettings,
+          aiTools,
+        );
+        const result = await aiApi.summarizeMarkdown(
+          loadedFile.path,
+          markdown,
+          workspaceRoot,
+          normalizedInstruction,
+          generationOptions,
+        );
 
-    const documentKey = createAiDocumentKey(workspaceRoot, loadedFile.path)
+        setAiResult({ documentKey, result });
+      } catch (error) {
+        setAiErrorMessage({
+          documentKey,
+          message: getErrorMessage(
+            error,
+            text("errors.summarizeMarkdownFailed"),
+          ),
+        });
+      } finally {
+        clearAiDocumentBusyState(documentKey);
+      }
+    },
+    [
+      clearAiDocumentBusyState,
+      clearAiDocumentError,
+      clearAiDocumentResult,
+      getLatestMarkdownForAi,
+      aiSettings,
+      aiTools,
+      setAiDocumentBusyState,
+      state.loadedFile,
+      state.workspace?.rootPath,
+      text,
+    ],
+  );
 
-    setIsTranslateMenuOpen(false)
-    setAiDocumentBusyState(documentKey, 'translating')
-    clearAiDocumentError(documentKey)
-    clearAiDocumentResult(documentKey)
+  const translateMarkdown = useCallback(
+    async (language: string): Promise<void> => {
+      const aiApi = window.aiApi;
+      const loadedFile = state.loadedFile;
+      const workspaceRoot = state.workspace?.rootPath;
 
-    try {
-      const markdown = await getLatestMarkdownForAi()
-      const generationOptions = resolveAiGenerationOptions(aiSettings, aiTools)
-      const result = await aiApi.translateMarkdown(
-        loadedFile.path,
-        markdown,
-        language,
-        workspaceRoot,
-        generationOptions
-      )
+      if (!aiApi || !loadedFile || !workspaceRoot) {
+        return;
+      }
 
-      setAiResult({ documentKey, result })
-    } catch (error) {
-      setAiErrorMessage({
-        documentKey,
-        message: getErrorMessage(error, 'Unable to translate Markdown')
-      })
-    } finally {
-      clearAiDocumentBusyState(documentKey)
-    }
-  }, [
-    clearAiDocumentBusyState,
-    clearAiDocumentError,
-    clearAiDocumentResult,
-    getLatestMarkdownForAi,
-    aiSettings,
-    aiTools,
-    setAiDocumentBusyState,
-    state.loadedFile,
-    state.workspace?.rootPath
-  ])
+      const documentKey = createAiDocumentKey(workspaceRoot, loadedFile.path);
+
+      setIsTranslateMenuOpen(false);
+      setAiDocumentBusyState(documentKey, "translating");
+      clearAiDocumentError(documentKey);
+      clearAiDocumentResult(documentKey);
+
+      try {
+        const markdown = await getLatestMarkdownForAi();
+        const generationOptions = resolveAiGenerationOptions(
+          aiSettings,
+          aiTools,
+        );
+        const result = await aiApi.translateMarkdown(
+          loadedFile.path,
+          markdown,
+          language,
+          workspaceRoot,
+          generationOptions,
+        );
+
+        setAiResult({ documentKey, result });
+      } catch (error) {
+        setAiErrorMessage({
+          documentKey,
+          message: getErrorMessage(
+            error,
+            text("errors.translateMarkdownFailed"),
+          ),
+        });
+      } finally {
+        clearAiDocumentBusyState(documentKey);
+      }
+    },
+    [
+      clearAiDocumentBusyState,
+      clearAiDocumentError,
+      clearAiDocumentResult,
+      getLatestMarkdownForAi,
+      aiSettings,
+      aiTools,
+      setAiDocumentBusyState,
+      state.loadedFile,
+      state.workspace?.rootPath,
+      text,
+    ],
+  );
 
   const rememberCustomTranslationLanguage = useCallback((): void => {
     setCustomAiTranslationLanguages((currentLanguages) => {
       const nextLanguages = rememberCustomAiTranslationLanguage(
         globalThis.localStorage,
         currentLanguages,
-        customAiTranslationLanguageInput
-      )
+        customAiTranslationLanguageInput,
+      );
 
-      return nextLanguages
-    })
-    setCustomAiTranslationLanguageInput('')
-  }, [customAiTranslationLanguageInput])
+      return nextLanguages;
+    });
+    setCustomAiTranslationLanguageInput("");
+  }, [customAiTranslationLanguageInput]);
 
   const forgetCustomTranslationLanguage = useCallback(
     (language: string): void => {
@@ -1226,16 +1345,16 @@ export const App = (): React.JSX.Element => {
         forgetCustomAiTranslationLanguage(
           globalThis.localStorage,
           currentLanguages,
-          language
-        )
-      )
+          language,
+        ),
+      );
     },
-    []
-  )
+    [],
+  );
 
   useEffect(() => {
-    const loadedFilePath = state.loadedFile?.path
-    const workspaceRoot = state.workspace?.rootPath
+    const loadedFilePath = state.loadedFile?.path;
+    const workspaceRoot = state.workspace?.rootPath;
 
     if (
       !state.isDirty ||
@@ -1243,354 +1362,415 @@ export const App = (): React.JSX.Element => {
       !loadedFilePath ||
       !workspaceRoot
     ) {
-      return
+      return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      void saveCurrentFile(state.draftMarkdown ?? undefined)
-    }, AUTO_SAVE_IDLE_DELAY_MS)
+      void saveCurrentFile(state.draftMarkdown ?? undefined);
+    }, AUTO_SAVE_IDLE_DELAY_MS);
 
     return () => {
-      window.clearTimeout(timeoutId)
-    }
+      window.clearTimeout(timeoutId);
+    };
   }, [
     saveCurrentFile,
     state.draftMarkdown,
     state.isDirty,
     state.isSavingFile,
     state.loadedFile?.path,
-    state.workspace?.rootPath
-  ])
+    state.workspace?.rootPath,
+  ]);
 
   useEffect(() => {
     const saveOnShortcut = (event: KeyboardEvent): void => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') {
-        return
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
+        return;
       }
 
-      event.preventDefault()
-      void saveCurrentFile()
-    }
+      event.preventDefault();
+      void saveCurrentFile();
+    };
 
-    window.addEventListener('keydown', saveOnShortcut)
+    window.addEventListener("keydown", saveOnShortcut);
 
     return () => {
-      window.removeEventListener('keydown', saveOnShortcut)
-    }
-  }, [saveCurrentFile])
+      window.removeEventListener("keydown", saveOnShortcut);
+    };
+  }, [saveCurrentFile]);
 
   useEffect(() => {
     const openSearchOnShortcut = (event: KeyboardEvent): void => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f') {
-        return
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== "f"
+      ) {
+        return;
       }
 
-      event.preventDefault()
+      event.preventDefault();
 
       if (event.shiftKey) {
-        window.dispatchEvent(new CustomEvent('mde:open-workspace-search'))
-        return
+        window.dispatchEvent(new CustomEvent("mde:open-workspace-search"));
+        return;
       }
 
       if (state.loadedFile) {
-        openEditorSearch()
+        openEditorSearch();
       }
-    }
+    };
 
-    window.addEventListener('keydown', openSearchOnShortcut)
+    window.addEventListener("keydown", openSearchOnShortcut);
 
     return () => {
-      window.removeEventListener('keydown', openSearchOnShortcut)
-    }
-  }, [openEditorSearch, state.loadedFile])
+      window.removeEventListener("keydown", openSearchOnShortcut);
+    };
+  }, [openEditorSearch, state.loadedFile]);
 
   const createMarkdownFile = async (promptedPath: string): Promise<void> => {
-    const workspaceRoot = state.workspace?.rootPath
-    const filePath = ensureMarkdownExtension(promptedPath)
+    const workspaceRoot = state.workspace?.rootPath;
+    const filePath = ensureMarkdownExtension(promptedPath);
 
     if (!workspaceRoot) {
-      return
+      return;
     }
 
     try {
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
-      await window.editorApi.createMarkdownFile(filePath, workspaceRoot)
-      await refreshWorkspaceTree(workspaceRoot)
-      await loadFile(filePath, workspaceRoot)
+      await window.editorApi.createMarkdownFile(filePath, workspaceRoot);
+      await refreshWorkspaceTree(workspaceRoot);
+      await loadFile(filePath, workspaceRoot);
     } catch (error) {
       dispatch({
-        message: getErrorMessage(error, 'Unable to create Markdown file'),
-        type: 'workspace/operation-failed',
-        workspaceRoot
-      })
+        message: getErrorMessage(
+          error,
+          text("errors.createMarkdownFileFailed"),
+        ),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
     }
-  }
+  };
 
   const createFolder = async (folderPath: string): Promise<void> => {
-    const workspaceRoot = state.workspace?.rootPath
+    const workspaceRoot = state.workspace?.rootPath;
 
     if (!workspaceRoot) {
-      return
+      return;
     }
 
     try {
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
-      await window.editorApi.createFolder(folderPath, workspaceRoot)
-      await refreshWorkspaceTree(workspaceRoot)
+      await window.editorApi.createFolder(folderPath, workspaceRoot);
+      await refreshWorkspaceTree(workspaceRoot);
     } catch (error) {
       dispatch({
-        message: getErrorMessage(error, 'Unable to create folder'),
-        type: 'workspace/operation-failed',
-        workspaceRoot
-      })
+        message: getErrorMessage(error, text("errors.createFolderFailed")),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
     }
-  }
+  };
 
   const renameSelectedEntry = async (promptedName: string): Promise<void> => {
-    const selectedEntryPath = state.selectedEntryPath
-    const workspaceRoot = state.workspace?.rootPath
+    const selectedEntryPath = state.selectedEntryPath;
+    const workspaceRoot = state.workspace?.rootPath;
 
     if (!selectedEntryPath || !state.workspace || !workspaceRoot) {
-      return
+      return;
     }
 
-    const selectedNode = findNodeByPath(state.workspace.tree, selectedEntryPath)
-    const parentPath = getParentPath(selectedEntryPath)
+    const selectedNode = findNodeByPath(
+      state.workspace.tree,
+      selectedEntryPath,
+    );
+    const parentPath = getParentPath(selectedEntryPath);
     const nextEntryName =
-      selectedNode?.type === 'file'
+      selectedNode?.type === "file"
         ? ensureMarkdownExtension(promptedName)
-        : promptedName
-    const nextEntryPath = joinWorkspacePath(parentPath, nextEntryName)
+        : promptedName;
+    const nextEntryPath = joinWorkspacePath(parentPath, nextEntryName);
 
     if (nextEntryPath === selectedEntryPath) {
-      return
+      return;
     }
 
     try {
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
       const result = await window.editorApi.renameEntry(
         selectedEntryPath,
         nextEntryPath,
-        workspaceRoot
-      )
+        workspaceRoot,
+      );
 
       dispatch({
         newPath: result.path,
         oldPath: selectedEntryPath,
-        type: 'file/entry-renamed',
-        workspaceRoot
-      })
+        type: "file/entry-renamed",
+        workspaceRoot,
+      });
       updateWorkspaceFileHistory((currentHistory) =>
         renameWorkspaceFileHistoryEntry(
           currentHistory,
           workspaceRoot,
           selectedEntryPath,
-          result.path
-        )
-      )
-      await refreshWorkspaceTree(workspaceRoot)
+          result.path,
+        ),
+      );
+      await refreshWorkspaceTree(workspaceRoot);
     } catch (error) {
       dispatch({
-        message: getErrorMessage(error, 'Unable to rename entry'),
-        type: 'workspace/operation-failed',
-        workspaceRoot
-      })
+        message: getErrorMessage(error, text("errors.renameEntryFailed")),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
     }
-  }
+  };
 
   const deleteSelectedEntry = async (): Promise<void> => {
-    const selectedEntryPath = state.selectedEntryPath
-    const workspaceRoot = state.workspace?.rootPath
+    const selectedEntryPath = state.selectedEntryPath;
+    const workspaceRoot = state.workspace?.rootPath;
 
     if (!selectedEntryPath || !workspaceRoot) {
-      return
+      return;
     }
 
     try {
       if (!window.editorApi) {
-        throw new Error('Editor API unavailable. Restart the app and try again.')
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
-      await window.editorApi.deleteEntry(selectedEntryPath, workspaceRoot)
+      await window.editorApi.deleteEntry(selectedEntryPath, workspaceRoot);
       dispatch({
         entryPath: selectedEntryPath,
-        type: 'file/entry-deleted',
-        workspaceRoot
-      })
+        type: "file/entry-deleted",
+        workspaceRoot,
+      });
       updateWorkspaceFileHistory((currentHistory) =>
         removeWorkspaceFileHistoryEntry(
           currentHistory,
           workspaceRoot,
-          selectedEntryPath
-        )
-      )
-      await refreshWorkspaceTree(workspaceRoot)
+          selectedEntryPath,
+        ),
+      );
+      await refreshWorkspaceTree(workspaceRoot);
     } catch (error) {
       dispatch({
-        message: getErrorMessage(error, 'Unable to delete entry'),
-        type: 'workspace/operation-failed',
-        workspaceRoot
-      })
+        message: getErrorMessage(error, text("errors.deleteEntryFailed")),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
     }
-  }
+  };
 
   const beginExplorerResize = (
-    event: ReactPointerEvent<HTMLDivElement>
+    event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
-    event.preventDefault()
-    updateExplorerWidthFromPointer(event.clientX)
-    setIsResizingExplorer(true)
-  }
+    event.preventDefault();
+    updateExplorerWidthFromPointer(event.clientX);
+    setIsResizingExplorer(true);
+  };
 
   const handleAppDragOver = (event: ReactDragEvent<HTMLElement>): void => {
     const hasFileTransfer =
       event.dataTransfer.files.length > 0 ||
-      Array.from(event.dataTransfer.types).includes('Files')
+      Array.from(event.dataTransfer.types).includes("Files");
 
     if (!hasFileTransfer) {
-      return
+      return;
     }
 
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-  }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
 
   const handleAppDrop = (event: ReactDragEvent<HTMLElement>): void => {
-    const resourcePath = getDroppedResourcePath(event)
+    const resourcePath = getDroppedResourcePath(event);
 
     if (!resourcePath) {
-      return
+      return;
     }
 
-    event.preventDefault()
+    event.preventDefault();
     void openDroppedPath(resourcePath).catch((error) => {
       dispatch({
-        message: getErrorMessage(error, 'Unable to open dropped path'),
-        type: 'workspace/open-failed'
-      })
-    })
-  }
+        message: getErrorMessage(error, text("errors.openDroppedPathFailed")),
+        type: "workspace/open-failed",
+      });
+    });
+  };
 
   const resizeExplorerFromKeyboard = (
-    event: ReactKeyboardEvent<HTMLDivElement>
+    event: ReactKeyboardEvent<HTMLDivElement>,
   ): void => {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      setExplorerWidth((currentWidth) => clampExplorerWidth(currentWidth - 16))
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault()
-      setExplorerWidth((currentWidth) => clampExplorerWidth(currentWidth + 16))
-    } else if (event.key === 'Home') {
-      event.preventDefault()
-      setExplorerWidth(EXPLORER_WIDTH_MIN)
-    } else if (event.key === 'End') {
-      event.preventDefault()
-      setExplorerWidth(EXPLORER_WIDTH_MAX)
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setExplorerWidth((currentWidth) => clampExplorerWidth(currentWidth - 16));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setExplorerWidth((currentWidth) => clampExplorerWidth(currentWidth + 16));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setExplorerWidth(EXPLORER_WIDTH_MIN);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setExplorerWidth(EXPLORER_WIDTH_MAX);
     }
-  }
+  };
 
-  const checkForUpdatesFromSettings = useCallback(async (): Promise<
-    UpdateCheckResult
-  > => {
-    const updateApi = window.updateApi
+  const checkForUpdatesFromSettings =
+    useCallback(async (): Promise<UpdateCheckResult> => {
+      const updateApi = window.updateApi;
 
-    if (!updateApi) {
-      return {
-        currentVersion: APP_VERSION,
-        message: 'Update checks are unavailable in this runtime.',
-        updateAvailable: false
+      if (!updateApi) {
+        return {
+          currentVersion: APP_VERSION,
+          message: text("settings.updatesUnavailable"),
+          updateAvailable: false,
+        };
       }
-    }
 
-    const result = await updateApi.checkForUpdates()
+      const result = await updateApi.checkForUpdates();
 
-    if (result.updateAvailable && result.update) {
-      showAvailableUpdate(result.update)
-    }
+      if (result.updateAvailable && result.update) {
+        showAvailableUpdate(result.update);
+      }
 
-    return result
-  }, [showAvailableUpdate])
+      return result;
+    }, [showAvailableUpdate, text]);
+
+  const generateAppLanguagePack = useCallback(
+    async (language: string): Promise<void> => {
+      const aiApi = window.aiApi;
+
+      if (!aiApi?.generateAppLanguagePack) {
+        throw new Error(text("errors.aiCliUnavailable"));
+      }
+
+      const languagePack = getAppLanguagePack(
+        appLanguageId,
+        customAppLanguagePacks,
+      );
+      const generationOptions = resolveAiGenerationOptions(aiSettings, aiTools);
+      const result = await aiApi.generateAppLanguagePack(
+        language,
+        createAppLanguagePackEntries(languagePack),
+        generationOptions,
+      );
+      const customLanguagePack = createCustomAppLanguagePack(
+        result.language,
+        result.entries,
+      );
+
+      setCustomAppLanguagePacks((currentPacks) => {
+        const nextPacks = [
+          ...currentPacks.filter((pack) => pack.id !== customLanguagePack.id),
+          customLanguagePack,
+        ];
+
+        writeCustomAppLanguagePacks(globalThis.localStorage, nextPacks);
+
+        return nextPacks;
+      });
+      selectAppLanguage(customLanguagePack.id);
+    },
+    [
+      aiSettings,
+      aiTools,
+      appLanguageId,
+      customAppLanguagePacks,
+      selectAppLanguage,
+      text,
+    ],
+  );
 
   const installUpdate = async (): Promise<void> => {
-    const updateApi = window.updateApi
+    const updateApi = window.updateApi;
 
     if (!updateApi || !availableUpdate) {
-      return
+      return;
     }
 
-    setUpdateErrorMessage(null)
+    setUpdateErrorMessage(null);
 
     try {
-      if (availableUpdate.installMode === 'open-dmg') {
-        setUpdateStatus('downloading')
-        await updateApi.downloadAndOpenUpdate()
-        setUpdateStatus('ready')
+      if (availableUpdate.installMode === "open-dmg") {
+        setUpdateStatus("downloading");
+        await updateApi.downloadAndOpenUpdate();
+        setUpdateStatus("ready");
         setUpdateProgress({
           downloadedBytes: availableUpdate.assetSize ?? 0,
           percent: 100,
-          totalBytes: availableUpdate.assetSize ?? null
-        })
-        return
+          totalBytes: availableUpdate.assetSize ?? null,
+        });
+        return;
       }
 
-      await updateApi.installWindowsUpdate()
+      await updateApi.installWindowsUpdate();
     } catch (error) {
-      setUpdateStatus('failed')
-      setUpdateErrorMessage(getErrorMessage(error, 'Unable to install update'))
+      setUpdateStatus("failed");
+      setUpdateErrorMessage(
+        getErrorMessage(error, text("errors.installUpdateFailed")),
+      );
     }
-  }
+  };
 
   const dismissUpdate = (): void => {
-    setIsUpdateDismissed(true)
-    setUpdateStatus(null)
-  }
+    setIsUpdateDismissed(true);
+    setUpdateStatus(null);
+  };
 
-  const appShellStyle: CSSProperties & Record<'--explorer-width', string> = {
-    '--explorer-width': `${explorerWidth}px`
-  }
-  const isEditorFullWidth = editorViewMode === 'full-width'
-  const resolvedTheme = resolveThemePreference(themePreference, systemThemeFamily)
+  const appShellStyle: CSSProperties & Record<"--explorer-width", string> = {
+    "--explorer-width": `${explorerWidth}px`,
+  };
+  const isEditorFullWidth = editorViewMode === "full-width";
+  const resolvedTheme = resolveThemePreference(
+    themePreference,
+    systemThemeFamily,
+  );
   const editorViewToggleLabel = isEditorFullWidth
-    ? 'Use centered editor view'
-    : 'Use full-width editor view'
+    ? text("editor.useCenteredView")
+    : text("editor.useFullWidthView");
   const currentAiDocumentKey =
     state.workspace && state.loadedFile
       ? createAiDocumentKey(state.workspace.rootPath, state.loadedFile.path)
-      : null
+      : null;
   const currentAiBusyState: AiActionBusyState = currentAiDocumentKey
-    ? (aiBusyStatesByDocument[currentAiDocumentKey] ?? 'idle')
-    : 'idle'
+    ? (aiBusyStatesByDocument[currentAiDocumentKey] ?? "idle")
+    : "idle";
   const currentAiResult =
     currentAiDocumentKey && aiResult?.documentKey === currentAiDocumentKey
       ? aiResult.result
-      : null
+      : null;
   const currentAiErrorMessage =
     currentAiDocumentKey && aiErrorMessage?.documentKey === currentAiDocumentKey
       ? aiErrorMessage.message
-      : null
-  const shouldShowAiActions = aiTools.length > 0 && Boolean(state.loadedFile)
+      : null;
+  const shouldShowAiActions = aiTools.length > 0 && Boolean(state.loadedFile);
   const recentFilePaths = state.workspace
     ? getWorkspaceRecentFiles(workspaceFileHistory, state.workspace.rootPath)
-    : []
+    : [];
 
   return (
     <main
       className={[
-        'app-shell',
-        isExplorerCollapsed ? 'is-explorer-collapsed' : '',
-        isResizingExplorer ? 'is-resizing-explorer' : ''
+        "app-shell",
+        isExplorerCollapsed ? "is-explorer-collapsed" : "",
+        isResizingExplorer ? "is-resizing-explorer" : "",
       ]
         .filter(Boolean)
-        .join(' ')}
+        .join(" ")}
       data-panel-family={resolvedTheme.panelFamily}
       data-theme={resolvedTheme.id}
       data-theme-family={resolvedTheme.family}
@@ -1604,55 +1784,58 @@ export const App = (): React.JSX.Element => {
         aiSettings={aiSettings}
         aiTools={aiTools}
         appVersion={APP_VERSION}
+        availableLanguagePacks={selectableAppLanguagePacks}
         isCollapsed={isExplorerCollapsed}
         onAiSettingsChange={updateAiSettings}
+        onAppLanguageChange={selectAppLanguage}
         onCheckForUpdates={checkForUpdatesFromSettings}
         onCreateFile={(filePath) => {
-          void createMarkdownFile(filePath)
+          void createMarkdownFile(filePath);
         }}
         onCreateFolder={(folderPath) => {
-          void createFolder(folderPath)
+          void createFolder(folderPath);
         }}
         onDeleteEntry={() => {
-          void deleteSelectedEntry()
+          void deleteSelectedEntry();
         }}
         onForgetWorkspace={forgetWorkspace}
         onOpenFile={() => {
-          void openFile()
+          void openFile();
         }}
         onOpenRecentFile={(filePath) => {
-          void loadFile(filePath)
+          void loadFile(filePath);
         }}
         onOpenWorkspace={() => {
-          void openWorkspace()
+          void openWorkspace();
         }}
         onOpenWorkspaceInNewWindow={(workspace) => {
-          void openWorkspaceInNewWindow(workspace)
+          void openWorkspaceInNewWindow(workspace);
         }}
         onOpenWorkspaceSearchResult={openWorkspaceSearchResult}
         onRefreshTree={(directoryPaths) =>
           refreshWorkspaceTree(state.workspace?.rootPath, directoryPaths)
         }
         onRenameEntry={(entryName) => {
-          void renameSelectedEntry(entryName)
+          void renameSelectedEntry(entryName);
         }}
         onSelectEntry={(entryPath) => {
-          dispatch({ type: 'explorer/entry-selected', entryPath })
+          dispatch({ type: "explorer/entry-selected", entryPath });
         }}
         onSelectFile={(filePath) => {
-          void loadFile(filePath)
+          void loadFile(filePath);
         }}
+        onGenerateAppLanguagePack={generateAppLanguagePack}
         onSwitchWorkspace={(workspace) => {
-          void switchWorkspace(workspace)
+          void switchWorkspace(workspace);
         }}
         onSearchWorkspace={searchWorkspaceMarkdown}
         onToggleCollapsed={() => {
-          setIsExplorerCollapsed((currentValue) => !currentValue)
+          setIsExplorerCollapsed((currentValue) => !currentValue);
         }}
         onSelectTheme={(themeId: AppThemeId) => {
           updateThemePreference((currentPreference) =>
-            selectAppTheme(currentPreference, themeId)
-          )
+            selectAppTheme(currentPreference, themeId),
+          );
         }}
         onToggleSystemTheme={(shouldFollowSystem) => {
           updateThemePreference((currentPreference) =>
@@ -1660,24 +1843,26 @@ export const App = (): React.JSX.Element => {
               ? enableSystemThemePreference(currentPreference)
               : disableSystemThemePreference(
                   currentPreference,
-                  resolvedTheme.family
-                )
-          )
+                  resolvedTheme.family,
+                ),
+          );
         }}
         recentFilePaths={recentFilePaths}
         recentWorkspaces={recentWorkspaces}
         resolvedTheme={resolvedTheme}
+        selectedLanguageId={appLanguageId}
         shouldAutoOpenWorkspaceDialog={
           hasResolvedInitialLaunchPath &&
           !state.workspace &&
           !state.isOpeningWorkspace
         }
         state={state}
+        text={text}
         themePreference={themePreference}
       />
       {!isExplorerCollapsed ? (
         <div
-          aria-label="Resize explorer sidebar"
+          aria-label={text("editor.resizeExplorerSidebar")}
           aria-orientation="vertical"
           aria-valuemax={EXPLORER_WIDTH_MAX}
           aria-valuemin={EXPLORER_WIDTH_MIN}
@@ -1691,46 +1876,45 @@ export const App = (): React.JSX.Element => {
       ) : null}
       <section
         className={[
-          'editor-pane',
-          isEditorFullWidth ? 'is-editor-full-width' : '',
-          currentAiResult ? 'is-ai-result-active' : ''
+          "editor-pane",
+          isEditorFullWidth ? "is-editor-full-width" : "",
+          currentAiResult ? "is-ai-result-active" : "",
         ]
           .filter(Boolean)
-          .join(' ')}
-        aria-label="Editor"
+          .join(" ")}
+        aria-label={text("editor.label")}
       >
-        <div className="editor-action-bar" aria-label="Editor actions">
+        <div className="editor-action-bar" aria-label={text("editor.actions")}>
           {state.loadedFile ? (
             <div className="editor-search-shell">
               {isEditorSearchOpen ? (
                 <form
-                  aria-label="Search current Markdown"
+                  aria-label={text("editor.markdownSearch")}
                   className="editor-search-form"
                   onSubmit={(event) => {
-                    event.preventDefault()
-                    cycleEditorSearchMatch()
+                    event.preventDefault();
+                    cycleEditorSearchMatch();
                   }}
                 >
                   <Search aria-hidden="true" size={15} />
                   <input
-                    aria-label="Search current Markdown"
+                    aria-label={text("editor.markdownSearch")}
                     onChange={(event) => {
-                      const nextQuery = event.target.value
+                      const nextQuery = event.target.value;
 
-                      setEditorSearchQuery(nextQuery)
+                      setEditorSearchQuery(nextQuery);
                       setEditorSearchState({
-                        activeMatchIndex:
-                          nextQuery.trim().length > 0 ? 0 : -1,
-                        matchCount: 0
-                      })
+                        activeMatchIndex: nextQuery.trim().length > 0 ? 0 : -1,
+                        matchCount: 0,
+                      });
                     }}
                     onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        event.preventDefault()
-                        closeEditorSearch()
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        closeEditorSearch();
                       }
                     }}
-                    placeholder="Search"
+                    placeholder={text("editor.searchPlaceholder")}
                     ref={editorSearchInputRef}
                     type="search"
                     value={editorSearchQuery}
@@ -1738,10 +1922,10 @@ export const App = (): React.JSX.Element => {
                   <span aria-live="polite" className="editor-search-count">
                     {editorSearchQuery.trim().length > 0
                       ? `${Math.max(editorSearchState.activeMatchIndex + 1, 0)}/${editorSearchState.matchCount}`
-                      : '0/0'}
+                      : "0/0"}
                   </span>
                   <button
-                    aria-label="Close current Markdown search"
+                    aria-label={text("editor.closeMarkdownSearch")}
                     className="editor-search-close-button"
                     onClick={closeEditorSearch}
                     type="button"
@@ -1751,13 +1935,13 @@ export const App = (): React.JSX.Element => {
                 </form>
               ) : null}
               <button
-                aria-label="Search current Markdown"
+                aria-label={text("editor.markdownSearch")}
                 aria-pressed={isEditorSearchOpen}
                 className="editor-action-button"
                 onClick={() => {
-                  openEditorSearch()
+                  openEditorSearch();
                 }}
-                title="Search current Markdown"
+                title={text("editor.markdownSearch")}
                 type="button"
               >
                 <Search aria-hidden="true" size={17} strokeWidth={2} />
@@ -1774,14 +1958,15 @@ export const App = (): React.JSX.Element => {
               onCustomLanguageInputChange={setCustomAiTranslationLanguageInput}
               onForgetCustomLanguage={forgetCustomTranslationLanguage}
               onSummarize={() => {
-                void summarizeMarkdown()
+                void summarizeMarkdown();
               }}
               onToggleTranslateMenu={() => {
-                setIsTranslateMenuOpen((currentValue) => !currentValue)
+                setIsTranslateMenuOpen((currentValue) => !currentValue);
               }}
               onTranslate={(language) => {
-                void translateMarkdown(language)
+                void translateMarkdown(language);
               }}
+              text={text}
             />
           ) : null}
           <button
@@ -1791,12 +1976,12 @@ export const App = (): React.JSX.Element => {
             onClick={() => {
               setEditorViewMode((currentMode) => {
                 const nextMode =
-                  currentMode === 'full-width' ? 'centered' : 'full-width'
+                  currentMode === "full-width" ? "centered" : "full-width";
 
-                writeEditorViewMode(globalThis.localStorage, nextMode)
+                writeEditorViewMode(globalThis.localStorage, nextMode);
 
-                return nextMode
-              })
+                return nextMode;
+              });
             }}
             title={editorViewToggleLabel}
             type="button"
@@ -1808,11 +1993,7 @@ export const App = (): React.JSX.Element => {
                 strokeWidth={2}
               />
             ) : (
-              <StretchHorizontal
-                aria-hidden="true"
-                size={17}
-                strokeWidth={2}
-              />
+              <StretchHorizontal aria-hidden="true" size={17} strokeWidth={2} />
             )}
           </button>
         </div>
@@ -1824,21 +2005,22 @@ export const App = (): React.JSX.Element => {
         {currentAiResult ? (
           <AiResultPanel
             colorScheme={resolvedTheme.family}
-            isRegeneratingSummary={currentAiBusyState === 'refining-summary'}
+            isRegeneratingSummary={currentAiBusyState === "refining-summary"}
             onClose={() => {
               if (currentAiDocumentKey) {
-                clearAiDocumentResult(currentAiDocumentKey)
+                clearAiDocumentResult(currentAiDocumentKey);
               }
             }}
             onRegenerateSummary={(instruction) => {
-              void summarizeMarkdown(instruction)
+              void summarizeMarkdown(instruction);
             }}
             result={currentAiResult}
-            workspaceRoot={state.workspace?.rootPath ?? ''}
+            text={text}
+            workspaceRoot={state.workspace?.rootPath ?? ""}
           />
         ) : state.loadedFile ? (
           <MarkdownBlockEditor
-            key={`${state.workspace?.rootPath ?? ''}:${state.loadedFile.path}`}
+            key={`${state.workspace?.rootPath ?? ""}:${state.loadedFile.path}`}
             draftMarkdown={state.draftMarkdown ?? state.loadedFile.contents}
             colorScheme={resolvedTheme.family}
             errorMessage={state.fileErrorMessage}
@@ -1847,32 +2029,33 @@ export const App = (): React.JSX.Element => {
             markdown={state.loadedFile.contents}
             onImageUpload={uploadImageAsset}
             onMarkdownChange={(contents) => {
-              const workspaceRoot = state.workspace?.rootPath
+              const workspaceRoot = state.workspace?.rootPath;
 
               if (!workspaceRoot || !state.loadedFile) {
-                return
+                return;
               }
 
               dispatch({
                 contents,
                 filePath: state.loadedFile.path,
-                type: 'file/content-changed',
-                workspaceRoot
-              })
+                type: "file/content-changed",
+                workspaceRoot,
+              });
             }}
             onSaveRequest={saveCurrentFile}
             onSearchStateChange={setEditorSearchState}
             path={state.loadedFile.path}
             ref={editorRef}
             searchQuery={editorSearchQuery}
+            text={text}
             activeSearchMatchIndex={editorSearchState.activeMatchIndex}
-            workspaceRoot={state.workspace?.rootPath ?? ''}
+            workspaceRoot={state.workspace?.rootPath ?? ""}
           />
         ) : (
           <div className="editor-empty-state">
             <p className="editor-kicker">MDE</p>
-            <h1>{state.selectedFilePath ?? 'Select a folder to begin'}</h1>
-            {state.isLoadingFile ? <p>Loading file...</p> : null}
+            <h1>{state.selectedFilePath ?? text("editor.emptyTitle")}</h1>
+            {state.isLoadingFile ? <p>{text("common.loadingFile")}</p> : null}
             {state.fileErrorMessage ? (
               <p className="editor-error" role="alert">
                 {state.fileErrorMessage}
@@ -1886,13 +2069,14 @@ export const App = (): React.JSX.Element => {
           errorMessage={updateErrorMessage}
           onDismiss={dismissUpdate}
           onInstall={() => {
-            void installUpdate()
+            void installUpdate();
           }}
           progress={updateProgress}
           status={updateStatus}
+          text={text}
           update={availableUpdate}
         />
       ) : null}
     </main>
-  )
-}
+  );
+};

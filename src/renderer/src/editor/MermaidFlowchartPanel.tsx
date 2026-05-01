@@ -1,124 +1,136 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from "react";
 
 import {
   extractMermaidBlocks,
-  replaceMermaidBlockSource
-} from './flowchartMarkdown'
+  replaceMermaidBlockSource,
+} from "./flowchartMarkdown";
+import type { AppText } from "../i18n/appLanguage";
 
 interface MermaidFlowchartPanelProps {
-  readonly colorScheme: 'dark' | 'light'
-  readonly markdown: string
-  readonly onMarkdownChange: (contents: string) => void
+  readonly colorScheme: "dark" | "light";
+  readonly markdown: string;
+  readonly onMarkdownChange: (contents: string) => void;
+  readonly text: AppText;
 }
 
 interface RenderedFlowchart {
-  readonly errorMessage: string | null
-  readonly svg: string | null
+  readonly errorMessage: string | null;
+  readonly svg: string | null;
 }
 
 interface MermaidApi {
   readonly initialize: (options: {
-    readonly securityLevel: 'strict'
-    readonly startOnLoad: boolean
-    readonly theme: 'dark' | 'neutral'
-  }) => void
+    readonly securityLevel: "strict";
+    readonly startOnLoad: boolean;
+    readonly theme: "dark" | "neutral";
+  }) => void;
   readonly render: (
     id: string,
-    source: string
-  ) => Promise<{ readonly svg: string }> | { readonly svg: string }
+    source: string,
+  ) => Promise<{ readonly svg: string }> | { readonly svg: string };
 }
 
-const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : 'Unable to render flowchart'
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
 
 const loadMermaid = async (): Promise<MermaidApi> => {
-  const mermaidModule = (await import('mermaid')) as unknown as {
-    readonly default?: MermaidApi
-  } & MermaidApi
+  const mermaidModule = (await import("mermaid")) as unknown as {
+    readonly default?: MermaidApi;
+  } & MermaidApi;
 
-  return mermaidModule.default ?? mermaidModule
-}
+  return mermaidModule.default ?? mermaidModule;
+};
 
 export const MermaidFlowchartPanel = ({
   colorScheme,
   markdown,
-  onMarkdownChange
+  onMarkdownChange,
+  text,
 }: MermaidFlowchartPanelProps): React.JSX.Element | null => {
-  const idPrefix = useId().replaceAll(':', '-')
-  const blocks = useMemo(() => extractMermaidBlocks(markdown), [markdown])
+  const idPrefix = useId().replaceAll(":", "-");
+  const blocks = useMemo(() => extractMermaidBlocks(markdown), [markdown]);
   const [renderedFlowcharts, setRenderedFlowcharts] = useState<
     readonly RenderedFlowchart[]
-  >([])
+  >([]);
 
   useEffect(() => {
-    let isCurrent = true
+    let isCurrent = true;
 
     const renderFlowcharts = async (): Promise<void> => {
       if (blocks.length === 0) {
-        setRenderedFlowcharts([])
-        return
+        setRenderedFlowcharts([]);
+        return;
       }
 
       try {
-        const mermaid = await loadMermaid()
+        const mermaid = await loadMermaid();
 
         mermaid.initialize({
-          securityLevel: 'strict',
+          securityLevel: "strict",
           startOnLoad: false,
-          theme: colorScheme === 'dark' ? 'dark' : 'neutral'
-        })
+          theme: colorScheme === "dark" ? "dark" : "neutral",
+        });
 
         const results = await Promise.all(
           blocks.map(async (block) => {
             try {
               const rendered = await mermaid.render(
                 `mde-flowchart-${idPrefix}-${block.index}`,
-                block.source
-              )
+                block.source,
+              );
 
               return {
                 errorMessage: null,
-                svg: rendered.svg
-              }
+                svg: rendered.svg,
+              };
             } catch (error) {
               return {
-                errorMessage: getErrorMessage(error),
-                svg: null
-              }
+                errorMessage: getErrorMessage(
+                  error,
+                  text("flowchart.renderFailed"),
+                ),
+                svg: null,
+              };
             }
-          })
-        )
+          }),
+        );
 
         if (isCurrent) {
-          setRenderedFlowcharts(results)
+          setRenderedFlowcharts(results);
         }
       } catch (error) {
         if (isCurrent) {
           setRenderedFlowcharts(
             blocks.map(() => ({
-              errorMessage: getErrorMessage(error),
-              svg: null
-            }))
-          )
+              errorMessage: getErrorMessage(
+                error,
+                text("flowchart.renderFailed"),
+              ),
+              svg: null,
+            })),
+          );
         }
       }
-    }
+    };
 
-    void renderFlowcharts()
+    void renderFlowcharts();
 
     return () => {
-      isCurrent = false
-    }
-  }, [blocks, colorScheme, idPrefix])
+      isCurrent = false;
+    };
+  }, [blocks, colorScheme, idPrefix, text]);
 
   if (blocks.length === 0) {
-    return null
+    return null;
   }
 
   return (
-    <aside aria-label="Flowcharts" className="mermaid-flowchart-panel">
+    <aside
+      aria-label={text("flowchart.label")}
+      className="mermaid-flowchart-panel"
+    >
       {blocks.map((block) => {
-        const rendered = renderedFlowcharts[block.index]
+        const rendered = renderedFlowcharts[block.index];
 
         return (
           <section className="mermaid-flowchart-card" key={block.index}>
@@ -140,26 +152,30 @@ export const MermaidFlowchartPanel = ({
               </div>
             </div>
             <label className="mermaid-flowchart-source-label">
-              <span>Mermaid source {block.index + 1}</span>
+              <span>
+                {text("flowchart.source", { index: block.index + 1 })}
+              </span>
               <textarea
-                aria-label={`Mermaid source ${block.index + 1}`}
+                aria-label={text("flowchart.source", {
+                  index: block.index + 1,
+                })}
                 className="mermaid-flowchart-source"
                 onChange={(event) => {
                   onMarkdownChange(
                     replaceMermaidBlockSource(
                       markdown,
                       block.index,
-                      event.currentTarget.value
-                    )
-                  )
+                      event.currentTarget.value,
+                    ),
+                  );
                 }}
                 spellCheck={false}
                 value={block.source}
               />
             </label>
           </section>
-        )
+        );
       })}
     </aside>
-  )
-}
+  );
+};
