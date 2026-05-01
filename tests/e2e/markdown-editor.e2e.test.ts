@@ -904,6 +904,96 @@ test('loads README markdown into the block editor surface', async () => {
   }
 })
 
+test('renders and preserves YAML frontmatter outside the editor body', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  const invalidPath = join(workspacePath, 'invalid.md')
+
+  await writeFile(
+    readmePath,
+    [
+      '---',
+      'name: auto-pick-tasks',
+      'description: Use ready tasks',
+      '---',
+      '# Auto Pick Tasks',
+      '',
+      'Body paragraph.'
+    ].join('\n')
+  )
+  await writeFile(
+    invalidPath,
+    ['---', 'name: [unterminated', '---', '# Invalid Body', '', 'Safe body.'].join(
+      '\n'
+    )
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+    const editorSurface = editor.locator('.markdown-editor-surface')
+
+    await expect(editor).toContainText('Frontmatter')
+    await expect(editorSurface).toContainText('Auto Pick Tasks')
+    await expect(editorSurface).not.toContainText('name: auto-pick-tasks')
+
+    await window.getByRole('button', { name: /frontmatter 2 fields/i }).click()
+    await expect(window.locator('.frontmatter-raw')).toContainText(
+      'description: Use ready tasks'
+    )
+
+    await window.getByRole('button', { name: /edit frontmatter/i }).click()
+    await window
+      .getByRole('textbox', { name: /raw frontmatter yaml/i })
+      .fill('name: updated-frontmatter\ndescription: Updated metadata')
+    await window.getByRole('button', { name: /apply frontmatter/i }).click()
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+
+    await expect.poll(async () => readFile(readmePath, 'utf8')).toContain(
+      'name: updated-frontmatter'
+    )
+
+    await focusTextEndInEditor(window, 'Body paragraph.')
+    await window.keyboard.insertText(' Edited body.')
+
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toContain('Body paragraph. Edited body.')
+    await expect.poll(async () => readFile(readmePath, 'utf8')).toMatch(
+      /^---\nname: updated-frontmatter\ndescription: Updated metadata\n---\n# Auto Pick Tasks/
+    )
+
+    await window
+      .getByRole('button', { name: /invalid\.md Markdown file/i })
+      .click()
+    await expect(
+      window.getByRole('button', { name: /frontmatter 1 field/i })
+    ).toContainText(/invalid YAML/i)
+    await window.getByRole('button', { name: /frontmatter 1 field/i }).click()
+    await expect(window.getByText(/frontmatter parse failed/i)).toBeVisible()
+
+    await expect(editorSurface).toContainText('Safe body.')
+    await focusTextEndInEditor(window, 'Safe body.')
+    await window.keyboard.insertText(' Still editable.')
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+    await expect
+      .poll(async () => readFile(invalidPath, 'utf8'), { timeout: 10_000 })
+      .toContain('name: [unterminated')
+    await expect
+      .poll(async () => readFile(invalidPath, 'utf8'), { timeout: 10_000 })
+      .toContain('Safe body. Still editable.')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('keeps loaded markdown intact when undo is pressed before editing', async () => {
   const workspacePath = await createFixtureWorkspace()
   const readmePath = join(workspacePath, 'README.md')

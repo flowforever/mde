@@ -187,6 +187,40 @@ describe("aiService", () => {
     ).resolves.toBe("## Summary\n\n- Main point.");
   });
 
+  it("summarizes Markdown body content without frontmatter metadata", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "mde-ai-service-"));
+    const prompts: string[] = [];
+    let runPromptCalls = 0;
+    const service = createAiService({
+      locateCommand: locateCommands({ codex: "/fake/codex" }),
+      runPrompt: ({ prompt }) => {
+        prompts.push(prompt);
+        runPromptCalls += 1;
+
+        return Promise.resolve("## Summary\n\n- Body only.");
+      },
+    });
+
+    await writeFile(join(workspacePath, "README.md"), "# Readme");
+
+    const first = await service.summarizeMarkdown(
+      workspacePath,
+      "README.md",
+      "---\nname: first\n---\n# Readme\n\nBody text.",
+    );
+    const cachedAfterMetadataOnlyChange = await service.summarizeMarkdown(
+      workspacePath,
+      "README.md",
+      "---\nname: second\n---\n# Readme\n\nBody text.",
+    );
+
+    expect(first).toMatchObject({ cached: false });
+    expect(cachedAfterMetadataOnlyChange).toMatchObject({ cached: true });
+    expect(runPromptCalls).toBe(1);
+    expect(prompts[0]).toContain("# Readme\n\nBody text.");
+    expect(prompts[0]).not.toContain("name: first");
+  });
+
   it("uses the selected CLI and model for AI generation", async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), "mde-ai-service-"));
     const promptRuns: {

@@ -37,6 +37,11 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
 } from "./markdownTransforms";
+import { FrontmatterPanel } from "./FrontmatterPanel";
+import {
+  composeMarkdownWithFrontmatter,
+  splitMarkdownFrontmatter,
+} from "./frontmatter";
 import type { TreeNode } from "../../../shared/fileTree";
 import type { AppText } from "../i18n/appLanguage";
 
@@ -275,9 +280,17 @@ export const MarkdownBlockEditor = forwardRef<
     }),
     [path, workspaceRoot],
   );
+  const persistedMarkdownDocument = useMemo(
+    () => splitMarkdownFrontmatter(markdown),
+    [markdown],
+  );
+  const draftMarkdownDocument = useMemo(
+    () => splitMarkdownFrontmatter(draftMarkdown),
+    [draftMarkdown],
+  );
   const editorMarkdown = useMemo(
-    () => prepareMarkdownForEditor(markdown, assetContext),
-    [assetContext, markdown],
+    () => prepareMarkdownForEditor(persistedMarkdownDocument.body, assetContext),
+    [assetContext, persistedMarkdownDocument.body],
   );
   const directoryOptions = useMemo(
     () => [
@@ -313,9 +326,13 @@ export const MarkdownBlockEditor = forwardRef<
       exportedMarkdown,
       assetContext,
     );
+    const bodyMarkdown = replaceMermaidBlocksFromSource(
+      portableMarkdown,
+      draftMarkdownDocument.body,
+    );
 
-    return replaceMermaidBlocksFromSource(portableMarkdown, draftMarkdown);
-  }, [assetContext, draftMarkdown, editor]);
+    return composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown);
+  }, [assetContext, draftMarkdownDocument, editor]);
 
   const closeLinkDialog = useCallback((): void => {
     setLinkDialogState(null);
@@ -327,6 +344,20 @@ export const MarkdownBlockEditor = forwardRef<
   const openLinkDialog = useCallback((): void => {
     setLinkDialogState(createInitialLinkDialogState(path, text));
   }, [path, text]);
+
+  const applyFrontmatterChange = useCallback(
+    (raw: string): void => {
+      const nextMarkdown = composeMarkdownWithFrontmatter(
+        draftMarkdownDocument,
+        draftMarkdownDocument.body,
+        raw,
+      );
+
+      hasLocalChangesRef.current = true;
+      onMarkdownChange(nextMarkdown);
+    },
+    [draftMarkdownDocument, onMarkdownChange],
+  );
 
   const insertEditorLink = useCallback(
     (href: string, displayText?: string): void => {
@@ -713,8 +744,24 @@ export const MarkdownBlockEditor = forwardRef<
       {!isReadOnly ? (
         <MermaidFlowchartPanel
           colorScheme={colorScheme}
-          markdown={draftMarkdown}
-          onMarkdownChange={onMarkdownChange}
+          markdown={draftMarkdownDocument.body}
+          onMarkdownChange={(bodyMarkdown) => {
+            hasLocalChangesRef.current = true;
+            onMarkdownChange(
+              composeMarkdownWithFrontmatter(
+                draftMarkdownDocument,
+                bodyMarkdown,
+              ),
+            );
+          }}
+          text={text}
+        />
+      ) : null}
+      {draftMarkdownDocument.frontmatter ? (
+        <FrontmatterPanel
+          frontmatter={draftMarkdownDocument.frontmatter}
+          isReadOnly={isReadOnly}
+          onApply={applyFrontmatterChange}
           text={text}
         />
       ) : null}
@@ -735,10 +782,17 @@ export const MarkdownBlockEditor = forwardRef<
                 contents,
                 assetContext,
               );
+              const bodyMarkdown = replaceMermaidBlocksFromSource(
+                portableContents,
+                draftMarkdownDocument.body,
+              );
 
               setSerializationErrorMessage(null);
               onMarkdownChange(
-                replaceMermaidBlocksFromSource(portableContents, draftMarkdown),
+                composeMarkdownWithFrontmatter(
+                  draftMarkdownDocument,
+                  bodyMarkdown,
+                ),
               );
             })
             .catch((error: unknown) => {

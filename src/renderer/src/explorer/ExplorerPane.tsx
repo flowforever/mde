@@ -2334,6 +2334,9 @@ export const ExplorerPane = ({
                           columnNumber: match.columnNumber,
                           lineNumber: match.lineNumber,
                         })}
+                        {match.kind === "metadata"
+                          ? ` · ${text("globalSearch.metadataMatch")}`
+                          : ""}
                       </span>
                       <span>{match.preview}</span>
                     </button>

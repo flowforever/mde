@@ -27,6 +27,7 @@ import type {
   AiTool,
   AiToolId,
 } from "../../shared/ai";
+import { getMarkdownBody } from "../../shared/frontmatter";
 import { assertPathInsideWorkspace, resolveWorkspacePath } from "./pathSafety";
 
 const execFileAsync = promisify(execFile);
@@ -932,31 +933,37 @@ export const createAiService = ({
       markdown,
       instruction,
       options,
-    ) =>
-      generateMarkdown({
+    ) => {
+      const bodyMarkdown = getMarkdownBody(markdown);
+
+      return generateMarkdown({
         kind: "summary",
         instruction,
-        markdown,
+        markdown: bodyMarkdown,
         markdownFilePath,
         options,
-        prompt: createSummaryPrompt(markdown, instruction),
+        prompt: createSummaryPrompt(bodyMarkdown, instruction),
         workspacePath,
-      }),
+      });
+    },
     translateMarkdown: (
       workspacePath,
       markdownFilePath,
       markdown,
       language,
       options,
-    ) =>
-      generateMarkdown({
+    ) => {
+      const bodyMarkdown = getMarkdownBody(markdown);
+
+      return generateMarkdown({
         kind: "translation",
         language: language.trim(),
-        markdown,
+        markdown: bodyMarkdown,
         markdownFilePath,
         options,
-        prompt: createTranslatePrompt(markdown, language),
+        prompt: createTranslatePrompt(bodyMarkdown, language),
         workspacePath,
-      }),
+      });
+    },
   };
 };

@@ -53,11 +53,13 @@ describe('workspaceService', () => {
           matches: [
             {
               columnNumber: 3,
+              kind: 'body',
               lineNumber: 1,
               preview: '# Alpha'
             },
             {
               columnNumber: 6,
+              kind: 'body',
               lineNumber: 3,
               preview: 'Root alpha note'
             }
@@ -68,6 +70,7 @@ describe('workspaceService', () => {
           matches: [
             {
               columnNumber: 1,
+              kind: 'body',
               lineNumber: 2,
               preview: 'alpha guide'
             }

@@ -185,6 +185,108 @@ describe("MarkdownBlockEditor accessibility", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders YAML frontmatter as metadata and parses only the Markdown body", async () => {
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={[
+          "---",
+          "name: auto-pick-tasks",
+          "description: Use ready tasks",
+          "---",
+          "# Auto Pick Tasks",
+          "",
+          "Body text.",
+        ].join("\n")}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={[
+          "---",
+          "name: auto-pick-tasks",
+          "description: Use ready tasks",
+          "---",
+          "# Auto Pick Tasks",
+          "",
+          "Body text.",
+        ].join("\n")}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="skills/auto-pick-tasks/SKILL.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.tryParseMarkdownToBlocks,
+      ).toHaveBeenCalledWith("# Auto Pick Tasks\n\nBody text.");
+    });
+    expect(
+      screen.getByRole("button", { name: /frontmatter 2 fields/i }),
+    ).toBeVisible();
+    expect(screen.getByText(/name: auto-pick-tasks/i)).toBeVisible();
+  });
+
+  it("edits raw YAML frontmatter without rewriting the Markdown body", async () => {
+    const user = userEvent.setup();
+    const onMarkdownChange = vi.fn();
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={[
+          "---",
+          "name: metadata",
+          "description: editable",
+          "---",
+          "# Body",
+          "",
+          "Body text.",
+        ].join("\n")}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={[
+          "---",
+          "name: metadata",
+          "description: editable",
+          "---",
+          "# Body",
+          "",
+          "Body text.",
+        ].join("\n")}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={onMarkdownChange}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /frontmatter 2 fields/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /edit frontmatter/i }));
+    await user.clear(
+      screen.getByRole("textbox", { name: /raw frontmatter yaml/i }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: /raw frontmatter yaml/i }),
+      "name: new",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /apply frontmatter/i }),
+    );
+
+    expect(onMarkdownChange).toHaveBeenLastCalledWith(
+      "---\nname: new\n---\n# Body\n\nBody text.",
+    );
+  });
+
   it("renders read-only markdown without propagating editor changes", async () => {
     const user = userEvent.setup();
     const onMarkdownChange = vi.fn();

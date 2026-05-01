@@ -40,6 +40,7 @@ export interface ImageAsset {
 
 export interface WorkspaceSearchMatch {
   readonly columnNumber: number
+  readonly kind: 'body' | 'metadata'
   readonly lineNumber: number
   readonly preview: string
 }

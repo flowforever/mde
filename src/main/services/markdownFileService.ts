@@ -24,6 +24,7 @@ import {
   findTextSearchMatches,
   normalizeSearchQuery
 } from '../../shared/search'
+import { splitMarkdownFrontmatter } from '../../shared/frontmatter'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 
 const ignoredEntryNames = new Set([
@@ -453,6 +454,7 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
         markdownPath
       )
       const contents = await readFile(realFilePath, 'utf8')
+      const parsedMarkdown = splitMarkdownFrontmatter(contents)
       const matches = findTextSearchMatches(contents, normalizedQuery)
 
       if (matches.length === 0) {
@@ -462,6 +464,11 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
       results.push({
         matches: matches.slice(0, MAX_SEARCH_MATCHES_PER_FILE).map((match) => ({
           columnNumber: match.columnNumber,
+          kind:
+            parsedMarkdown.frontmatter &&
+            match.startOffset < parsedMarkdown.bodyStartOffset
+              ? 'metadata'
+              : 'body',
           lineNumber: match.lineNumber,
           preview: createSearchPreview(contents, match)
         })),

@@ -273,6 +273,56 @@ describe('fileHandlers integration', () => {
     })
   })
 
+  it('marks frontmatter workspace search matches as metadata hits', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-search-workspace-'))
+
+    await writeFile(
+      join(workspacePath, 'README.md'),
+      ['---', 'name: metadata-target', '---', '# Body', '', 'Body target'].join(
+        '\n'
+      )
+    )
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    const metadataResult = await handlers
+      .get(FILE_CHANNELS.searchWorkspaceMarkdown)
+      ?.({}, 'metadata-target', workspace.rootPath)
+    const bodyResult = await handlers
+      .get(FILE_CHANNELS.searchWorkspaceMarkdown)
+      ?.({}, 'Body target', workspace.rootPath)
+
+    expect(metadataResult).toMatchObject({
+      results: [
+        {
+          matches: [
+            {
+              kind: 'metadata',
+              lineNumber: 2,
+              preview: 'name: metadata-target'
+            }
+          ],
+          path: 'README.md'
+        }
+      ]
+    })
+    expect(bodyResult).toMatchObject({
+      results: [
+        {
+          matches: [
+            {
+              kind: 'body',
+              preview: 'Body target'
+            }
+          ],
+          path: 'README.md'
+        }
+      ]
+    })
+  })
+
   it('rejects stale workspace search requests', async () => {
     const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
     const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))
