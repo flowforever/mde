@@ -170,7 +170,10 @@ describe('Release automation config', () => {
     expect(workflow).toContain('contents: write')
     expect(workflow).toContain('npm ci')
     expect(workflow).toContain('gh release create')
-    expect(workflow).toContain('--notes-from-tag')
+    expect(workflow).toContain(
+      'notes_file=".github/release-notes/$GITHUB_REF_NAME.md"'
+    )
+    expect(workflow).toContain('--notes-file "$notes_file"')
     expect(workflow).toContain('Restore release notes')
     expect(workflow).toContain('git for-each-ref')
     expect(workflow).toContain('gh release edit')

@@ -65,10 +65,22 @@ jobs:
 
       - name: Create release notes
         run: |
+          notes_file=".github/release-notes/$GITHUB_REF_NAME.md"
+
+          if [ ! -f "$notes_file" ]; then
+            git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > /tmp/release-notes.md
+            notes_file="/tmp/release-notes.md"
+          fi
+
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; keeping existing release notes."
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "MDE ${GITHUB_REF_NAME#v}" \
+              --notes-file "$notes_file"
           else
-            gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "MDE ${GITHUB_REF_NAME#v}" \
+              --notes-file "$notes_file"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,10 +104,16 @@ jobs:
 
       - name: Restore release notes
         run: |
-          git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > /tmp/release-notes.md
+          notes_file=".github/release-notes/$GITHUB_REF_NAME.md"
+
+          if [ ! -f "$notes_file" ]; then
+            git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > /tmp/release-notes.md
+            notes_file="/tmp/release-notes.md"
+          fi
+
           gh release edit "$GITHUB_REF_NAME" \
             --title "MDE ${GITHUB_REF_NAME#v}" \
-            --notes-file /tmp/release-notes.md
+            --notes-file "$notes_file"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -125,9 +143,15 @@ jobs:
       - name: Restore release notes
         shell: bash
         run: |
-          git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > /tmp/release-notes.md
+          notes_file=".github/release-notes/$GITHUB_REF_NAME.md"
+
+          if [ ! -f "$notes_file" ]; then
+            git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > /tmp/release-notes.md
+            notes_file="/tmp/release-notes.md"
+          fi
+
           gh release edit "$GITHUB_REF_NAME" \
             --title "MDE ${GITHUB_REF_NAME#v}" \
-            --notes-file /tmp/release-notes.md
+            --notes-file "$notes_file"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
