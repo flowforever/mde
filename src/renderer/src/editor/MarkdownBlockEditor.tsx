@@ -140,6 +140,7 @@ export const MarkdownBlockEditor = forwardRef<
   )
   const isHydratingRef = useRef(false)
   const hasLocalChangesRef = useRef(false)
+  const latestDraftMarkdownRef = useRef(draftMarkdown)
   const shellRef = useRef<HTMLDivElement | null>(null)
   const [parseErrorMessage, setParseErrorMessage] = useState<string | null>(null)
   const [serializationErrorMessage, setSerializationErrorMessage] = useState<
@@ -184,6 +185,13 @@ export const MarkdownBlockEditor = forwardRef<
 
     const loadMarkdown = async (): Promise<void> => {
       try {
+        if (
+          hasLocalChangesRef.current &&
+          markdown === latestDraftMarkdownRef.current
+        ) {
+          return
+        }
+
         const blocks = await importMarkdownToBlocks(editor, editorMarkdown)
 
         if (!isCurrent) {
@@ -212,7 +220,11 @@ export const MarkdownBlockEditor = forwardRef<
       isCurrent = false
       isHydratingRef.current = false
     }
-  }, [editor, editorMarkdown])
+  }, [editor, editorMarkdown, markdown])
+
+  useEffect(() => {
+    latestDraftMarkdownRef.current = draftMarkdown
+  }, [draftMarkdown])
 
   useEffect(() => {
     hasLocalChangesRef.current = false

@@ -19,9 +19,12 @@ interface MockHighlightRegistry {
 const mockBlockNoteState = vi.hoisted(() => ({
   lastEditor: undefined as
     | {
+        blocksToMarkdownLossy: ReturnType<typeof vi.fn>
+        document: { content: string; id: string; type: string }[]
         replaceBlocks: ReturnType<typeof vi.fn>
         transaction: { setMeta: ReturnType<typeof vi.fn> }
         transact: ReturnType<typeof vi.fn>
+        tryParseMarkdownToBlocks: ReturnType<typeof vi.fn>
       }
     | undefined,
   lastOptions: undefined as
@@ -40,22 +43,24 @@ vi.mock('@blocknote/react', () => ({
     options?: { uploadFile?: (file: File, blockId?: string) => Promise<string> }
   ) => {
     mockBlockNoteState.lastOptions = options
-    const blocks = [{ content: '', id: 'initial', type: 'paragraph' }]
-    const transaction = { setMeta: vi.fn() }
-    const editor = {
-      blocksToMarkdownLossy: vi.fn().mockResolvedValue(''),
-      document: blocks,
-      replaceBlocks: vi.fn(),
-      transaction,
-      transact: vi.fn((callback: (transaction: unknown) => unknown) =>
-        callback(transaction)
-      ),
-      tryParseMarkdownToBlocks: vi.fn().mockResolvedValue(blocks)
+
+    if (!mockBlockNoteState.lastEditor) {
+      const blocks = [{ content: '', id: 'initial', type: 'paragraph' }]
+      const transaction = { setMeta: vi.fn() }
+
+      mockBlockNoteState.lastEditor = {
+        blocksToMarkdownLossy: vi.fn().mockResolvedValue(''),
+        document: blocks,
+        replaceBlocks: vi.fn(),
+        transaction,
+        transact: vi.fn((callback: (transaction: unknown) => unknown) =>
+          callback(transaction)
+        ),
+        tryParseMarkdownToBlocks: vi.fn().mockResolvedValue(blocks)
+      }
     }
 
-    mockBlockNoteState.lastEditor = editor
-
-    return editor
+    return mockBlockNoteState.lastEditor
   }
 }))
 
@@ -409,6 +414,113 @@ describe('MarkdownBlockEditor accessibility', () => {
       'addToHistory',
       false
     )
+  })
+
+  it('does not rehydrate the editor after a local autosave updates persisted markdown', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Original"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Original"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    await waitFor(() => {
+      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(1)
+    })
+
+    await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
+
+    const editedMarkdown = ['# Original', '', '  indented middle line'].join('\n')
+
+    rerender(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={editedMarkdown}
+        errorMessage={null}
+        isDirty
+        isSaving={false}
+        markdown="# Original"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    rerender(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={editedMarkdown}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={editedMarkdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(1)
+  })
+
+  it('rehydrates the editor when persisted markdown changes without local edits', async () => {
+    const { rerender } = render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Original"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Original"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    await waitFor(() => {
+      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(1)
+    })
+
+    rerender(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# External update"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# External update"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    await waitFor(() => {
+      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('passes pasted image files to the provided image upload handler', async () => {

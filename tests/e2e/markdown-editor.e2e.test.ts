@@ -1580,6 +1580,67 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
   }
 })
 
+test('keeps the editing position after idle autosave', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  await writeFile(
+    readmePath,
+    [
+      '# Cursor Autosave',
+      '',
+      'First paragraph.',
+      '',
+      'Middle anchor paragraph.',
+      '',
+      'Last paragraph.'
+    ].join('\n')
+  )
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await expect(editableDocument).toBeVisible()
+    await window.getByText('Middle anchor paragraph.').click()
+    await window.keyboard.press('End')
+    await window.keyboard.press('Enter')
+    await window.keyboard.insertText('Autosave middle A')
+
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toContain('Autosave middle A')
+    await expect(window.getByText(/unsaved changes/i)).toBeHidden()
+
+    await window.keyboard.insertText(' and still in the middle')
+
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toContain('Autosave middle A and still in the middle')
+
+    const savedMarkdown = await readFile(readmePath, 'utf8')
+    const firstIndex = savedMarkdown.indexOf('First paragraph.')
+    const insertedIndex = savedMarkdown.indexOf(
+      'Autosave middle A and still in the middle'
+    )
+    const lastIndex = savedMarkdown.indexOf('Last paragraph.')
+
+    expect(firstIndex).toBeGreaterThanOrEqual(0)
+    expect(insertedIndex).toBeGreaterThan(firstIndex)
+    expect(insertedIndex).toBeLessThan(lastIndex)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('remembers and switches recent workspaces from the workspace menu', async () => {
   const firstWorkspacePath = await createFixtureWorkspace()
   const secondWorkspacePath = await createFixtureWorkspace()
