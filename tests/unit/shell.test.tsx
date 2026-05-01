@@ -1637,7 +1637,7 @@ describe('App shell', () => {
     render(<App />)
 
     expect(screen.getByRole('main')).toHaveAttribute('data-theme', 'cedar')
-    await user.click(screen.getByRole('button', { name: /open settings/i }))
+    await user.click(screen.getByRole('button', { name: /change theme/i }))
 
     expect(
       screen.getByRole('switch', { name: /follow system appearance/i })
@@ -1716,7 +1716,7 @@ describe('App shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /open settings/i }))
+    await user.click(screen.getByRole('button', { name: /change theme/i }))
 
     expect(screen.getByRole('dialog', { name: /settings/i })).toBeVisible()
     const colorwayPicker = screen.getByRole('radiogroup', {

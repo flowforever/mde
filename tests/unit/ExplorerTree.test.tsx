@@ -1277,6 +1277,9 @@ describe('ExplorerTree', () => {
     await user.click(screen.getByRole('button', { name: /recent files/i }))
 
     expect(
+      container.querySelector('.explorer-recent-files-section')
+    ).toHaveClass('is-collapsed')
+    expect(
       screen.queryByRole('button', { name: /open recent file README\.md/i })
     ).not.toBeInTheDocument()
 
@@ -1317,6 +1320,59 @@ describe('ExplorerTree', () => {
     expect(localStorage.getItem('mde.explorerRecentFilesPanel')).toContain(
       '"height":200'
     )
+  })
+
+  it('renders settings and theme controls as separate buttons in one footer row', () => {
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace-footer-controls',
+        tree
+      }
+    }
+
+    const { container } = render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    const footer = container.querySelector('.explorer-theme-footer')
+    const settingsButton = screen.getByRole('button', {
+      name: /^open settings$/i
+    })
+    const themeButton = screen.getByRole('button', {
+      name: /^change theme$/i
+    })
+
+    expect(footer).not.toBeNull()
+    expect(settingsButton).toHaveClass('explorer-footer-settings-button')
+    expect(themeButton).toHaveClass('theme-selector-button')
+    expect(settingsButton.parentElement).toBe(footer)
+    expect(themeButton.parentElement).toBe(footer)
+    expect(settingsButton).not.toContainElement(themeButton)
+    expect(themeButton).toHaveTextContent('System Carbon')
   })
 
   it('keeps hidden entries scoped by workspace and can show them from the context menu', async () => {

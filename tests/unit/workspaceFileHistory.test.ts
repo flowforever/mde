@@ -83,31 +83,85 @@ describe('workspaceFileHistory', () => {
     expect(getWorkspaceRecentFiles(history, '/missing')).toEqual([])
   })
 
-  it('remembers files newest first without mutating previous history', () => {
+  it('keeps a reopened file in place when it is already within the latest seven files', () => {
     const existing = new Map([
       [
         '/workspace',
         {
           lastOpenedFilePath: 'README.md',
-          recentFilePaths: ['README.md', 'docs/intro.md']
+          recentFilePaths: [
+            '0.md',
+            '1.md',
+            '2.md',
+            '3.md',
+            '4.md',
+            '5.md',
+            '6.md',
+            '7.md'
+          ]
         }
       ]
     ])
 
-    const nextHistory = rememberWorkspaceFile(
-      existing,
-      '/workspace',
-      'docs/intro.md'
-    )
+    const nextHistory = rememberWorkspaceFile(existing, '/workspace', '4.md')
 
-    expect(getWorkspaceLastOpenedFile(nextHistory, '/workspace')).toBe(
-      'docs/intro.md'
-    )
+    expect(getWorkspaceLastOpenedFile(nextHistory, '/workspace')).toBe('4.md')
     expect(getWorkspaceRecentFiles(nextHistory, '/workspace')).toEqual([
-      'docs/intro.md',
-      'README.md'
+      '0.md',
+      '1.md',
+      '2.md',
+      '3.md',
+      '4.md',
+      '5.md',
+      '6.md',
+      '7.md'
     ])
     expect(getWorkspaceLastOpenedFile(existing, '/workspace')).toBe('README.md')
+  })
+
+  it('moves a reopened file to the front when it is outside the latest seven files', () => {
+    const existing = new Map([
+      [
+        '/workspace',
+        {
+          lastOpenedFilePath: 'README.md',
+          recentFilePaths: [
+            '0.md',
+            '1.md',
+            '2.md',
+            '3.md',
+            '4.md',
+            '5.md',
+            '6.md',
+            '7.md'
+          ]
+        }
+      ]
+    ])
+
+    const nextHistory = rememberWorkspaceFile(existing, '/workspace', '7.md')
+
+    expect(getWorkspaceLastOpenedFile(nextHistory, '/workspace')).toBe('7.md')
+    expect(getWorkspaceRecentFiles(nextHistory, '/workspace')).toEqual([
+      '7.md',
+      '0.md',
+      '1.md',
+      '2.md',
+      '3.md',
+      '4.md',
+      '5.md',
+      '6.md'
+    ])
+    expect(getWorkspaceRecentFiles(existing, '/workspace')).toEqual([
+      '0.md',
+      '1.md',
+      '2.md',
+      '3.md',
+      '4.md',
+      '5.md',
+      '6.md',
+      '7.md'
+    ])
   })
 
   it('caps recent files per workspace at twenty entries', () => {

@@ -264,7 +264,7 @@ test('selects and persists a manual theme from settings', async () => {
     await expect(appShell).toHaveAttribute('data-theme', 'manuscript')
     await window.getByRole('button', { name: /close workspace popup/i }).click()
 
-    await window.getByRole('button', { name: /open settings/i }).click()
+    await window.getByRole('button', { name: /change theme/i }).click()
     await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
     await window
       .getByRole('switch', { name: /follow system appearance/i })
@@ -303,7 +303,7 @@ test('selects and persists a manual theme from settings', async () => {
       'blue-hour'
     )
     await window.getByRole('button', { name: /close workspace popup/i }).click()
-    await window.getByRole('button', { name: /open settings/i }).click()
+    await window.getByRole('button', { name: /change theme/i }).click()
     await expect(
       window.getByRole('switch', { name: /follow system appearance/i })
     ).not.toBeChecked()
@@ -334,7 +334,7 @@ test('selects the current system theme family without leaving follow-system mode
     const appShell = window.locator('.app-shell')
 
     await window.getByRole('button', { name: /close workspace popup/i }).click()
-    await window.getByRole('button', { name: /open settings/i }).click()
+    await window.getByRole('button', { name: /change theme/i }).click()
     await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
     await expect(
       window.getByRole('switch', { name: /follow system appearance/i })
@@ -794,6 +794,11 @@ test('resizes and toggles the explorer sidebar', async () => {
     expect(
       await explorerPane.evaluate((element) => element.getBoundingClientRect().width)
     ).toBeLessThanOrEqual(56)
+    expect(
+      await explorerPane.evaluate(
+        (element) => globalThis.getComputedStyle(element).borderRightWidth
+      )
+    ).toBe('1px')
 
     await window.getByRole('button', { name: /expand explorer sidebar/i }).click()
     await expect(
@@ -805,6 +810,11 @@ test('resizes and toggles the explorer sidebar', async () => {
     expect(
       await explorerPane.evaluate((element) => element.getBoundingClientRect().width)
     ).toBeGreaterThan(initialWidth + 48)
+    expect(
+      await explorerPane.evaluate(
+        (element) => globalThis.getComputedStyle(element).borderRightWidth
+      )
+    ).toBe('0px')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -1403,8 +1413,40 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
         button.evaluate((element) => Math.round(element.getBoundingClientRect().top))
       )
     )
+    const settingsButton = window.getByRole('button', {
+      name: /^open settings$/i
+    })
+    const themeButton = window.getByRole('button', {
+      name: /^change theme$/i
+    })
+    const footerButtonTops = await Promise.all(
+      [settingsButton, themeButton].map((button) =>
+        button.evaluate((element) => Math.round(element.getBoundingClientRect().top))
+      )
+    )
+    const borderWidths = await window.evaluate(() => {
+      const explorerPane = document.querySelector('.explorer-pane')
+      const resizeHandle = document.querySelector('.explorer-panel-resize-handle')
+      const recentFiles = document.querySelector('.explorer-recent-files-section')
+
+      if (!explorerPane || !resizeHandle || !recentFiles) {
+        throw new Error('Unable to find explorer border targets')
+      }
+
+      return {
+        explorerRight: globalThis.getComputedStyle(explorerPane).borderRightWidth,
+        recentTop: globalThis.getComputedStyle(recentFiles).borderTopWidth,
+        resizeTop: globalThis.getComputedStyle(resizeHandle).borderTopWidth
+      }
+    })
 
     expect(new Set(toolbarButtonTops).size).toBe(1)
+    expect(new Set(footerButtonTops).size).toBe(1)
+    expect(borderWidths).toEqual({
+      explorerRight: '0px',
+      recentTop: '0px',
+      resizeTop: '1px'
+    })
     await expect(
       window.getByRole('button', { name: /rename selected README\.md/i })
     ).toHaveCount(0)

@@ -1,6 +1,6 @@
 {
   "name": "mde",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
   "productName": "MDE",
   "private": true,

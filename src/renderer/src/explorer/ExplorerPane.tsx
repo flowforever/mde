@@ -1308,22 +1308,33 @@ export const ExplorerPane = ({
     <div className="explorer-theme-footer" aria-label="Settings controls">
       <button
         aria-label="Open settings"
-        className="theme-selector-button"
+        className="explorer-icon-button explorer-footer-settings-button"
         onClick={() => {
-          openSettingsDialog('theme')
+          openSettingsDialog('ai')
         }}
         title="Open settings"
         type="button"
       >
+        <Settings aria-hidden="true" focusable="false" size={16} />
+      </button>
+      <button
+        aria-label="Change theme"
+        className="theme-selector-button"
+        onClick={() => {
+          openSettingsDialog('theme')
+        }}
+        title="Change theme"
+        type="button"
+      >
         <span className="theme-selector-icon" aria-hidden="true">
-          <Settings aria-hidden="true" focusable="false" size={15} />
+          <Paintbrush aria-hidden="true" focusable="false" size={15} />
         </span>
         <span className="theme-selector-copy">
-          <span>Settings</span>
+          <span>Theme</span>
           <span>
             {isFollowingSystemTheme
-              ? `Theme: System ${resolvedTheme.label}`
-              : `Theme: ${resolvedTheme.label}`}
+              ? `System ${resolvedTheme.label}`
+              : resolvedTheme.label}
           </span>
         </span>
         <span className="theme-selector-swatches" aria-hidden="true">

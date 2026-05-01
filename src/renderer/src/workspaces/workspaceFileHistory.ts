@@ -17,6 +17,7 @@ interface StoredWorkspaceFileHistoryEntry {
 export const WORKSPACE_FILE_HISTORY_STORAGE_KEY = 'mde.workspaceFileHistory'
 
 const MAX_RECENT_FILES = 20
+const STABLE_RECENT_FILE_ORDER_LIMIT = 7
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0
@@ -137,12 +138,18 @@ export const rememberWorkspaceFile = (
   }
 
   const currentEntry = history.get(workspaceRoot)
-  const recentFilePaths = [
-    filePath,
-    ...(currentEntry?.recentFilePaths ?? []).filter(
-      (currentFilePath) => currentFilePath !== filePath
-    )
-  ].slice(0, MAX_RECENT_FILES)
+  const currentRecentFilePaths = currentEntry?.recentFilePaths ?? []
+  const currentIndex = currentRecentFilePaths.indexOf(filePath)
+  const shouldKeepCurrentOrder =
+    currentIndex >= 0 && currentIndex < STABLE_RECENT_FILE_ORDER_LIMIT
+  const recentFilePaths = shouldKeepCurrentOrder
+    ? currentRecentFilePaths.slice(0, MAX_RECENT_FILES)
+    : [
+        filePath,
+        ...currentRecentFilePaths.filter(
+          (currentFilePath) => currentFilePath !== filePath
+        )
+      ].slice(0, MAX_RECENT_FILES)
   const nextHistory = new Map(history)
 
   nextHistory.set(workspaceRoot, {
