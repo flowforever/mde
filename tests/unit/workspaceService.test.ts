@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { createWorkspaceService } from '../../src/main/services/workspaceService'
+import { createMarkdownFileService } from '../../src/main/services/markdownFileService'
 
 describe('workspaceService', () => {
   it('sorts directories before Markdown files and ignores unsupported entries', async () => {
@@ -27,5 +28,53 @@ describe('workspaceService', () => {
       ['file', 'README.md']
     ])
     expect(Object.isFrozen(workspace.tree)).toBe(true)
+  })
+
+  it('searches Markdown content across the workspace with bounded previews', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-workspace-search-'))
+
+    await mkdir(join(rootPath, 'docs'))
+    await mkdir(join(rootPath, 'node_modules'))
+    await writeFile(join(rootPath, 'README.md'), '# Alpha\n\nRoot alpha note')
+    await writeFile(join(rootPath, 'docs', 'guide.md'), 'Beta\nalpha guide')
+    await writeFile(join(rootPath, 'notes.txt'), 'alpha plain text')
+    await writeFile(join(rootPath, 'node_modules', 'ignored.md'), 'alpha ignored')
+
+    const result = await createMarkdownFileService().searchMarkdownFiles(
+      rootPath,
+      'alpha'
+    )
+
+    expect(result).toEqual({
+      limited: false,
+      query: 'alpha',
+      results: [
+        {
+          matches: [
+            {
+              columnNumber: 3,
+              lineNumber: 1,
+              preview: '# Alpha'
+            },
+            {
+              columnNumber: 6,
+              lineNumber: 3,
+              preview: 'Root alpha note'
+            }
+          ],
+          path: 'README.md'
+        },
+        {
+          matches: [
+            {
+              columnNumber: 1,
+              lineNumber: 2,
+              preview: 'alpha guide'
+            }
+          ],
+          path: 'docs/guide.md'
+        }
+      ]
+    })
   })
 })

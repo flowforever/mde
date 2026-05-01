@@ -9,10 +9,19 @@ import {
   useRef,
   useState
 } from 'react'
-import { AlignHorizontalSpaceAround, StretchHorizontal } from 'lucide-react'
+import {
+  AlignHorizontalSpaceAround,
+  Search,
+  StretchHorizontal,
+  X
+} from 'lucide-react'
 
 import type { AiApi, AiGenerationResult, AiTool } from '../../../shared/ai'
-import type { EditorApi, Workspace } from '../../../shared/workspace'
+import type {
+  EditorApi,
+  Workspace,
+  WorkspaceSearchResult
+} from '../../../shared/workspace'
 import type {
   AvailableUpdate,
   UpdateApi,
@@ -29,6 +38,7 @@ import {
   readEditorViewMode,
   writeEditorViewMode
 } from '../editor/editorViewMode'
+import { getNextSearchMatchIndex } from '../search/editorSearch'
 import { ExplorerPane } from '../explorer/ExplorerPane'
 import { UpdateDialog, type UpdateDialogStatus } from './UpdateDialog'
 import {
@@ -189,6 +199,11 @@ interface ScopedAiErrorMessage {
   readonly message: string
 }
 
+interface EditorSearchState {
+  readonly activeMatchIndex: number
+  readonly matchCount: number
+}
+
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)))
 
@@ -254,13 +269,20 @@ const removeAiDocumentEntry = <Value,>(
     Object.entries(entries).filter(([candidateKey]) => candidateKey !== documentKey)
   ) as Record<string, Value>
 
-const getWindowTitle = (workspace: Workspace | null): string => {
+const getWindowTitle = (
+  workspace: Workspace | null,
+  loadedFilePath?: string | null
+): string => {
   if (!workspace) {
     return 'MDE'
   }
 
-  if (workspace.type === 'file') {
-    return `${workspace.name} - ${workspace.rootPath}`
+  const titleFilePath =
+    loadedFilePath ??
+    (workspace.type === 'file' ? workspace.openedFilePath ?? workspace.name : null)
+
+  if (titleFilePath) {
+    return `${titleFilePath.split('/').at(-1) ?? titleFilePath} - ${workspace.rootPath}`
   }
 
   return workspace.rootPath
@@ -323,6 +345,12 @@ export const App = (): React.JSX.Element => {
     useState(readCustomAiTranslationLanguages)
   const [customAiTranslationLanguageInput, setCustomAiTranslationLanguageInput] =
     useState('')
+  const [isEditorSearchOpen, setIsEditorSearchOpen] = useState(false)
+  const [editorSearchQuery, setEditorSearchQuery] = useState('')
+  const [editorSearchState, setEditorSearchState] = useState<EditorSearchState>({
+    activeMatchIndex: -1,
+    matchCount: 0
+  })
   const [availableUpdate, setAvailableUpdate] =
     useState<AvailableUpdate | null>(null)
   const [updateStatus, setUpdateStatus] =
@@ -335,6 +363,7 @@ export const App = (): React.JSX.Element => {
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false)
   const appShellRef = useRef<HTMLElement | null>(null)
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null)
+  const editorSearchInputRef = useRef<HTMLInputElement | null>(null)
   const hasConsumedInitialLaunchPathRef = useRef(false)
 
   const rememberOpenedWorkspace = useCallback((workspace: Workspace): void => {
@@ -388,6 +417,57 @@ export const App = (): React.JSX.Element => {
     setIsTranslateMenuOpen(false)
   }, [])
 
+  const openEditorSearch = useCallback((query?: string): void => {
+    if (query !== undefined) {
+      setEditorSearchQuery(query)
+      setEditorSearchState({
+        activeMatchIndex: query.trim().length > 0 ? 0 : -1,
+        matchCount: 0
+      })
+    }
+
+    setIsEditorSearchOpen(true)
+    window.setTimeout(() => {
+      editorSearchInputRef.current?.focus()
+      editorSearchInputRef.current?.select()
+    }, 0)
+  }, [])
+
+  const closeEditorSearch = useCallback((): void => {
+    setIsEditorSearchOpen(false)
+    setEditorSearchQuery('')
+    setEditorSearchState({
+      activeMatchIndex: -1,
+      matchCount: 0
+    })
+  }, [])
+
+  const cycleEditorSearchMatch = useCallback((): void => {
+    setEditorSearchState((currentState) => ({
+      ...currentState,
+      activeMatchIndex: getNextSearchMatchIndex(
+        currentState.activeMatchIndex,
+        currentState.matchCount
+      )
+    }))
+  }, [])
+
+  const searchWorkspaceMarkdown = useCallback(async (
+    query: string
+  ): Promise<WorkspaceSearchResult> => {
+    const workspaceRoot = state.workspace?.rootPath
+
+    if (!workspaceRoot) {
+      throw new Error('Open a workspace before searching')
+    }
+
+    if (!window.editorApi?.searchWorkspaceMarkdown) {
+      throw new Error('Workspace search is unavailable. Restart the app and try again.')
+    }
+
+    return window.editorApi.searchWorkspaceMarkdown(query, workspaceRoot)
+  }, [state.workspace?.rootPath])
+
   const clearAiDocumentResult = useCallback((documentKey: string): void => {
     setAiResult((currentResult) =>
       currentResult?.documentKey === documentKey ? null : currentResult
@@ -427,9 +507,10 @@ export const App = (): React.JSX.Element => {
 
   const completeWorkspaceOpen = useCallback((workspace: Workspace): void => {
     clearAiResultState()
+    closeEditorSearch()
     dispatch({ type: 'workspace/opened', workspace })
     rememberOpenedWorkspace(workspace)
-  }, [clearAiResultState, rememberOpenedWorkspace])
+  }, [clearAiResultState, closeEditorSearch, rememberOpenedWorkspace])
 
   const loadFile = useCallback(async (
     filePath: string,
@@ -469,6 +550,14 @@ export const App = (): React.JSX.Element => {
     }
   }, [closeAiMenus, rememberOpenedFile, state.workspace?.rootPath])
 
+  const openWorkspaceSearchResult = useCallback((
+    filePath: string,
+    query: string
+  ): void => {
+    openEditorSearch(query)
+    void loadFile(filePath)
+  }, [loadFile, openEditorSearch])
+
   const loadWorkspaceDefaultFile = useCallback(async (
     workspace: Workspace
   ): Promise<void> => {
@@ -499,8 +588,8 @@ export const App = (): React.JSX.Element => {
   }, [])
 
   useEffect(() => {
-    document.title = getWindowTitle(state.workspace)
-  }, [state.workspace])
+    document.title = getWindowTitle(state.workspace, state.loadedFile?.path)
+  }, [state.loadedFile?.path, state.workspace])
 
   useEffect(() => {
     const aiApi = window.aiApi
@@ -1190,6 +1279,31 @@ export const App = (): React.JSX.Element => {
     }
   }, [saveCurrentFile])
 
+  useEffect(() => {
+    const openSearchOnShortcut = (event: KeyboardEvent): void => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f') {
+        return
+      }
+
+      event.preventDefault()
+
+      if (event.shiftKey) {
+        window.dispatchEvent(new CustomEvent('mde:open-workspace-search'))
+        return
+      }
+
+      if (state.loadedFile) {
+        openEditorSearch()
+      }
+    }
+
+    window.addEventListener('keydown', openSearchOnShortcut)
+
+    return () => {
+      window.removeEventListener('keydown', openSearchOnShortcut)
+    }
+  }, [openEditorSearch, state.loadedFile])
+
   const createMarkdownFile = async (promptedPath: string): Promise<void> => {
     const workspaceRoot = state.workspace?.rootPath
     const filePath = ensureMarkdownExtension(promptedPath)
@@ -1515,6 +1629,7 @@ export const App = (): React.JSX.Element => {
         onOpenWorkspaceInNewWindow={(workspace) => {
           void openWorkspaceInNewWindow(workspace)
         }}
+        onOpenWorkspaceSearchResult={openWorkspaceSearchResult}
         onRefreshTree={(directoryPaths) =>
           refreshWorkspaceTree(state.workspace?.rootPath, directoryPaths)
         }
@@ -1530,6 +1645,7 @@ export const App = (): React.JSX.Element => {
         onSwitchWorkspace={(workspace) => {
           void switchWorkspace(workspace)
         }}
+        onSearchWorkspace={searchWorkspaceMarkdown}
         onToggleCollapsed={() => {
           setIsExplorerCollapsed((currentValue) => !currentValue)
         }}
@@ -1584,6 +1700,70 @@ export const App = (): React.JSX.Element => {
         aria-label="Editor"
       >
         <div className="editor-action-bar" aria-label="Editor actions">
+          {state.loadedFile ? (
+            <div className="editor-search-shell">
+              {isEditorSearchOpen ? (
+                <form
+                  aria-label="Search current Markdown"
+                  className="editor-search-form"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    cycleEditorSearchMatch()
+                  }}
+                >
+                  <Search aria-hidden="true" size={15} />
+                  <input
+                    aria-label="Search current Markdown"
+                    onChange={(event) => {
+                      const nextQuery = event.target.value
+
+                      setEditorSearchQuery(nextQuery)
+                      setEditorSearchState({
+                        activeMatchIndex:
+                          nextQuery.trim().length > 0 ? 0 : -1,
+                        matchCount: 0
+                      })
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        closeEditorSearch()
+                      }
+                    }}
+                    placeholder="Search"
+                    ref={editorSearchInputRef}
+                    type="search"
+                    value={editorSearchQuery}
+                  />
+                  <span aria-live="polite" className="editor-search-count">
+                    {editorSearchQuery.trim().length > 0
+                      ? `${Math.max(editorSearchState.activeMatchIndex + 1, 0)}/${editorSearchState.matchCount}`
+                      : '0/0'}
+                  </span>
+                  <button
+                    aria-label="Close current Markdown search"
+                    className="editor-search-close-button"
+                    onClick={closeEditorSearch}
+                    type="button"
+                  >
+                    <X aria-hidden="true" size={14} />
+                  </button>
+                </form>
+              ) : null}
+              <button
+                aria-label="Search current Markdown"
+                aria-pressed={isEditorSearchOpen}
+                className="editor-action-button"
+                onClick={() => {
+                  openEditorSearch()
+                }}
+                title="Search current Markdown"
+                type="button"
+              >
+                <Search aria-hidden="true" size={17} strokeWidth={2} />
+              </button>
+            </div>
+          ) : null}
           {shouldShowAiActions ? (
             <AiActionMenu
               busyState={currentAiBusyState}
@@ -1681,8 +1861,11 @@ export const App = (): React.JSX.Element => {
               })
             }}
             onSaveRequest={saveCurrentFile}
+            onSearchStateChange={setEditorSearchState}
             path={state.loadedFile.path}
             ref={editorRef}
+            searchQuery={editorSearchQuery}
+            activeSearchMatchIndex={editorSearchState.activeMatchIndex}
             workspaceRoot={state.workspace?.rootPath ?? ''}
           />
         ) : (

@@ -278,6 +278,9 @@ describe('ExplorerTree', () => {
       name: /new markdown file/i
     })
     const newFolderButton = screen.getByRole('button', { name: /new folder/i })
+    const searchButton = screen.getByRole('button', {
+      name: /search workspace contents/i
+    })
     const showHiddenButton = screen.getByRole('button', {
       name: /show hidden entries/i
     })
@@ -296,6 +299,7 @@ describe('ExplorerTree', () => {
     expect(workspaceManagerButton).toHaveTextContent('/workspace')
     expect(container.querySelector('.explorer-workspace-name')).not.toBeInTheDocument()
     for (const button of [
+      searchButton,
       newMarkdownButton,
       newFolderButton,
       showHiddenButton,
@@ -311,7 +315,8 @@ describe('ExplorerTree', () => {
     expect(
       screen.queryByRole('button', { name: /delete selected/i })
     ).not.toBeInTheDocument()
-    expect(toolbarButtons).toHaveLength(4)
+    expect(toolbarButtons).toHaveLength(5)
+    expect(toolbarButtons.indexOf(searchButton)).toBe(0)
     expect(toolbarButtons.indexOf(refreshButton)).toBe(
       toolbarButtons.indexOf(showHiddenButton) + 1
     )

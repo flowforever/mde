@@ -1,8 +1,20 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MarkdownBlockEditor } from '../../src/renderer/src/editor/MarkdownBlockEditor'
+
+interface MockHighlightRegistry {
+  readonly delete: ReturnType<typeof vi.fn>
+  readonly set: ReturnType<typeof vi.fn>
+}
 
 const mockBlockNoteState = vi.hoisted(() => ({
   lastEditor: undefined as
@@ -87,12 +99,32 @@ vi.mock('mermaid', () => ({
 }))
 
 describe('MarkdownBlockEditor accessibility', () => {
+  const installHighlightMock = (): MockHighlightRegistry => {
+    const registry = {
+      delete: vi.fn(),
+      set: vi.fn()
+    }
+
+    Object.defineProperty(window, 'Highlight', {
+      configurable: true,
+      value: vi.fn()
+    })
+    Object.defineProperty(window.CSS, 'highlights', {
+      configurable: true,
+      value: registry
+    })
+
+    return registry
+  }
+
   afterEach(() => {
     cleanup()
     mockBlockNoteState.lastEditor = undefined
     mockBlockNoteState.lastOptions = undefined
     mockMermaid.initialize.mockClear()
     mockMermaid.render.mockClear()
+    Reflect.deleteProperty(window, 'Highlight')
+    Reflect.deleteProperty(window.CSS, 'highlights')
   })
 
   it('does not render a manual save control', () => {
@@ -270,6 +302,85 @@ describe('MarkdownBlockEditor accessibility', () => {
     await user.click(screen.getByRole('button', { name: /trigger editor change/i }))
 
     expect(onMarkdownChange).toHaveBeenCalledWith('')
+  })
+
+  it('reports current search matches and publishes highlight ranges', async () => {
+    const highlightRegistry = installHighlightMock()
+    const onSearchStateChange = vi.fn()
+
+    render(
+      <MarkdownBlockEditor
+        activeSearchMatchIndex={1}
+        colorScheme="light"
+        draftMarkdown="Alpha beta\nalpha ALPHA"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="Alpha beta\nalpha ALPHA"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        onSearchStateChange={onSearchStateChange}
+        path="README.md"
+        searchQuery="alpha"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    act(() => {
+      screen.getByTestId('mock-contenteditable').textContent =
+        'Alpha beta\nalpha ALPHA'
+    })
+
+    await waitFor(() => {
+      expect(onSearchStateChange).toHaveBeenLastCalledWith({
+        activeMatchIndex: 1,
+        matchCount: 3
+      })
+    })
+    expect(highlightRegistry.set).toHaveBeenCalledWith(
+      'mde-editor-search-match',
+      expect.anything()
+    )
+    expect(highlightRegistry.set).toHaveBeenCalledWith(
+      'mde-editor-search-active',
+      expect.anything()
+    )
+  })
+
+  it('counts search matches from rendered editor text instead of raw markdown syntax', async () => {
+    installHighlightMock()
+    const onSearchStateChange = vi.fn()
+
+    render(
+      <MarkdownBlockEditor
+        activeSearchMatchIndex={0}
+        colorScheme="light"
+        draftMarkdown="[Link title](https://example.com)"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="[Link title](https://example.com)"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        onSearchStateChange={onSearchStateChange}
+        path="README.md"
+        searchQuery="https"
+        workspaceRoot="/workspace"
+      />
+    )
+
+    act(() => {
+      screen.getByTestId('mock-contenteditable').textContent = 'Link title'
+    })
+
+    await waitFor(() => {
+      expect(onSearchStateChange).toHaveBeenLastCalledWith({
+        activeMatchIndex: -1,
+        matchCount: 0
+      })
+    })
   })
 
   it('keeps imported markdown replacement out of the undo history', async () => {

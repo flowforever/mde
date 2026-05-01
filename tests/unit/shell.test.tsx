@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 interface MockMarkdownBlockEditorProps {
+  readonly activeSearchMatchIndex?: number
   readonly colorScheme: 'dark' | 'light'
   readonly errorMessage: string | null
   readonly isDirty: boolean
@@ -18,7 +19,12 @@ interface MockMarkdownBlockEditorProps {
   readonly isSaving: boolean
   readonly markdown: string
   readonly onMarkdownChange: (contents: string) => void
+  readonly onSearchStateChange?: (state: {
+    readonly activeMatchIndex: number
+    readonly matchCount: number
+  }) => void
   readonly path: string
+  readonly searchQuery?: string
 }
 
 const mockEditorState = vi.hoisted(() => ({
@@ -31,6 +37,9 @@ vi.mock('../../src/renderer/src/editor/MarkdownBlockEditor', () => {
       <span>{props.path}</span>
       <span>{props.markdown}</span>
       <span data-testid="mock-editor-color-scheme">{props.colorScheme}</span>
+      {props.searchQuery ? (
+        <span data-testid="mock-editor-search-query">{props.searchQuery}</span>
+      ) : null}
       {props.isReadOnly ? <span data-testid="mock-editor-readonly">read-only</span> : null}
       {props.isDirty ? <span>Unsaved changes</span> : null}
       {props.isSaving ? <span>Saving...</span> : null}
@@ -1238,6 +1247,190 @@ describe('App shell', () => {
     expect(localStorage.getItem('mde.customTranslationLanguages')).not.toContain(
       'Japanese'
     )
+  })
+
+  it('opens current editor search from the action bar and keyboard shortcut', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'file'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Original',
+        path: 'README.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
+    } satisfies EditorApi
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: '/fake/codex', id: 'codex', name: 'Codex' }]
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn()
+    } satisfies AiApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    Object.defineProperty(window, 'aiApi', {
+      configurable: true,
+      value: aiApi
+    })
+
+    render(<App />)
+
+    const searchButton = await screen.findByRole('button', {
+      name: /search current markdown/i
+    })
+    const summaryButton = await screen.findByRole('button', {
+      name: /summarize markdown/i
+    })
+
+    expect(
+      searchButton.compareDocumentPosition(summaryButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    await user.click(searchButton)
+    await user.type(
+      screen.getByRole('searchbox', { name: /search current markdown/i }),
+      'Original{Enter}'
+    )
+
+    expect(screen.getByTestId('mock-editor-search-query')).toHaveTextContent(
+      'Original'
+    )
+
+    await user.keyboard('{Escape}')
+    expect(
+      screen.queryByRole('searchbox', { name: /search current markdown/i })
+    ).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'f', metaKey: true })
+    await waitFor(() => {
+      expect(
+        screen.getByRole('searchbox', { name: /search current markdown/i })
+      ).toHaveFocus()
+    })
+  })
+
+  it('opens a global workspace search result and keeps the query highlighted', async () => {
+    const user = userEvent.setup()
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue('/workspace/README.md'),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: '/workspace/README.md',
+        name: 'README.md',
+        openedFilePath: 'README.md',
+        rootPath: '/workspace',
+        tree: [
+          { name: 'README.md', path: 'README.md', type: 'file' },
+          {
+            children: [{ name: 'guide.md', path: 'docs/guide.md', type: 'file' }],
+            name: 'docs',
+            path: 'docs',
+            type: 'directory'
+          }
+        ],
+        type: 'workspace'
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockImplementation((filePath: string) =>
+        Promise.resolve(
+          filePath === 'docs/guide.md'
+            ? {
+                contents: '# Guide\n\nAlpha details',
+                path: 'docs/guide.md'
+              }
+            : {
+                contents: '# Original',
+                path: 'README.md'
+              }
+        )
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      searchWorkspaceMarkdown: vi.fn().mockResolvedValue({
+        limited: false,
+        query: 'alpha',
+        results: [
+          {
+            matches: [{ columnNumber: 1, lineNumber: 3, preview: 'Alpha details' }],
+            path: 'docs/guide.md'
+          }
+        ]
+      }),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined)
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /search workspace contents/i })
+    fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true })
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('searchbox', { name: /search workspace contents/i })
+      ).toHaveFocus()
+    })
+    await user.type(
+      screen.getByRole('searchbox', { name: /search workspace contents/i }),
+      'alpha'
+    )
+    await waitFor(() => {
+      expect(editorApi.searchWorkspaceMarkdown).toHaveBeenCalledWith(
+        'alpha',
+        '/workspace'
+      )
+    })
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: /open search result docs\/guide\.md line 3/i
+      })
+    )
+
+    expect(editorApi.readMarkdownFile).toHaveBeenLastCalledWith(
+      'docs/guide.md',
+      '/workspace'
+    )
+    expect(await screen.findByTestId('mock-editor-search-query')).toHaveTextContent(
+      'alpha'
+    )
+    await waitFor(() => {
+      expect(document.title).toBe('guide.md - /workspace')
+    })
   })
 
   it('persists the selected AI CLI and sends it with AI actions', async () => {

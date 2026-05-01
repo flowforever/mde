@@ -19,6 +19,7 @@ export const FILE_CHANNELS = Object.freeze({
   readMarkdownFile: 'file:read-markdown',
   renameEntry: 'file:rename-entry',
   saveImageAsset: 'file:save-image-asset',
+  searchWorkspaceMarkdown: 'file:search-workspace-markdown',
   writeMarkdownFile: 'file:write-markdown'
 })
 

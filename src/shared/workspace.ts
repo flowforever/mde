@@ -30,6 +30,23 @@ export interface ImageAsset {
   readonly markdownPath: string
 }
 
+export interface WorkspaceSearchMatch {
+  readonly columnNumber: number
+  readonly lineNumber: number
+  readonly preview: string
+}
+
+export interface WorkspaceSearchFileResult {
+  readonly matches: readonly WorkspaceSearchMatch[]
+  readonly path: string
+}
+
+export interface WorkspaceSearchResult {
+  readonly limited: boolean
+  readonly query: string
+  readonly results: readonly WorkspaceSearchFileResult[]
+}
+
 export interface EditorApi {
   readonly consumeLaunchPath: () => Promise<string | null>
   readonly onLaunchPath: (callback: (resourcePath: string) => void) => () => void
@@ -46,6 +63,10 @@ export interface EditorApi {
     filePath: string,
     workspaceRoot: string
   ) => Promise<FileContents>
+  readonly searchWorkspaceMarkdown?: (
+    query: string,
+    workspaceRoot: string
+  ) => Promise<WorkspaceSearchResult>
   readonly writeMarkdownFile: (
     filePath: string,
     contents: string,

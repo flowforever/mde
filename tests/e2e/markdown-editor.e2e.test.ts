@@ -896,6 +896,96 @@ test('toggles the editor between centered and full-width layouts', async () => {
   }
 })
 
+test('searches within the current Markdown editor', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const searchShortcut = process.platform === 'darwin' ? 'Meta+F' : 'Control+F'
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Root markdown file.'
+    )
+
+    await window.keyboard.press(searchShortcut)
+    const searchBox = window.getByRole('searchbox', {
+      name: /search current markdown/i
+    })
+
+    await expect(searchBox).toBeFocused()
+    await searchBox.fill('markdown')
+    await window.keyboard.press('Enter')
+
+    await expect(window.locator('.editor-search-count')).toContainText('1/1')
+    await expect
+      .poll(() =>
+        window.evaluate(() => {
+          const cssApi = globalThis.CSS as
+            | (typeof CSS & {
+                highlights?: {
+                  get: (name: string) => { size: number } | undefined
+                  has: (name: string) => boolean
+                }
+              })
+            | undefined
+
+          return {
+            activeSize: cssApi?.highlights?.get('mde-editor-search-active')?.size ?? 0,
+            hasMatches: cssApi?.highlights?.has('mde-editor-search-match') ?? false
+          }
+        })
+      )
+      .toEqual({
+        activeSize: 1,
+        hasMatches: true
+      })
+
+    await window.keyboard.press('Escape')
+    await expect(searchBox).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('searches the workspace and opens a matched file with editor highlights', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const searchShortcut =
+    process.platform === 'darwin' ? 'Meta+Shift+F' : 'Control+Shift+F'
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.keyboard.press(searchShortcut)
+    const searchBox = window.getByRole('searchbox', {
+      name: /search workspace contents/i
+    })
+
+    await expect(searchBox).toBeFocused()
+    await searchBox.fill('nested')
+    await window
+      .getByRole('button', { name: /open search result docs\/intro\.md line 3/i })
+      .click()
+
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Nested markdown file.'
+    )
+    await expect(window).toHaveTitle(`intro.md - ${await realpath(workspacePath)}`)
+    await expect(
+      window.getByRole('searchbox', { name: /search current markdown/i })
+    ).toHaveValue('nested')
+    await expect(window.locator('.editor-search-count')).toContainText('1/1')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('renders Mermaid flowcharts and saves pasted images beside the Markdown file', async () => {
   const workspacePath = await createFixtureWorkspace()
   const diagramPath = join(workspacePath, 'docs', 'diagram.md')

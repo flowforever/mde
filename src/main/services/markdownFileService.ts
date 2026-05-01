@@ -17,8 +17,13 @@ import type {
   FileContents,
   ImageAsset,
   ImageAssetInput,
-  RenamedEntry
+  RenamedEntry,
+  WorkspaceSearchResult
 } from '../../shared/workspace'
+import {
+  findTextSearchMatches,
+  normalizeSearchQuery
+} from '../../shared/search'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 
 const ignoredEntryNames = new Set([
@@ -44,6 +49,10 @@ export interface MarkdownFileService {
     workspacePath: string,
     asset: ImageAssetInput
   ) => Promise<ImageAsset>
+  readonly searchMarkdownFiles: (
+    workspacePath: string,
+    query: string
+  ) => Promise<WorkspaceSearchResult>
   readonly createMarkdownFile: (
     workspacePath: string,
     filePath: string,
@@ -57,6 +66,9 @@ export interface MarkdownFileService {
   ) => Promise<RenamedEntry>
   readonly deleteEntry: (workspacePath: string, entryPath: string) => Promise<void>
 }
+
+const MAX_SEARCH_FILE_RESULTS = 50
+const MAX_SEARCH_MATCHES_PER_FILE = 3
 
 const isMarkdownPath = (filePath: string): boolean =>
   extname(filePath).toLowerCase() === '.md'
@@ -177,6 +189,25 @@ const joinWorkspacePath = (...segments: readonly string[]): string =>
 
 const isSupportedImageAssetPath = (entryPath: string): boolean =>
   supportedImageExtensions.has(extname(entryPath).toLowerCase())
+
+const createSearchPreview = (
+  contents: string,
+  match: ReturnType<typeof findTextSearchMatches>[number]
+): string => {
+  const lineStartIndex = contents.lastIndexOf('\n', match.startOffset - 1) + 1
+  const nextLineBreakIndex = contents.indexOf('\n', match.startOffset)
+  const lineEndIndex =
+    nextLineBreakIndex === -1 ? contents.length : nextLineBreakIndex
+
+  return contents.slice(lineStartIndex, lineEndIndex).trim()
+}
+
+const compareWorkspacePaths = (leftPath: string, rightPath: string): number => {
+  const leftDepth = leftPath.split('/').length
+  const rightDepth = rightPath.split('/').length
+
+  return leftDepth - rightDepth || leftPath.localeCompare(rightPath)
+}
 
 const assertNoSymlinkPathComponents = async (
   workspacePath: string,
@@ -364,6 +395,84 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
     return Object.freeze({
       contents: await readFile(realFilePath, 'utf8'),
       path: filePath
+    })
+  },
+  async searchMarkdownFiles(workspacePath, query) {
+    const normalizedQuery = normalizeSearchQuery(query)
+
+    if (normalizedQuery.length === 0) {
+      return Object.freeze({
+        limited: false,
+        query: normalizedQuery,
+        results: []
+      })
+    }
+
+    const collectMarkdownPaths = async (
+      directoryPath: string
+    ): Promise<readonly string[]> => {
+      const absoluteDirectoryPath = resolveWorkspacePath(workspacePath, directoryPath)
+      const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
+      const nestedPaths = await Promise.all(
+        entries.map(async (entry): Promise<readonly string[]> => {
+          if (ignoredEntryNames.has(entry.name)) {
+            return []
+          }
+
+          const entryPath = joinWorkspacePath(directoryPath, entry.name)
+
+          if (entry.isDirectory()) {
+            return collectMarkdownPaths(entryPath)
+          }
+
+          if (entry.isFile() && isMarkdownPath(entry.name)) {
+            return [entryPath]
+          }
+
+          return []
+        })
+      )
+
+      return nestedPaths.flat()
+    }
+
+    const results: WorkspaceSearchResult['results'][number][] = []
+    const markdownPaths = Array.from(await collectMarkdownPaths('')).sort(
+      compareWorkspacePaths
+    )
+    let limited = false
+
+    for (const markdownPath of markdownPaths) {
+      if (results.length >= MAX_SEARCH_FILE_RESULTS) {
+        limited = true
+        break
+      }
+
+      const realFilePath = await resolveExistingMarkdownFile(
+        workspacePath,
+        markdownPath
+      )
+      const contents = await readFile(realFilePath, 'utf8')
+      const matches = findTextSearchMatches(contents, normalizedQuery)
+
+      if (matches.length === 0) {
+        continue
+      }
+
+      results.push({
+        matches: matches.slice(0, MAX_SEARCH_MATCHES_PER_FILE).map((match) => ({
+          columnNumber: match.columnNumber,
+          lineNumber: match.lineNumber,
+          preview: createSearchPreview(contents, match)
+        })),
+        path: markdownPath
+      })
+    }
+
+    return Object.freeze({
+      limited,
+      query: normalizedQuery,
+      results: Object.freeze(results)
     })
   },
   async writeMarkdownFile(workspacePath, filePath, contents) {

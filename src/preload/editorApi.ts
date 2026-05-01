@@ -2,7 +2,12 @@ import type * as Electron from 'electron'
 
 import { FILE_CHANNELS, WORKSPACE_CHANNELS } from '../main/ipc/channels'
 import type { TreeNode } from '../shared/fileTree'
-import type { EditorApi, FileContents, ImageAsset } from '../shared/workspace'
+import type {
+  EditorApi,
+  FileContents,
+  ImageAsset,
+  WorkspaceSearchResult
+} from '../shared/workspace'
 
 type IpcRenderer = Pick<
   typeof Electron.ipcRenderer,
@@ -75,6 +80,12 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       filePath,
       workspaceRoot
     ) as Promise<FileContents>,
+  searchWorkspaceMarkdown: (query, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.searchWorkspaceMarkdown,
+      query,
+      workspaceRoot
+    ) as Promise<WorkspaceSearchResult>,
   writeMarkdownFile: (filePath, contents, workspaceRoot) =>
     ipcRenderer.invoke(
       FILE_CHANNELS.writeMarkdownFile,

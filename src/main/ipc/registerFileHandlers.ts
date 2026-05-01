@@ -80,6 +80,19 @@ export const registerFileHandlers = ({
   )
 
   ipcMain.handle(
+    FILE_CHANNELS.searchWorkspaceMarkdown,
+    async (event, query, workspaceRoot) =>
+      markdownFileService.searchMarkdownFiles(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        assertStringInput(query, 'Search query')
+      )
+  )
+
+  ipcMain.handle(
     FILE_CHANNELS.saveImageAsset,
     async (
       event,

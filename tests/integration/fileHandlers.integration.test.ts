@@ -244,6 +244,61 @@ describe('fileHandlers integration', () => {
     )
   })
 
+  it('searches Markdown files through the active workspace IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-search-workspace-'))
+
+    await mkdir(join(workspacePath, 'docs'))
+    await writeFile(join(workspacePath, 'README.md'), '# Search\n\nAlpha root')
+    await writeFile(join(workspacePath, 'docs', 'guide.md'), 'Nested alpha')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    const result = await handlers
+      .get(FILE_CHANNELS.searchWorkspaceMarkdown)
+      ?.({}, 'alpha', workspace.rootPath)
+
+    expect(result).toMatchObject({
+      limited: false,
+      query: 'alpha',
+      results: [
+        {
+          path: 'README.md'
+        },
+        {
+          path: 'docs/guide.md'
+        }
+      ]
+    })
+  })
+
+  it('rejects stale workspace search requests', async () => {
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await writeFile(join(originalWorkspacePath, 'README.md'), '# Original alpha')
+    await writeFile(join(activeWorkspacePath, 'README.md'), '# Active alpha')
+
+    registerFileHandlers({
+      getActiveWorkspaceRoot: () => activeWorkspacePath,
+      ipcMain,
+      markdownFileService: createMarkdownFileService()
+    })
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.searchWorkspaceMarkdown)
+        ?.({}, 'alpha', originalWorkspacePath)
+    ).rejects.toThrow(/workspace changed/i)
+  })
+
   it('rejects stale destructive operations when the expected workspace is no longer active', async () => {
     const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
     const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))

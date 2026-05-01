@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -22,6 +22,7 @@ import {
   PanelLeftOpen,
   Pencil,
   RefreshCw,
+  Search,
   Settings,
   Trash2,
   X
@@ -37,6 +38,7 @@ import {
 import type { AppState } from '../app/appTypes'
 import type { AiTool, AiToolId } from '../../../shared/ai'
 import type { UpdateCheckResult } from '../../../shared/update'
+import type { WorkspaceSearchResult } from '../../../shared/workspace'
 import {
   getEffectiveAiToolId,
   type AiCliSettings
@@ -69,8 +71,10 @@ interface ExplorerPaneProps {
   readonly onOpenRecentFile?: (filePath: string) => void
   readonly onOpenWorkspace: () => void
   readonly onOpenWorkspaceInNewWindow?: (workspace: RecentWorkspace) => void
+  readonly onOpenWorkspaceSearchResult?: (filePath: string, query: string) => void
   readonly onRefreshTree?: (directoryPaths: readonly string[]) => Promise<void> | void
   readonly onRenameEntry: (entryName: string) => void
+  readonly onSearchWorkspace?: (query: string) => Promise<WorkspaceSearchResult>
   readonly onSelectTheme?: (themeId: AppThemeId) => void
   readonly onSelectEntry: (entryPath: string | null) => void
   readonly onSelectFile: (filePath: string) => void
@@ -361,8 +365,10 @@ export const ExplorerPane = ({
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
   onOpenWorkspaceInNewWindow = () => undefined,
+  onOpenWorkspaceSearchResult = () => undefined,
   onRefreshTree = () => undefined,
   onRenameEntry,
+  onSearchWorkspace,
   onSelectTheme = () => undefined,
   onSelectEntry,
   onSelectFile,
@@ -428,7 +434,16 @@ export const ExplorerPane = ({
     string | null
   >(null)
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState('')
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false)
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('')
+  const [globalSearchResult, setGlobalSearchResult] =
+    useState<WorkspaceSearchResult | null>(null)
+  const [isGlobalSearchLoading, setIsGlobalSearchLoading] = useState(false)
+  const [globalSearchErrorMessage, setGlobalSearchErrorMessage] = useState<
+    string | null
+  >(null)
   const workspaceContentRef = useRef<HTMLDivElement | null>(null)
+  const globalSearchInputRef = useRef<HTMLInputElement | null>(null)
   const locateFileRequestIdRef = useRef(0)
   const expandedDirectoryPaths =
     expandedDirectoryState.workspaceRoot === workspaceRoot
@@ -440,9 +455,83 @@ export const ExplorerPane = ({
     ? hiddenEntryPathsByWorkspace.get(workspaceRoot) ?? EMPTY_HIDDEN_ENTRY_PATHS
     : EMPTY_HIDDEN_ENTRY_PATHS
 
+  const openGlobalSearch = useCallback((): void => {
+    setIsGlobalSearchOpen(true)
+  }, [])
+
+  const closeGlobalSearch = useCallback((): void => {
+    setIsGlobalSearchOpen(false)
+    setGlobalSearchQuery('')
+    setGlobalSearchResult(null)
+    setGlobalSearchErrorMessage(null)
+    setIsGlobalSearchLoading(false)
+  }, [])
+
   useEffect(() => {
     writeHiddenExplorerEntries(hiddenEntryPathsByWorkspace)
   }, [hiddenEntryPathsByWorkspace])
+
+  useEffect(() => {
+    const openWorkspaceSearch = (): void => {
+      openGlobalSearch()
+    }
+
+    window.addEventListener('mde:open-workspace-search', openWorkspaceSearch)
+
+    return () => {
+      window.removeEventListener('mde:open-workspace-search', openWorkspaceSearch)
+    }
+  }, [openGlobalSearch])
+
+  useLayoutEffect(() => {
+    if (!isGlobalSearchOpen) {
+      return
+    }
+
+    globalSearchInputRef.current?.focus()
+    globalSearchInputRef.current?.select()
+  }, [isGlobalSearchOpen])
+
+  useEffect(() => {
+    if (!isGlobalSearchOpen || !onSearchWorkspace) {
+      return
+    }
+
+    const query = globalSearchQuery.trim()
+
+    if (query.length === 0) {
+      return
+    }
+
+    let isCancelled = false
+
+    const timeoutId = window.setTimeout(() => {
+      void onSearchWorkspace(query)
+        .then((result) => {
+          if (!isCancelled) {
+            setGlobalSearchResult(result)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!isCancelled) {
+            setGlobalSearchResult(null)
+            setGlobalSearchErrorMessage(
+              error instanceof Error ? error.message : 'Unable to search workspace'
+            )
+          }
+        })
+        .finally(() => {
+          if (!isCancelled) {
+            setIsGlobalSearchLoading(false)
+          }
+        })
+    }, 180)
+
+    return () => {
+      isCancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [globalSearchQuery, isGlobalSearchOpen, onSearchWorkspace])
 
   useEffect(() => {
     writeDefaultHiddenExplorerWorkspaces(defaultHiddenWorkspaceRoots)
@@ -1492,6 +1581,16 @@ export const ExplorerPane = ({
         <div className="explorer-workspace">
           <div className="explorer-toolbar" aria-label="Workspace actions">
             <button
+              aria-label="Search workspace contents"
+              className="explorer-icon-button"
+              disabled={!state.workspace}
+              onClick={openGlobalSearch}
+              title="Search workspace contents"
+              type="button"
+            >
+              <Search aria-hidden="true" focusable="false" size={16} />
+            </button>
+            <button
               aria-label="New Markdown file"
               className="explorer-icon-button"
               onClick={() => {
@@ -1759,6 +1858,107 @@ export const ExplorerPane = ({
       ) : (
         <p className="explorer-empty">Open a folder to browse Markdown files.</p>
       )}
+      {isGlobalSearchOpen ? (
+        <div
+          className="workspace-dialog-backdrop global-search-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeGlobalSearch()
+            }
+          }}
+        >
+          <section
+            aria-label="Search workspace"
+            className="global-search-dialog"
+            role="dialog"
+          >
+            <form
+              aria-label="Search workspace contents"
+              className="global-search-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+              }}
+            >
+              <Search aria-hidden="true" focusable="false" size={18} />
+              <input
+                aria-label="Search workspace contents"
+                onChange={(event) => {
+                  const nextQuery = event.target.value
+
+                  setGlobalSearchQuery(nextQuery)
+                  if (nextQuery.trim().length === 0) {
+                    setGlobalSearchResult(null)
+                    setGlobalSearchErrorMessage(null)
+                    setIsGlobalSearchLoading(false)
+                  } else {
+                    setGlobalSearchErrorMessage(null)
+                    setIsGlobalSearchLoading(true)
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    closeGlobalSearch()
+                  }
+                }}
+                placeholder="Search workspace"
+                ref={globalSearchInputRef}
+                type="search"
+                value={globalSearchQuery}
+              />
+              <button
+                aria-label="Close workspace search"
+                onClick={closeGlobalSearch}
+                type="button"
+              >
+                <X aria-hidden="true" focusable="false" size={16} />
+              </button>
+            </form>
+            <div className="global-search-results" role="list">
+              {globalSearchErrorMessage ? (
+                <p className="global-search-message" role="alert">
+                  {globalSearchErrorMessage}
+                </p>
+              ) : isGlobalSearchLoading ? (
+                <p className="global-search-message" role="status">
+                  Searching...
+                </p>
+              ) : globalSearchResult && globalSearchResult.results.length > 0 ? (
+                globalSearchResult.results.map((result) =>
+                  result.matches.map((match) => (
+                    <button
+                      aria-label={`Open search result ${result.path} line ${match.lineNumber}`}
+                      className="global-search-result"
+                      key={`${result.path}:${match.lineNumber}:${match.columnNumber}`}
+                      onClick={() => {
+                        onOpenWorkspaceSearchResult(
+                          result.path,
+                          globalSearchResult.query
+                        )
+                        closeGlobalSearch()
+                      }}
+                      type="button"
+                    >
+                      <span>{getEntryName(result.path)}</span>
+                      <span>{result.path}</span>
+                      <span>
+                        Line {match.lineNumber}, column {match.columnNumber}
+                      </span>
+                      <span>{match.preview}</span>
+                    </button>
+                  ))
+                )
+              ) : globalSearchQuery.trim().length > 0 ? (
+                <p className="global-search-message">No results</p>
+              ) : (
+                <p className="global-search-message">
+                  Search Markdown files in the current workspace.
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
       {settingsControls}
       {renderSettingsDialog()}
     </aside>
