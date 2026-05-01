@@ -1265,9 +1265,8 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     const toolbarButtons = [
       window.getByRole('button', { name: /new markdown file/i }),
       window.getByRole('button', { name: /new folder/i }),
-      window.getByRole('button', { name: /rename selected README\.md/i }),
-      window.getByRole('button', { name: /delete selected README\.md/i }),
-      window.getByRole('button', { name: /show hidden entries/i })
+      window.getByRole('button', { name: /show hidden entries/i }),
+      window.getByRole('button', { name: /refresh explorer/i })
     ]
     const toolbarButtonTops = await Promise.all(
       toolbarButtons.map((button) =>
@@ -1276,6 +1275,12 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     )
 
     expect(new Set(toolbarButtonTops).size).toBe(1)
+    await expect(
+      window.getByRole('button', { name: /rename selected README\.md/i })
+    ).toHaveCount(0)
+    await expect(
+      window.getByRole('button', { name: /delete selected README\.md/i })
+    ).toHaveCount(0)
     await expect(readmeRow).toHaveAttribute('aria-current', 'page')
     await expect(readmeRow).toHaveClass(/is-active/)
     await expect(window.locator('.app-shell')).toBeVisible()
@@ -1370,6 +1375,13 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
       button: 'right'
     })
     await expect(window.getByRole('menu', { name: /drafts actions/i })).toBeVisible()
+    await expect(
+      window.getByRole('menuitem', { name: /new markdown file/i })
+    ).toBeVisible()
+    await expect(window.getByRole('menuitem', { name: /new folder/i })).toBeVisible()
+    await expect(
+      window.locator('.explorer-context-menu [role="menuitem"] svg')
+    ).toHaveCount(5)
     await window.locator('.explorer-header').click()
     await expect(window.getByRole('menu', { name: /drafts actions/i })).toHaveCount(0)
     await window.getByRole('button', { name: /drafts folder/i }).click({
@@ -1417,7 +1429,7 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     ).toBeVisible()
     await expect(
       window.getByRole('button', { name: /rename selected inside-docs\.md/i })
-    ).toBeVisible()
+    ).toHaveCount(0)
 
     await expect(
       window.getByRole('button', { name: /drafts folder/i })
@@ -1452,6 +1464,18 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
       .getByRole('button', { name: /renamed\.md Markdown file/i })
       .click({ button: 'right' })
     await window.getByRole('menuitem', { name: /^delete$/i }).click()
+    const deleteConfirmationBox = await window
+      .locator('.explorer-delete-confirmation')
+      .boundingBox()
+    const renamedRowBox = await window
+      .getByRole('button', { name: /renamed\.md Markdown file/i })
+      .boundingBox()
+
+    expect(deleteConfirmationBox).not.toBeNull()
+    expect(renamedRowBox).not.toBeNull()
+    expect(
+      Math.abs((deleteConfirmationBox?.y ?? 0) - (renamedRowBox?.y ?? 0))
+    ).toBeLessThan(96)
     await window.getByRole('button', { name: /confirm delete/i }).click()
 
     await expect(

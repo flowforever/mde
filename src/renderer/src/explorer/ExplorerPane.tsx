@@ -94,6 +94,11 @@ interface EntryContextMenu {
   readonly y: number
 }
 
+interface PendingDeleteConfirmation {
+  readonly x: number
+  readonly y: number
+}
+
 const EMPTY_HIDDEN_ENTRY_PATHS: ReadonlySet<string> = new Set()
 const DEFAULT_AI_SETTINGS: AiCliSettings = {
   modelNames: {},
@@ -104,6 +109,9 @@ const EXPLORER_RECENT_FILES_PANEL_STORAGE_KEY =
 const RECENT_FILES_PANEL_HEIGHT_DEFAULT = 164
 const RECENT_FILES_PANEL_HEIGHT_MIN = 96
 const RECENT_FILES_PANEL_HEIGHT_MAX = 320
+const DELETE_CONFIRMATION_WIDTH = 220
+const DELETE_CONFIRMATION_HEIGHT = 108
+const DELETE_CONFIRMATION_MARGIN = 12
 
 interface RecentFilesPanelState {
   readonly height: number
@@ -202,6 +210,29 @@ const sortDirectoryPaths = (
       getDirectoryDepth(leftPath) - getDirectoryDepth(rightPath) ||
       leftPath.localeCompare(rightPath)
   )
+
+const clampDeleteConfirmationPosition = (
+  x: number,
+  y: number
+): PendingDeleteConfirmation => {
+  const maxX = Math.max(
+    DELETE_CONFIRMATION_MARGIN,
+    globalThis.innerWidth -
+      DELETE_CONFIRMATION_WIDTH -
+      DELETE_CONFIRMATION_MARGIN
+  )
+  const maxY = Math.max(
+    DELETE_CONFIRMATION_MARGIN,
+    globalThis.innerHeight -
+      DELETE_CONFIRMATION_HEIGHT -
+      DELETE_CONFIRMATION_MARGIN
+  )
+
+  return {
+    x: Math.min(Math.max(DELETE_CONFIRMATION_MARGIN, x), maxX),
+    y: Math.min(Math.max(DELETE_CONFIRMATION_MARGIN, y), maxY)
+  }
+}
 
 const findDirectoryPath = (
   nodes: readonly TreeNode[],
@@ -378,7 +409,8 @@ export const ExplorerPane = ({
   >(readDefaultHiddenExplorerWorkspaces)
   const [hasDismissedAutoWorkspaceDialog, setHasDismissedAutoWorkspaceDialog] =
     useState(false)
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] =
+    useState<PendingDeleteConfirmation | null>(null)
   const [
     showingHiddenEntriesWorkspaceRoot,
     setShowingHiddenEntriesWorkspaceRoot
@@ -491,7 +523,7 @@ export const ExplorerPane = ({
     setActionTargetDirectoryPath(targetDirectoryPath)
     setActionTargetEntryPath(targetEntryPath)
     setEntryValue(defaultValue)
-    setIsConfirmingDelete(false)
+    setDeleteConfirmation(null)
   }
 
   const clearPendingAction = (): void => {
@@ -623,6 +655,31 @@ export const ExplorerPane = ({
     }
   }, [contextMenu])
 
+  useEffect(() => {
+    if (!deleteConfirmation) {
+      return
+    }
+
+    const closeDeleteConfirmation = (): void => {
+      setDeleteConfirmation(null)
+    }
+    const closeDeleteConfirmationOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        closeDeleteConfirmation()
+      }
+    }
+
+    window.addEventListener('scroll', closeDeleteConfirmation, true)
+    window.addEventListener('resize', closeDeleteConfirmation)
+    window.addEventListener('keydown', closeDeleteConfirmationOnEscape)
+
+    return () => {
+      window.removeEventListener('scroll', closeDeleteConfirmation, true)
+      window.removeEventListener('resize', closeDeleteConfirmation)
+      window.removeEventListener('keydown', closeDeleteConfirmationOnEscape)
+    }
+  }, [deleteConfirmation])
+
   const beginContextRename = (): void => {
     if (!contextMenu) {
       return
@@ -633,13 +690,35 @@ export const ExplorerPane = ({
     closeContextMenu()
   }
 
+  const beginContextCreateFile = (): void => {
+    if (contextMenu?.entry.type !== 'directory') {
+      return
+    }
+
+    onSelectEntry(contextMenu.entry.path)
+    beginAction('create-file', 'Untitled.md', contextMenu.entry.path)
+    closeContextMenu()
+  }
+
+  const beginContextCreateFolder = (): void => {
+    if (contextMenu?.entry.type !== 'directory') {
+      return
+    }
+
+    onSelectEntry(contextMenu.entry.path)
+    beginAction('create-folder', 'notes', contextMenu.entry.path)
+    closeContextMenu()
+  }
+
   const beginContextDelete = (): void => {
     if (!contextMenu) {
       return
     }
 
     onSelectEntry(contextMenu.entry.path)
-    setIsConfirmingDelete(true)
+    setDeleteConfirmation(
+      clampDeleteConfirmationPosition(contextMenu.x, contextMenu.y)
+    )
     clearPendingAction()
     closeContextMenu()
   }
@@ -695,9 +774,6 @@ export const ExplorerPane = ({
     clearPendingAction()
   }
 
-  const selectedEntryName = state.selectedEntryPath
-    ? getEntryName(state.selectedEntryPath)
-    : ''
   const defaultHiddenEntryPaths =
     state.workspace && workspaceRoot && !defaultHiddenWorkspaceRoots.has(workspaceRoot)
       ? collectDefaultHiddenEntryPaths(state.workspace.tree)
@@ -707,7 +783,6 @@ export const ExplorerPane = ({
       ? new Set([...hiddenEntryPaths, ...defaultHiddenEntryPaths])
       : hiddenEntryPaths
   const hasHiddenEntries = effectiveHiddenEntryPaths.size > 0
-  const hasSelectedEntry = Boolean(state.selectedEntryPath)
   const selectedDirectoryPath = state.workspace
     ? findDirectoryPath(state.workspace.tree, state.selectedEntryPath)
     : null
@@ -1448,52 +1523,6 @@ export const ExplorerPane = ({
             </button>
             <button
               aria-label={
-                hasSelectedEntry
-                  ? `Rename selected ${selectedEntryName}`
-                  : 'Rename selected entry'
-              }
-              className="explorer-icon-button"
-              disabled={!hasSelectedEntry}
-              onClick={() => {
-                if (!hasSelectedEntry) {
-                  return
-                }
-
-                beginAction(
-                  'rename',
-                  selectedEntryName,
-                  null,
-                  state.selectedEntryPath
-                )
-              }}
-              title="Rename"
-              type="button"
-            >
-              <Pencil aria-hidden="true" focusable="false" size={15} />
-            </button>
-            <button
-              aria-label={
-                hasSelectedEntry
-                  ? `Delete selected ${selectedEntryName}`
-                  : 'Delete selected entry'
-              }
-              className="explorer-icon-button"
-              disabled={!hasSelectedEntry}
-              onClick={() => {
-                if (!hasSelectedEntry) {
-                  return
-                }
-
-                setIsConfirmingDelete(true)
-                clearPendingAction()
-              }}
-              title="Delete"
-              type="button"
-            >
-              <Trash2 aria-hidden="true" focusable="false" size={15} />
-            </button>
-            <button
-              aria-label={
                 isShowingHiddenEntries ? 'Hide hidden entries' : 'Show hidden entries'
               }
               aria-pressed={isShowingHiddenEntries}
@@ -1527,13 +1556,21 @@ export const ExplorerPane = ({
               <RefreshCw aria-hidden="true" focusable="false" size={16} />
             </button>
           </div>
-          {isConfirmingDelete && state.selectedEntryPath ? (
-            <div className="explorer-delete-confirmation">
+          {deleteConfirmation && state.selectedEntryPath ? (
+            <div
+              className="explorer-delete-confirmation"
+              style={
+                {
+                  '--delete-confirmation-x': `${deleteConfirmation.x}px`,
+                  '--delete-confirmation-y': `${deleteConfirmation.y}px`
+                } as CSSProperties
+              }
+            >
               <p>Delete {state.selectedEntryPath}?</p>
               <button
                 onClick={() => {
                   onDeleteEntry()
-                  setIsConfirmingDelete(false)
+                  setDeleteConfirmation(null)
                 }}
                 type="button"
               >
@@ -1541,7 +1578,7 @@ export const ExplorerPane = ({
               </button>
               <button
                 onClick={() => {
-                  setIsConfirmingDelete(false)
+                  setDeleteConfirmation(null)
                 }}
                 type="button"
               >
@@ -1587,12 +1624,41 @@ export const ExplorerPane = ({
                     event.stopPropagation()
                   }}
                 >
+                  {contextMenu.entry.type === 'directory' ? (
+                    <>
+                      <button
+                        onClick={beginContextCreateFile}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <FilePlus
+                          aria-hidden="true"
+                          focusable="false"
+                          size={14}
+                        />
+                        <span>New Markdown file</span>
+                      </button>
+                      <button
+                        onClick={beginContextCreateFolder}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <FolderPlus
+                          aria-hidden="true"
+                          focusable="false"
+                          size={14}
+                        />
+                        <span>New folder</span>
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     onClick={beginContextRename}
                     role="menuitem"
                     type="button"
                   >
-                    Rename
+                    <Pencil aria-hidden="true" focusable="false" size={14} />
+                    <span>Rename</span>
                   </button>
                   <button
                     onClick={
@@ -1601,14 +1667,20 @@ export const ExplorerPane = ({
                     role="menuitem"
                     type="button"
                   >
-                    {isContextEntryHidden ? 'Show' : 'Hide'}
+                    {isContextEntryHidden ? (
+                      <Eye aria-hidden="true" focusable="false" size={14} />
+                    ) : (
+                      <EyeOff aria-hidden="true" focusable="false" size={14} />
+                    )}
+                    <span>{isContextEntryHidden ? 'Show' : 'Hide'}</span>
                   </button>
                   <button
                     onClick={beginContextDelete}
                     role="menuitem"
                     type="button"
                   >
-                    Delete
+                    <Trash2 aria-hidden="true" focusable="false" size={14} />
+                    <span>Delete</span>
                   </button>
                 </div>
               ) : null}

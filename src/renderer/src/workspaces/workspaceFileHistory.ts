@@ -16,7 +16,7 @@ interface StoredWorkspaceFileHistoryEntry {
 
 export const WORKSPACE_FILE_HISTORY_STORAGE_KEY = 'mde.workspaceFileHistory'
 
-const MAX_RECENT_FILES = 16
+const MAX_RECENT_FILES = 20
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0

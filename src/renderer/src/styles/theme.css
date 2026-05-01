@@ -1385,7 +1385,7 @@ input:focus-visible,
 
 .explorer-toolbar {
   display: grid;
-  grid-template-columns: repeat(5, 32px);
+  grid-template-columns: repeat(4, 32px);
   justify-content: start;
   gap: 6px;
 }
@@ -1439,6 +1439,16 @@ input:focus-visible,
 .explorer-delete-confirmation {
   display: grid;
   grid-template-columns: 1fr 1fr;
+}
+
+.explorer-delete-confirmation {
+  position: fixed;
+  z-index: 11;
+  top: var(--delete-confirmation-y);
+  left: var(--delete-confirmation-x);
+  width: 220px;
+  transform: translateY(6px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
 }
 
 .explorer-form-actions {
@@ -1561,6 +1571,10 @@ input:focus-visible,
 }
 
 .explorer-context-menu button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
   min-height: 28px;
   padding: 0 8px;
   color: inherit;

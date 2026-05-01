@@ -110,17 +110,18 @@ describe('workspaceFileHistory', () => {
     expect(getWorkspaceLastOpenedFile(existing, '/workspace')).toBe('README.md')
   })
 
-  it('caps recent files per workspace', () => {
-    const filePaths = Array.from({ length: 20 }, (_, index) => `${index}.md`)
+  it('caps recent files per workspace at twenty entries', () => {
+    const filePaths = Array.from({ length: 24 }, (_, index) => `${index}.md`)
     const history = filePaths.reduce<WorkspaceFileHistory>(
       (currentHistory, filePath) =>
         rememberWorkspaceFile(currentHistory, '/workspace', filePath),
       new Map()
     )
 
-    expect(getWorkspaceRecentFiles(history, '/workspace')).toHaveLength(16)
-    expect(getWorkspaceRecentFiles(history, '/workspace')[0]).toBe('19.md')
-    expect(getWorkspaceRecentFiles(history, '/workspace')).not.toContain('0.md')
+    expect(getWorkspaceRecentFiles(history, '/workspace')).toHaveLength(20)
+    expect(getWorkspaceRecentFiles(history, '/workspace')[0]).toBe('23.md')
+    expect(getWorkspaceRecentFiles(history, '/workspace')).toContain('4.md')
+    expect(getWorkspaceRecentFiles(history, '/workspace')).not.toContain('3.md')
   })
 
   it('updates remembered file paths when a file or folder is renamed', () => {

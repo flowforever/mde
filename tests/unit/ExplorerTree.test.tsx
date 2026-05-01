@@ -278,12 +278,6 @@ describe('ExplorerTree', () => {
       name: /new markdown file/i
     })
     const newFolderButton = screen.getByRole('button', { name: /new folder/i })
-    const renameButton = screen.getByRole('button', {
-      name: /rename selected README\.md/i
-    })
-    const deleteButton = screen.getByRole('button', {
-      name: /delete selected README\.md/i
-    })
     const showHiddenButton = screen.getByRole('button', {
       name: /show hidden entries/i
     })
@@ -304,8 +298,6 @@ describe('ExplorerTree', () => {
     for (const button of [
       newMarkdownButton,
       newFolderButton,
-      renameButton,
-      deleteButton,
       showHiddenButton,
       refreshButton
     ]) {
@@ -313,6 +305,13 @@ describe('ExplorerTree', () => {
       expect(button.textContent?.trim()).toBe('')
       expect(button.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
     }
+    expect(
+      screen.queryByRole('button', { name: /rename selected/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /delete selected/i })
+    ).not.toBeInTheDocument()
+    expect(toolbarButtons).toHaveLength(4)
     expect(toolbarButtons.indexOf(refreshButton)).toBe(
       toolbarButtons.indexOf(showHiddenButton) + 1
     )
@@ -643,7 +642,7 @@ describe('ExplorerTree', () => {
     expect(onCreateFile).toHaveBeenLastCalledWith('root.md')
   }, EXPLORER_INTERACTION_TEST_TIMEOUT)
 
-  it('submits rename and confirmed delete for the selected entry', async () => {
+  it('submits rename and confirmed delete from the selected entry context menu', async () => {
     const user = userEvent.setup()
     const onRenameEntry = vi.fn()
     const onDeleteEntry = vi.fn()
@@ -682,22 +681,115 @@ describe('ExplorerTree', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: /rename selected README\.md/i }))
+    expect(
+      screen.queryByRole('button', { name: /rename selected README\.md/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /delete selected README\.md/i })
+    ).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: /README\.md Markdown file/i }),
+      { clientX: 72, clientY: 96 }
+    )
+    await user.click(screen.getByRole('menuitem', { name: /^rename$/i }))
     await user.clear(screen.getByLabelText(/rename README\.md/i))
     await user.type(screen.getByLabelText(/rename README\.md/i), 'renamed.md')
     await user.keyboard('{Enter}')
 
     expect(onRenameEntry).toHaveBeenCalledWith('renamed.md')
 
-    await user.click(screen.getByRole('button', { name: /delete selected README\.md/i }))
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: /README\.md Markdown file/i }),
+      { clientX: 72, clientY: 96 }
+    )
+    await user.click(screen.getByRole('menuitem', { name: /^delete$/i }))
     expect(screen.getByText(/delete README\.md/i)).toBeVisible()
+    const deleteConfirmation = screen
+      .getByText(/delete README\.md/i)
+      .closest('.explorer-delete-confirmation')!
+
+    expect(deleteConfirmation).toHaveStyle({
+      '--delete-confirmation-x': '72px',
+      '--delete-confirmation-y': '96px'
+    })
     await user.click(screen.getByRole('button', { name: /confirm delete/i }))
 
     expect(onDeleteEntry).toHaveBeenCalledTimes(1)
   })
 
-  it('opens a row context menu for rename, hide, and delete actions', async () => {
+  it('keeps delete confirmation inside the viewport and closes it on scroll', async () => {
     const user = userEvent.setup()
+    const state: AppState = {
+      draftMarkdown: '# Fixture Workspace',
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: '# Fixture Workspace',
+        path: 'README.md'
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace: {
+        name: 'workspace',
+        rootPath: '/workspace',
+        tree
+      }
+    }
+
+    render(
+      <ExplorerPane
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        state={state}
+      />
+    )
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 320
+    })
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 240
+    })
+
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: /README\.md Markdown file/i }),
+      { clientX: 318, clientY: 238 }
+    )
+    await user.click(screen.getByRole('menuitem', { name: /^delete$/i }))
+
+    const deleteConfirmation = screen
+      .getByText(/delete README\.md/i)
+      .closest('.explorer-delete-confirmation')!
+
+    expect(deleteConfirmation).toHaveStyle({
+      '--delete-confirmation-x': '88px',
+      '--delete-confirmation-y': '120px'
+    })
+
+    fireEvent.scroll(window)
+
+    expect(
+      screen.queryByText(/delete README\.md/i)
+    ).not.toBeInTheDocument()
+  })
+
+  it('opens row context menus with icons and directory create actions', async () => {
+    const user = userEvent.setup()
+    const onCreateFile = vi.fn()
+    const onCreateFolder = vi.fn()
     const onRenameEntry = vi.fn()
     const onDeleteEntry = vi.fn()
     const onSelectEntry = vi.fn()
@@ -725,8 +817,8 @@ describe('ExplorerTree', () => {
 
     render(
       <ExplorerPane
-        onCreateFile={vi.fn()}
-        onCreateFolder={vi.fn()}
+        onCreateFile={onCreateFile}
+        onCreateFolder={onCreateFolder}
         onDeleteEntry={onDeleteEntry}
         onOpenWorkspace={vi.fn()}
         onRenameEntry={onRenameEntry}
@@ -746,6 +838,12 @@ describe('ExplorerTree', () => {
     expect(screen.getByRole('menuitem', { name: /^rename$/i })).toBeVisible()
     expect(screen.getByRole('menuitem', { name: /^hide$/i })).toBeVisible()
     expect(screen.getByRole('menuitem', { name: /^delete$/i })).toBeVisible()
+    expect(
+      screen.queryByRole('menuitem', { name: /new markdown file/i })
+    ).not.toBeInTheDocument()
+    for (const menuItem of screen.getAllByRole('menuitem')) {
+      expect(menuItem.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+    }
 
     await user.click(screen.getByRole('menuitem', { name: /^hide$/i }))
 
@@ -764,6 +862,42 @@ describe('ExplorerTree', () => {
     expect(
       screen.queryByRole('button', { name: /README\.md Markdown file/i })
     ).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
+      clientX: 36,
+      clientY: 48
+    })
+    expect(
+      screen.getByRole('menuitem', { name: /new markdown file/i })
+    ).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: /new folder/i })).toBeVisible()
+    for (const menuItem of screen.getAllByRole('menuitem')) {
+      expect(menuItem.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+    }
+    await user.click(screen.getByRole('menuitem', { name: /new markdown file/i }))
+    const docsItem = screen
+      .getByRole('button', { name: /docs folder/i })
+      .closest('li') as HTMLElement
+
+    await user.clear(within(docsItem).getByLabelText(/new markdown file name/i))
+    await user.type(
+      within(docsItem).getByLabelText(/new markdown file name/i),
+      'context-note.md'
+    )
+    await user.keyboard('{Enter}')
+
+    expect(onCreateFile).toHaveBeenCalledWith('docs/context-note.md')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
+      clientX: 36,
+      clientY: 48
+    })
+    await user.click(screen.getByRole('menuitem', { name: /new folder/i }))
+    await user.clear(within(docsItem).getByLabelText(/new folder name/i))
+    await user.type(within(docsItem).getByLabelText(/new folder name/i), 'context-assets')
+    await user.keyboard('{Enter}')
+
+    expect(onCreateFolder).toHaveBeenCalledWith('docs/context-assets')
 
     fireEvent.contextMenu(screen.getByRole('button', { name: /docs folder/i }), {
       clientX: 36,
@@ -1064,7 +1198,8 @@ describe('ExplorerTree', () => {
     })
     const readmeItem = readmeRow.closest('li')
 
-    await user.click(screen.getByRole('button', { name: /rename selected README\.md/i }))
+    fireEvent.contextMenu(readmeRow, { clientX: 72, clientY: 96 })
+    await user.click(screen.getByRole('menuitem', { name: /^rename$/i }))
 
     const renameInput = within(readmeItem as HTMLElement).getByLabelText(
       /rename README\.md/i

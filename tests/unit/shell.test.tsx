@@ -595,6 +595,80 @@ describe('App shell', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('hydrates and renders at most twenty recent files in the explorer', async () => {
+    const recentFilePaths = Array.from(
+      { length: 24 },
+      (_value, index) => `docs/recent-${index + 1}.md`
+    )
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: 'Workspace',
+        rootPath: '/workspace',
+        tree: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+        type: 'workspace'
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: '# Recent 1',
+        path: 'docs/recent-24.md'
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn()
+    } satisfies EditorApi
+
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: editorApi
+    })
+    localStorage.setItem(
+      'mde.activeWorkspace',
+      JSON.stringify({
+        name: 'Workspace',
+        rootPath: '/workspace',
+        type: 'workspace'
+      })
+    )
+    localStorage.setItem(
+      'mde.workspaceFileHistory',
+      JSON.stringify([
+        {
+          lastOpenedFilePath: 'docs/recent-24.md',
+          recentFilePaths,
+          workspaceRoot: '/workspace'
+        }
+      ])
+    )
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith('/workspace')
+    })
+
+    expect(
+      await screen.findAllByRole('button', { name: /open recent file/i })
+    ).toHaveLength(20)
+    expect(
+      screen.getByRole('button', { name: /open recent file docs\/recent-1\.md/i })
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /open recent file docs\/recent-20\.md/i })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /open recent file docs\/recent-21\.md/i })
+    ).not.toBeInTheDocument()
+  })
+
   it('refreshes the root, expanded folders, and current file ancestors from explorer refresh', async () => {
     const user = userEvent.setup()
     const nestedChildren: readonly TreeNode[] = [
