@@ -1,4 +1,4 @@
-# Editor Link 新建文件选择目录的数据源不对 - READY
+# Editor Link 新建文件选择目录的数据源不对 - DONE
 
 ## Status
 
