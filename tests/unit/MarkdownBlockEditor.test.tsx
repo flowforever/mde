@@ -5,8 +5,10 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
@@ -55,7 +57,29 @@ const mockMermaid = vi.hoisted(() => ({
 }));
 
 vi.mock("@blocknote/react", () => ({
-  SuggestionMenuController: () => null,
+  SuggestionMenuController: ({
+    getItems,
+  }: {
+    readonly getItems: (
+      query: string,
+    ) => Promise<
+      readonly {
+        readonly onItemClick?: () => void;
+        readonly title: string;
+      }[]
+    >;
+  }) => (
+    <button
+      onClick={() => {
+        void getItems("").then((items) => {
+          items[0]?.onItemClick?.();
+        });
+      }}
+      type="button"
+    >
+      Open link picker
+    </button>
+  ),
   getDefaultReactSlashMenuItems: () => [],
   useCreateBlockNote: (options?: {
     links?: {
@@ -91,6 +115,7 @@ vi.mock("@blocknote/react", () => ({
 
 vi.mock("@blocknote/mantine", () => ({
   BlockNoteView: ({
+    children,
     className,
     "data-testid": testId,
     editable,
@@ -98,6 +123,7 @@ vi.mock("@blocknote/mantine", () => ({
     onChange,
     theme,
   }: {
+    readonly children?: ReactNode;
     readonly className?: string;
     readonly "data-testid"?: string;
     readonly editable?: boolean;
@@ -125,6 +151,7 @@ vi.mock("@blocknote/mantine", () => ({
       >
         Trigger editor change
       </button>
+      {children}
     </div>
   ),
 }));
@@ -158,6 +185,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     mockBlockNoteState.lastOptions = undefined;
     mockMermaid.initialize.mockClear();
     mockMermaid.render.mockClear();
+    localStorage.clear();
     Reflect.deleteProperty(window, "Highlight");
     Reflect.deleteProperty(window.CSS, "highlights");
   });
@@ -766,6 +794,198 @@ describe("MarkdownBlockEditor accessibility", () => {
     expect(preventDefault).toHaveBeenCalled();
     expect(onOpenLink).toHaveBeenCalledWith("docs/intro.md");
     anchor.remove();
+  });
+
+  it("opens the new-document link picker on the current visible directory only", async () => {
+    const user = userEvent.setup();
+
+    localStorage.setItem(
+      "mde.hiddenExplorerEntries",
+      JSON.stringify({
+        "/workspace": ["private"],
+      }),
+    );
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Current"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Current"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="docs/nested/current.md"
+        text={text}
+        workspaceRoot="/workspace"
+        workspaceTree={[
+          {
+            children: [
+              {
+                children: [],
+                name: "nested",
+                path: "docs/nested",
+                type: "directory",
+              },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+          {
+            children: [
+              {
+                children: [],
+                name: "child",
+                path: "other/child",
+                type: "directory",
+              },
+            ],
+            name: "other",
+            path: "other",
+            type: "directory",
+          },
+          {
+            children: [],
+            name: ".mde",
+            path: ".mde",
+            type: "directory",
+          },
+          {
+            children: [],
+            name: "private",
+            path: "private",
+            type: "directory",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /open link picker/i }));
+    await user.click(screen.getByRole("tab", { name: /new document/i }));
+
+    const directoryTree = screen.getByRole("tree", { name: /directory tree/i });
+    const docsDirectory = within(directoryTree).getByRole("treeitem", {
+      name: /^docs$/,
+    });
+    const nestedDirectory = within(directoryTree).getByRole("treeitem", {
+      name: /^nested$/,
+    });
+
+    expect(docsDirectory).toHaveAttribute("aria-expanded", "true");
+    expect(nestedDirectory).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(directoryTree).queryByRole("treeitem", { name: /^child$/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(directoryTree).queryByRole("treeitem", { name: /^\.mde$/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(directoryTree).queryByRole("treeitem", { name: /^private$/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves immediately after inserting an existing document link", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Current"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Current"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={onSaveRequest}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+        workspaceTree={[
+          {
+            children: [
+              {
+                name: "intro.md",
+                path: "docs/intro.md",
+                type: "file",
+              },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ]}
+      />,
+    );
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      "[intro.md](docs/intro.md)",
+    );
+
+    await user.click(screen.getByRole("button", { name: /open link picker/i }));
+    await user.type(screen.getByRole("textbox", { name: /link target/i }), "intro");
+    await user.click(
+      screen.getByRole("option", { name: /docs\/intro\.md/i }),
+    );
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith("[intro.md](docs/intro.md)");
+    });
+  });
+
+  it("saves immediately after creating and inserting a new document link", async () => {
+    const user = userEvent.setup();
+    const onCreateLinkedMarkdown = vi.fn().mockResolvedValue("docs/new-note.md");
+    const onSaveRequest = vi.fn();
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Current"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Current"
+        onCreateLinkedMarkdown={onCreateLinkedMarkdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={onSaveRequest}
+        path="docs/current.md"
+        text={text}
+        workspaceRoot="/workspace"
+        workspaceTree={[
+          {
+            children: [],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ]}
+      />,
+    );
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      "[new-note.md](new-note.md)",
+    );
+
+    await user.click(screen.getByRole("button", { name: /open link picker/i }));
+    await user.click(screen.getByRole("tab", { name: /new document/i }));
+    await user.clear(
+      screen.getByRole("textbox", { name: /new document name/i }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: /new document name/i }),
+      "new-note",
+    );
+    await user.click(screen.getByRole("button", { name: /create and insert/i }));
+
+    await waitFor(() => {
+      expect(onCreateLinkedMarkdown).toHaveBeenCalledWith("docs/new-note.md");
+      expect(onSaveRequest).toHaveBeenCalledWith("[new-note.md](new-note.md)");
+    });
   });
 
   it("rejects javascript link hrefs at the editor boundary", () => {

@@ -21,16 +21,29 @@ import {
   useCreateBlockNote,
   type DefaultReactSuggestionItem,
 } from "@blocknote/react";
-import { FilePlus2, Link as LinkIcon, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  Link as LinkIcon,
+  X,
+} from "lucide-react";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
 import { replaceEditorDocumentWithoutUndoHistory } from "./editorHydration";
 import {
+  collectMarkdownFilePaths,
   createMarkdownPathSuggestions,
   createRelativeMarkdownLink,
   isSupportedEditorLinkHref,
 } from "./editorLinks";
+import {
+  collectExpandedLinkDirectoryOptions,
+  createInitialLinkDirectoryState,
+  createVisibleEditorLinkTree,
+  type LinkDirectoryOption,
+} from "./editorLinkDirectories";
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
@@ -90,30 +103,20 @@ interface HighlightRuntime {
   readonly Highlight?: new (...ranges: Range[]) => unknown;
 }
 
-interface DirectoryOption {
-  readonly depth: number;
-  readonly name: string;
-  readonly path: string;
-}
-
 interface LinkDialogState {
   readonly errorMessage: string | null;
+  readonly expandedDirectoryPaths: ReadonlySet<string>;
   readonly hrefInput: string;
   readonly mode: "insert" | "new-document";
   readonly newDocumentDirectoryPath: string;
   readonly newDocumentName: string;
   readonly selectedSuggestionIndex: number;
+  readonly visibleWorkspaceTree: readonly TreeNode[];
 }
 
 const SEARCH_MATCH_HIGHLIGHT_NAME = "mde-editor-search-match";
 const SEARCH_ACTIVE_HIGHLIGHT_NAME = "mde-editor-search-active";
 const LINK_SUGGESTION_LIMIT = 20;
-
-const getParentPath = (entryPath: string): string => {
-  const separatorIndex = entryPath.lastIndexOf("/");
-
-  return separatorIndex === -1 ? "" : entryPath.slice(0, separatorIndex);
-};
 
 const joinWorkspacePath = (parentPath: string, entryName: string): string =>
   parentPath ? `${parentPath}/${entryName}` : entryName;
@@ -129,36 +132,27 @@ const getEntryName = (entryPath: string): string => {
     : entryPath.slice(separatorIndex + 1);
 };
 
-const collectDirectoryOptions = (
-  nodes: readonly TreeNode[],
-  depth = 0,
-): readonly DirectoryOption[] =>
-  nodes.flatMap((node) => {
-    if (node.type !== "directory") {
-      return [];
-    }
-
-    return [
-      {
-        depth,
-        name: node.name,
-        path: node.path,
-      },
-      ...collectDirectoryOptions(node.children, depth + 1),
-    ];
-  });
-
 const createInitialLinkDialogState = (
   currentFilePath: string,
   text: AppText,
-): LinkDialogState => ({
-  errorMessage: null,
-  hrefInput: "",
-  mode: "insert",
-  newDocumentDirectoryPath: getParentPath(currentFilePath),
-  newDocumentName: text("editor.linkNewDocumentDefaultName"),
-  selectedSuggestionIndex: 0,
-});
+  visibleWorkspaceTree: readonly TreeNode[],
+): LinkDialogState => {
+  const initialDirectoryState = createInitialLinkDirectoryState(
+    visibleWorkspaceTree,
+    currentFilePath,
+  );
+
+  return {
+    errorMessage: null,
+    expandedDirectoryPaths: initialDirectoryState.expandedDirectoryPaths,
+    hrefInput: "",
+    mode: "insert",
+    newDocumentDirectoryPath: initialDirectoryState.selectedDirectoryPath,
+    newDocumentName: text("editor.linkNewDocumentDefaultName"),
+    selectedSuggestionIndex: 0,
+    visibleWorkspaceTree,
+  };
+};
 
 const createSearchRanges = (
   container: HTMLElement,
@@ -292,29 +286,48 @@ export const MarkdownBlockEditor = forwardRef<
     () => prepareMarkdownForEditor(persistedMarkdownDocument.body, assetContext),
     [assetContext, persistedMarkdownDocument.body],
   );
-  const directoryOptions = useMemo(
-    () => [
+  const directoryOptions = useMemo<readonly LinkDirectoryOption[]>(() => {
+    if (!linkDialogState) {
+      return [];
+    }
+
+    return [
       {
         depth: 0,
+        hasChildDirectories: linkDialogState.visibleWorkspaceTree.some(
+          (node) => node.type === "directory",
+        ),
+        isExpanded: true,
         name: text("editor.linkRootDirectory"),
         path: "",
       },
-      ...collectDirectoryOptions(workspaceTree, 1),
-    ],
-    [text, workspaceTree],
-  );
+      ...collectExpandedLinkDirectoryOptions(
+        linkDialogState.visibleWorkspaceTree,
+        linkDialogState.expandedDirectoryPaths,
+        1,
+      ),
+    ];
+  }, [linkDialogState, text]);
   const linkSuggestions = useMemo(
-    () =>
-      linkDialogState
-        ? createMarkdownPathSuggestions(
-            linkDialogState.hrefInput,
-            markdownFilePaths,
-            {
-              currentFilePath: path,
-            },
-          ).slice(0, LINK_SUGGESTION_LIMIT)
-        : [],
-    [linkDialogState, markdownFilePaths, path],
+    () => {
+      if (!linkDialogState) {
+        return [];
+      }
+
+      const visibleMarkdownFilePaths =
+        workspaceTree.length > 0
+          ? collectMarkdownFilePaths(linkDialogState.visibleWorkspaceTree)
+          : markdownFilePaths;
+
+      return createMarkdownPathSuggestions(
+        linkDialogState.hrefInput,
+        visibleMarkdownFilePaths,
+        {
+          currentFilePath: path,
+        },
+      ).slice(0, LINK_SUGGESTION_LIMIT);
+    },
+    [linkDialogState, markdownFilePaths, path, workspaceTree.length],
   );
 
   const serializeMarkdown = useCallback(async (): Promise<string> => {
@@ -334,6 +347,29 @@ export const MarkdownBlockEditor = forwardRef<
     return composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown);
   }, [assetContext, draftMarkdownDocument, editor]);
 
+  const saveMarkdown = useCallback(async (): Promise<void> => {
+    if (isReadOnly || isSaving || !hasLocalChangesRef.current) {
+      return;
+    }
+
+    try {
+      const contents = await serializeMarkdown();
+
+      if (contents === markdown) {
+        hasLocalChangesRef.current = false;
+        return;
+      }
+
+      setSerializationErrorMessage(null);
+      await onSaveRequest(contents);
+      hasLocalChangesRef.current = false;
+    } catch (error) {
+      setSerializationErrorMessage(
+        getErrorMessage(error, text("errors.markdownSerializeFailed")),
+      );
+    }
+  }, [isReadOnly, isSaving, markdown, onSaveRequest, serializeMarkdown, text]);
+
   const closeLinkDialog = useCallback((): void => {
     setLinkDialogState(null);
     window.setTimeout(() => {
@@ -342,8 +378,15 @@ export const MarkdownBlockEditor = forwardRef<
   }, [editor]);
 
   const openLinkDialog = useCallback((): void => {
-    setLinkDialogState(createInitialLinkDialogState(path, text));
-  }, [path, text]);
+    const visibleWorkspaceTree = createVisibleEditorLinkTree(
+      workspaceTree,
+      workspaceRoot,
+    );
+
+    setLinkDialogState(
+      createInitialLinkDialogState(path, text, visibleWorkspaceTree),
+    );
+  }, [path, text, workspaceRoot, workspaceTree]);
 
   const applyFrontmatterChange = useCallback(
     (raw: string): void => {
@@ -373,10 +416,14 @@ export const MarkdownBlockEditor = forwardRef<
           ? selectedText
           : (displayText ?? getEntryName(normalizedHref));
 
+      hasLocalChangesRef.current = true;
       editor.createLink(normalizedHref, linkText);
       closeLinkDialog();
+      window.setTimeout(() => {
+        void saveMarkdown();
+      }, 0);
     },
-    [closeLinkDialog, editor],
+    [closeLinkDialog, editor, saveMarkdown],
   );
 
   const createLinkedMarkdown = useCallback(async (): Promise<void> => {
@@ -658,29 +705,6 @@ export const MarkdownBlockEditor = forwardRef<
     searchRevision,
   ]);
 
-  const saveMarkdown = useCallback(async (): Promise<void> => {
-    if (isReadOnly || isSaving || !hasLocalChangesRef.current) {
-      return;
-    }
-
-    try {
-      const contents = await serializeMarkdown();
-
-      if (contents === markdown) {
-        hasLocalChangesRef.current = false;
-        return;
-      }
-
-      setSerializationErrorMessage(null);
-      await onSaveRequest(contents);
-      hasLocalChangesRef.current = false;
-    } catch (error) {
-      setSerializationErrorMessage(
-        getErrorMessage(error, text("errors.markdownSerializeFailed")),
-      );
-    }
-  }, [isReadOnly, isSaving, markdown, onSaveRequest, serializeMarkdown, text]);
-
   const saveMarkdownOnBlur = useCallback(
     (event: ReactFocusEvent<HTMLDivElement>): void => {
       const nextFocusedElement = event.relatedTarget;
@@ -943,6 +967,11 @@ export const MarkdownBlockEditor = forwardRef<
                 >
                   {directoryOptions.map((directory) => (
                     <button
+                      aria-expanded={
+                        directory.hasChildDirectories
+                          ? directory.isExpanded
+                          : undefined
+                      }
                       aria-selected={
                         directory.path ===
                         linkDialogState.newDocumentDirectoryPath
@@ -955,9 +984,25 @@ export const MarkdownBlockEditor = forwardRef<
                       }
                       key={directory.path || "__root__"}
                       onClick={() => {
+                        const expandedDirectoryPaths = new Set(
+                          linkDialogState.expandedDirectoryPaths,
+                        );
+
+                        if (
+                          directory.path.length > 0 &&
+                          directory.hasChildDirectories
+                        ) {
+                          if (directory.isExpanded) {
+                            expandedDirectoryPaths.delete(directory.path);
+                          } else {
+                            expandedDirectoryPaths.add(directory.path);
+                          }
+                        }
+
                         setLinkDialogState({
                           ...linkDialogState,
                           errorMessage: null,
+                          expandedDirectoryPaths,
                           newDocumentDirectoryPath: directory.path,
                         });
                       }}
@@ -975,7 +1020,18 @@ export const MarkdownBlockEditor = forwardRef<
                       }
                       type="button"
                     >
-                      {directory.name}
+                      <span className="editor-link-directory-icon">
+                        {directory.hasChildDirectories ? (
+                          directory.isExpanded ? (
+                            <ChevronDown aria-hidden="true" size={14} />
+                          ) : (
+                            <ChevronRight aria-hidden="true" size={14} />
+                          )
+                        ) : null}
+                      </span>
+                      <span className="editor-link-directory-name">
+                        {directory.name}
+                      </span>
                     </button>
                   ))}
                 </div>

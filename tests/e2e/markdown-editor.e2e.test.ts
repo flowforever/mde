@@ -1906,10 +1906,111 @@ test('inserts a Markdown link from the editor slash command picker', async () =>
       .click()
 
     await expect(linkDialog).toHaveCount(0)
-    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
     await expect
       .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
       .toContain('[intro.md](docs/intro.md)')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('creates an editor link document from the visible current directory picker', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const workspaceRoot = await realpath(workspacePath)
+  const deepPath = join(workspacePath, 'docs', 'nested', 'deep.md')
+
+  await mkdir(join(workspacePath, '.mde'), { recursive: true })
+  await writeFile(join(workspacePath, '.mde', 'hidden.md'), '# Hidden')
+  await mkdir(join(workspacePath, 'private'), { recursive: true })
+  await writeFile(join(workspacePath, 'private', 'secret.md'), '# Secret')
+  await mkdir(join(workspacePath, 'other', 'child'), { recursive: true })
+  await writeFile(join(workspacePath, 'other', 'child', 'leaf.md'), '# Leaf')
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await window.evaluate((rootPath) => {
+      globalThis.localStorage.setItem(
+        'mde.hiddenExplorerEntries',
+        JSON.stringify({
+          [rootPath]: ['private']
+        })
+      )
+      globalThis.localStorage.removeItem('mde.defaultHiddenExplorerWorkspaces')
+    }, workspaceRoot)
+    await window.reload({ waitUntil: 'domcontentloaded' })
+    await window.locator('.app-shell').waitFor({ state: 'visible' })
+
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /expand docs/i }).click()
+    await window.getByRole('button', { name: /expand nested/i }).click()
+    await window
+      .getByRole('button', { name: /deep\.md Markdown file/i })
+      .click()
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await expect(editableDocument).toBeVisible()
+    await editableDocument.click()
+    await window.keyboard.press('End')
+    await window.keyboard.press('Enter')
+    await window.keyboard.insertText('/')
+    await window.getByText(/^Link$/).click()
+
+    const linkDialog = window.getByRole('dialog', { name: /insert link/i })
+
+    await expect(linkDialog).toBeVisible()
+    await linkDialog.getByRole('tab', { name: /new document/i }).click()
+
+    const directoryTree = linkDialog.getByRole('tree', {
+      name: /directory tree/i
+    })
+
+    await expect(
+      directoryTree.getByRole('treeitem', { name: /^docs$/ })
+    ).toHaveAttribute('aria-expanded', 'true')
+    await expect(
+      directoryTree.getByRole('treeitem', { name: /^nested$/ })
+    ).toHaveAttribute('aria-selected', 'true')
+    await expect(
+      directoryTree.getByRole('treeitem', { name: /^other$/ })
+    ).toBeVisible()
+    await expect(
+      directoryTree.getByRole('treeitem', { name: /^child$/ })
+    ).toHaveCount(0)
+    await expect(
+      directoryTree.getByRole('treeitem', { name: /^\.mde$/ })
+    ).toHaveCount(0)
+    await expect(
+      directoryTree.getByRole('treeitem', { name: /^private$/ })
+    ).toHaveCount(0)
+
+    await linkDialog
+      .getByRole('textbox', { name: /new document name/i })
+      .fill('linked-note')
+    await linkDialog
+      .getByRole('button', { name: /create and insert/i })
+      .click()
+
+    await expect(linkDialog).toHaveCount(0)
+    await expect
+      .poll(
+        async () =>
+          stat(join(workspacePath, 'docs', 'nested', 'linked-note.md')).then(
+            (entry) => entry.isFile()
+          ),
+        { timeout: 10_000 }
+      )
+      .toBe(true)
+    await expect
+      .poll(async () => readFile(deepPath, 'utf8'), { timeout: 10_000 })
+      .toContain('[linked-note.md](linked-note.md)')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

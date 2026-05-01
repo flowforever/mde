@@ -2824,10 +2824,26 @@ body.is-resizing-explorer-panel {
 }
 
 .editor-link-directory {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   height: 30px;
   padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px);
   overflow: hidden;
   font-size: 13px;
+}
+
+.editor-link-directory-icon {
+  display: inline-flex;
+  flex: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--editor-muted);
+}
+
+.editor-link-directory-name {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

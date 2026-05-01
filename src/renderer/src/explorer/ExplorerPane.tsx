@@ -42,6 +42,12 @@ import {
   writeDefaultHiddenExplorerWorkspaces,
   writeHiddenExplorerEntries,
 } from "./hiddenExplorerEntries";
+import {
+  collectDefaultHiddenEntryPaths,
+  filterHiddenNodes,
+  findDirectoryPath,
+  getAncestorDirectoryPaths,
+} from "./explorerTreeVisibility";
 import type { AppState } from "../app/appTypes";
 import type { AiTool, AiToolId } from "../../../shared/ai";
 import type { UpdateCheckResult } from "../../../shared/update";
@@ -213,14 +219,6 @@ const joinEntryPath = (
   entryPath: string,
 ): string => (directoryPath ? `${directoryPath}/${entryPath}` : entryPath);
 
-const getAncestorDirectoryPaths = (entryPath: string): readonly string[] => {
-  const segments = entryPath.split("/").filter((segment) => segment.length > 0);
-
-  return segments
-    .slice(0, -1)
-    .map((_segment, index) => segments.slice(0, index + 1).join("/"));
-};
-
 const getDirectoryDepth = (directoryPath: string): number =>
   directoryPath.split("/").filter((segment) => segment.length > 0).length;
 
@@ -256,46 +254,6 @@ const clampDeleteConfirmationPosition = (
   };
 };
 
-const findDirectoryPath = (
-  nodes: readonly TreeNode[],
-  targetPath: string | null,
-): string | null => {
-  if (!targetPath) {
-    return null;
-  }
-
-  for (const node of nodes) {
-    if (node.type !== "directory") {
-      continue;
-    }
-
-    if (node.path === targetPath) {
-      return node.path;
-    }
-
-    const childDirectoryPath = findDirectoryPath(node.children, targetPath);
-
-    if (childDirectoryPath) {
-      return childDirectoryPath;
-    }
-  }
-
-  return null;
-};
-
-const collectDefaultHiddenEntryPaths = (
-  nodes: readonly TreeNode[],
-): readonly string[] =>
-  nodes.reduce<readonly string[]>((entryPaths, node) => {
-    const childEntryPaths =
-      node.type === "directory"
-        ? collectDefaultHiddenEntryPaths(node.children)
-        : [];
-    const nodeEntryPaths = node.name.startsWith(".") ? [node.path] : [];
-
-    return [...entryPaths, ...nodeEntryPaths, ...childEntryPaths];
-  }, []);
-
 const resolveCreatedEntryPath = (
   directoryPath: string | null,
   entryPath: string,
@@ -310,28 +268,6 @@ const resolveCreatedEntryPath = (
 
   return joinEntryPath(directoryPath, entryPath);
 };
-
-const filterHiddenNodes = (
-  nodes: readonly TreeNode[],
-  hiddenEntryPaths: ReadonlySet<string>,
-): readonly TreeNode[] =>
-  nodes.reduce<readonly TreeNode[]>((visibleNodes, node) => {
-    if (hiddenEntryPaths.has(node.path)) {
-      return visibleNodes;
-    }
-
-    if (node.type === "file") {
-      return [...visibleNodes, node];
-    }
-
-    return [
-      ...visibleNodes,
-      {
-        ...node,
-        children: filterHiddenNodes(node.children, hiddenEntryPaths),
-      },
-    ];
-  }, []);
 
 interface ThemeDialogColumn {
   readonly id: AppThemeTone;
