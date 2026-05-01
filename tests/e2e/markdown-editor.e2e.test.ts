@@ -142,6 +142,46 @@ const resetThemePreference = async (window: Page): Promise<void> => {
   })
 }
 
+const focusTextEndInEditor = async (
+  window: Page,
+  text: string
+): Promise<void> => {
+  await window.evaluate((targetText) => {
+    const editorSurface = document.querySelector('.markdown-editor-surface')
+
+    if (!editorSurface) {
+      throw new Error('Markdown editor surface is not available')
+    }
+
+    const walker = document.createTreeWalker(editorSurface, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+
+    while (node) {
+      const textContent = node.textContent ?? ''
+      const textIndex = textContent.indexOf(targetText)
+
+      if (textIndex !== -1) {
+        const range = document.createRange()
+        const selection = document.getSelection()
+        const editableElement = node.parentElement?.closest<HTMLElement>(
+          '[contenteditable="true"]'
+        ) ?? editorSurface.querySelector<HTMLElement>('[contenteditable="true"]')
+
+        editableElement?.focus()
+        range.setStart(node, textIndex + targetText.length)
+        range.collapse(true)
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        return
+      }
+
+      node = walker.nextNode()
+    }
+
+    throw new Error(`Unable to find editor text: ${targetText}`)
+  }, text)
+}
+
 test('shows the initial centered workspace popup', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp()
 
@@ -1609,8 +1649,7 @@ test('keeps the editing position after idle autosave', async () => {
       .first()
 
     await expect(editableDocument).toBeVisible()
-    await window.getByText('Middle anchor paragraph.').click()
-    await window.keyboard.press('End')
+    await focusTextEndInEditor(window, 'Middle anchor paragraph.')
     await window.keyboard.press('Enter')
     await window.keyboard.insertText('Autosave middle A')
 

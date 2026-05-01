@@ -14,7 +14,9 @@ export default tseslint.config(
       'dist/**',
       'node_modules/**',
       'out/**',
-      'release/**'
+      'playwright-report/**',
+      'release/**',
+      'test-results/**'
     ]
   },
   js.configs.recommended,
