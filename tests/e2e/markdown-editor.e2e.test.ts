@@ -155,6 +155,27 @@ const setAppLanguagePreference = async (
   await window.locator('.app-shell').waitFor({ state: 'visible' })
 }
 
+const addCustomAppLanguagePack = async (window: Page): Promise<void> => {
+  await window.evaluate(() => {
+    globalThis.localStorage.setItem(
+      'mde.customAppLanguagePacks',
+      JSON.stringify([
+        {
+          id: 'custom:spanish',
+          label: 'Spanish',
+          locale: 'es',
+          messages: {
+            'settings.title': 'Ajustes',
+            'workspace.openWorkspace': 'Abrir workspace'
+          }
+        }
+      ])
+    )
+  })
+  await window.reload({ waitUntil: 'domcontentloaded' })
+  await window.locator('.app-shell').waitFor({ state: 'visible' })
+}
+
 const focusTextEndInEditor = async (
   window: Page,
   text: string
@@ -333,6 +354,7 @@ test('switches the app language from Preference settings and persists it', async
 
   try {
     await setAppLanguagePreference(window, 'en')
+    await addCustomAppLanguagePack(window)
     await expect(window.getByRole('button', { name: /close workspace popup/i }))
       .toBeVisible()
     await window.getByRole('button', { name: /close workspace popup/i }).click()
@@ -345,6 +367,9 @@ test('switches the app language from Preference settings and persists it', async
     const languageSelect = window.getByRole('combobox', { name: /^Language$/ })
 
     await expect(languageSelect).toHaveValue('en')
+    await expect(
+      languageSelect.locator('option', { hasText: 'Spanish (Custom)' })
+    ).toHaveCount(1)
     await languageSelect.selectOption('zh')
 
     await expect(window.getByRole('dialog', { name: /^设置$/ })).toBeVisible()

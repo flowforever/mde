@@ -8,6 +8,7 @@ import {
   createAppText,
   createCustomAppLanguagePack,
   getAppLanguagePack,
+  isCustomAppLanguagePack,
   readAppLanguagePreference,
   readCustomAppLanguagePacks,
   resolveSystemAppLanguageId,
@@ -118,6 +119,10 @@ describe("app language preferences", () => {
     );
     expect(readCustomAppLanguagePacks(storage)).toEqual([customPack]);
     expect(getAppLanguagePack(customPack.id, [customPack])).toEqual(customPack);
+    expect(isCustomAppLanguagePack(customPack)).toBe(true);
+    expect(isCustomAppLanguagePack(BUILT_IN_APP_LANGUAGE_PACKS.en)).toBe(
+      false,
+    );
   });
 
   it("recovers custom language packs with missing generated keys", () => {

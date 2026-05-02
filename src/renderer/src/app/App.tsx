@@ -2054,7 +2054,7 @@ export const App = (): React.JSX.Element => {
         generationOptions,
       );
       const customLanguagePack = createCustomAppLanguagePack(
-        result.language,
+        language,
         result.entries,
       );
 

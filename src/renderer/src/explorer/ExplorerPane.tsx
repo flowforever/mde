@@ -67,7 +67,12 @@ import {
 import type { RecentWorkspace } from "../workspaces/recentWorkspaces";
 import type { TreeNode } from "../../../shared/fileTree";
 import type { DeletedDocumentHistoryEntry } from "../../../shared/documentHistory";
-import type { AppLanguagePack, AppText, AppTextKey } from "../i18n/appLanguage";
+import {
+  isCustomAppLanguagePack,
+  type AppLanguagePack,
+  type AppText,
+  type AppTextKey,
+} from "../i18n/appLanguage";
 
 interface ExplorerPaneProps {
   readonly aiSettings?: AiCliSettings;
@@ -120,6 +125,7 @@ interface ExplorerPaneProps {
 }
 
 type PendingExplorerAction = "create-file" | "create-folder" | "rename" | null;
+type AppLanguagePackGenerationMode = "create" | "update" | null;
 type SettingsPanelId = "ai" | "preferences" | "theme" | "updates";
 
 interface EntryContextMenu {
@@ -477,7 +483,10 @@ export const ExplorerPane = ({
   const [activeSettingsPanel, setActiveSettingsPanel] =
     useState<SettingsPanelId>("theme");
   const [customAppLanguageInput, setCustomAppLanguageInput] = useState("");
-  const [isGeneratingAppLanguage, setIsGeneratingAppLanguage] = useState(false);
+  const [
+    appLanguagePackGenerationMode,
+    setAppLanguagePackGenerationMode,
+  ] = useState<AppLanguagePackGenerationMode>(null);
   const [languagePreferenceMessage, setLanguagePreferenceMessage] = useState<
     string | null
   >(null);
@@ -989,6 +998,25 @@ export const ExplorerPane = ({
   const selectedAiModelName = effectiveAiToolId
     ? (aiSettings.modelNames[effectiveAiToolId] ?? "")
     : "";
+  const selectedLanguagePack =
+    availableLanguagePacks.find(
+      (languagePack) => languagePack.id === selectedLanguageId,
+    ) ?? null;
+  const selectedCustomLanguagePack =
+    selectedLanguagePack && isCustomAppLanguagePack(selectedLanguagePack)
+      ? selectedLanguagePack
+      : null;
+  const isGeneratingAppLanguage = appLanguagePackGenerationMode !== null;
+  const canGenerateAppLanguagePack =
+    aiTools.length > 0 && Boolean(onGenerateAppLanguagePack);
+  const getLanguagePackOptionLabel = (
+    languagePack: AppLanguagePack,
+  ): string =>
+    isCustomAppLanguagePack(languagePack)
+      ? text("settings.customLanguageOptionLabel", {
+          language: languagePack.label,
+        })
+      : languagePack.label;
   const workspaceTriggerLabel = state.isOpeningWorkspace
     ? text("workspace.opening")
     : (state.workspace?.name ?? text("workspace.openWorkspace"));
@@ -1108,22 +1136,31 @@ export const ExplorerPane = ({
       selectedToolId: aiSettings.selectedToolId ?? effectiveAiToolId,
     });
   };
-  const generateAppLanguagePack = async (): Promise<void> => {
-    const language = customAppLanguageInput.trim();
+  const runAppLanguagePackGeneration = async (
+    language: string,
+    mode: Exclude<AppLanguagePackGenerationMode, null>,
+  ): Promise<void> => {
+    const trimmedLanguage = language.trim();
 
-    if (language.length === 0 || isGeneratingAppLanguage) {
+    if (
+      trimmedLanguage.length === 0 ||
+      isGeneratingAppLanguage ||
+      !onGenerateAppLanguagePack
+    ) {
       return;
     }
 
-    setIsGeneratingAppLanguage(true);
+    setAppLanguagePackGenerationMode(mode);
     setLanguagePreferenceMessage(null);
     setLanguagePreferenceErrorMessage(null);
 
     try {
-      await onGenerateAppLanguagePack(language);
-      setCustomAppLanguageInput("");
+      await onGenerateAppLanguagePack(trimmedLanguage);
+      if (mode === "create") {
+        setCustomAppLanguageInput("");
+      }
       setLanguagePreferenceMessage(
-        text("settings.languagePackReady", { language }),
+        text("settings.languagePackReady", { language: trimmedLanguage }),
       );
     } catch (error) {
       setLanguagePreferenceErrorMessage(
@@ -1132,8 +1169,17 @@ export const ExplorerPane = ({
           : text("errors.languagePackGenerationFailed"),
       );
     } finally {
-      setIsGeneratingAppLanguage(false);
+      setAppLanguagePackGenerationMode(null);
     }
+  };
+  const generateAppLanguagePack = async (): Promise<void> => {
+    await runAppLanguagePackGeneration(customAppLanguageInput, "create");
+  };
+  const updateSelectedAppLanguagePack = async (): Promise<void> => {
+    await runAppLanguagePackGeneration(
+      selectedCustomLanguagePack?.label ?? "",
+      "update",
+    );
   };
   const checkForUpdates = async (): Promise<void> => {
     if (!onCheckForUpdates) {
@@ -1333,7 +1379,7 @@ export const ExplorerPane = ({
         >
           {availableLanguagePacks.map((languagePack) => (
             <option key={languagePack.id} value={languagePack.id}>
-              {languagePack.label}
+              {getLanguagePackOptionLabel(languagePack)}
             </option>
           ))}
         </select>
@@ -1345,7 +1391,7 @@ export const ExplorerPane = ({
         <h3>{text("settings.customLanguageName")}</h3>
         <p>{text("settings.customLanguageDescription")}</p>
       </div>
-      {aiTools.length > 0 ? (
+      {canGenerateAppLanguagePack ? (
         <form
           className="settings-custom-language-form"
           onSubmit={(event) => {
@@ -1375,7 +1421,7 @@ export const ExplorerPane = ({
           >
             <Languages aria-hidden="true" focusable="false" size={15} />
             <span>
-              {isGeneratingAppLanguage
+              {appLanguagePackGenerationMode === "create"
                 ? text("settings.generatingLanguagePack")
                 : text("settings.customLanguageAction")}
             </span>
@@ -1386,6 +1432,37 @@ export const ExplorerPane = ({
           {text("settings.noAiToolsForLanguage")}
         </p>
       )}
+      {selectedCustomLanguagePack && canGenerateAppLanguagePack ? (
+        <div className="settings-custom-language-update">
+          <p className="settings-muted-copy">
+            {text("settings.updateCustomLanguageDescription")}
+          </p>
+          <button
+            className="settings-primary-button"
+            disabled={isGeneratingAppLanguage}
+            onClick={() => {
+              void updateSelectedAppLanguagePack();
+            }}
+            type="button"
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={
+                appLanguagePackGenerationMode === "update"
+                  ? "is-spinning"
+                  : undefined
+              }
+              focusable="false"
+              size={15}
+            />
+            <span>
+              {appLanguagePackGenerationMode === "update"
+                ? text("settings.updatingLanguagePack")
+                : text("settings.updateCustomLanguageAction")}
+            </span>
+          </button>
+        </div>
+      ) : null}
       {languagePreferenceMessage ? (
         <p className="settings-status-message" role="status">
           {languagePreferenceMessage}

@@ -199,6 +199,7 @@ const EN_MESSAGES = {
   "settings.customLanguageDescription":
     "Use a detected AI CLI to translate MDE interface text into another language.",
   "settings.customLanguageName": "Custom app language",
+  "settings.customLanguageOptionLabel": "{language} (Custom)",
   "settings.customLanguagePlaceholder": "Spanish, Japanese, German...",
   "settings.defaultModelName": "Default model name",
   "settings.followSystemAppearance": "Follow system appearance",
@@ -219,6 +220,10 @@ const EN_MESSAGES = {
     "Choose app language and generate custom language packs.",
   "settings.preferenceTitle": "Preference",
   "settings.panelLabel": "{panel} settings",
+  "settings.updateCustomLanguageAction": "Update selected language pack",
+  "settings.updateCustomLanguageDescription":
+    "Refresh the selected custom language pack with AI using the latest app text.",
+  "settings.updatingLanguagePack": "Updating language pack...",
   "workspace.resourceTypeFile": "file",
   "workspace.resourceTypeWorkspace": "workspace",
   "settings.subtitle": "Configure editor behavior, AI tools, and app updates.",
@@ -524,6 +529,7 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "settings.customLanguageDescription":
     "使用检测到的 AI CLI 将 MDE 界面文案翻译成其他语言。",
   "settings.customLanguageName": "自定义应用语言",
+  "settings.customLanguageOptionLabel": "{language}（自定义）",
   "settings.customLanguagePlaceholder": "西班牙语、日语、德语...",
   "settings.defaultModelName": "默认模型名称",
   "settings.followSystemAppearance": "跟随系统外观",
@@ -541,6 +547,10 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "settings.preferenceDescription": "选择应用语言并生成自定义语言包。",
   "settings.preferenceTitle": "偏好",
   "settings.panelLabel": "{panel}设置",
+  "settings.updateCustomLanguageAction": "更新所选语言包",
+  "settings.updateCustomLanguageDescription":
+    "使用 AI 根据最新应用文案刷新当前选择的自定义语言包。",
+  "settings.updatingLanguagePack": "正在更新语言包...",
   "workspace.resourceTypeFile": "file",
   "workspace.resourceTypeWorkspace": "workspace",
   "settings.subtitle": "配置编辑器行为、AI 工具和应用更新。",
@@ -780,6 +790,10 @@ export const createAppLanguagePackEntries = (
     key,
     text: languagePack.messages[key] ?? EN_MESSAGES[key],
   }));
+
+export const isCustomAppLanguagePack = (
+  languagePack: Pick<AppLanguagePack, "id">,
+): boolean => languagePack.id.startsWith("custom:");
 
 const createCustomLanguageId = (languageLabel: string): string => {
   const slug = languageLabel

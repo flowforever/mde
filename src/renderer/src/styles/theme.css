@@ -2245,6 +2245,13 @@ body.is-resizing-explorer-panel .explorer-panel-resize-handle::after {
   gap: 10px;
 }
 
+.settings-custom-language-update {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .settings-error-message {
   color: var(--danger);
 }

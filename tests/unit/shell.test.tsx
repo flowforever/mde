@@ -1661,6 +1661,93 @@ describe("App shell", () => {
     );
   });
 
+  it("marks custom app languages and updates the selected pack through AI", async () => {
+    const user = userEvent.setup();
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      generateAppLanguagePack: vi.fn().mockResolvedValue({
+        entries: [
+          { key: "settings.title", text: "Ajustes actualizados" },
+          {
+            key: "settings.updateCustomLanguageAction",
+            text: "Actualizar paquete seleccionado",
+          },
+          { key: "workspace.openWorkspace", text: "Abrir workspace" },
+        ],
+        language: "Spanish",
+        tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+
+    localStorage.setItem(
+      "mde.customAppLanguagePacks",
+      JSON.stringify([
+        {
+          id: "custom:spanish",
+          label: "Spanish",
+          locale: "es",
+          messages: {
+            "settings.title": "Ajustes",
+            "workspace.openWorkspace": "Abrir workspace",
+          },
+        },
+      ]),
+    );
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    await user.click(screen.getByRole("button", { name: /preference/i }));
+
+    expect(
+      screen.getByRole("option", { name: "Spanish (Custom)" }),
+    ).toBeVisible();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /language/i }),
+      "custom:spanish",
+    );
+
+    expect(localStorage.getItem("mde.appLanguagePreference")).toBe(
+      "custom:spanish",
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /update selected language pack/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(aiApi.generateAppLanguagePack).toHaveBeenCalled();
+    });
+
+    const firstLanguagePackCall = aiApi.generateAppLanguagePack.mock
+      .calls[0] as Parameters<NonNullable<AiApi["generateAppLanguagePack"]>>;
+
+    expect(firstLanguagePackCall[0]).toBe("Spanish");
+    expect(firstLanguagePackCall[1]).toEqual(
+      expect.arrayContaining([
+        { key: "settings.title", text: "Ajustes" },
+        {
+          key: "settings.updateCustomLanguageAction",
+          text: "Update selected language pack",
+        },
+      ]),
+    );
+    expect(localStorage.getItem("mde.customAppLanguagePacks")).toContain(
+      "Ajustes actualizados",
+    );
+  });
+
   it("opens current editor search from the action bar and keyboard shortcut", async () => {
     const user = userEvent.setup();
     const editorApi = {

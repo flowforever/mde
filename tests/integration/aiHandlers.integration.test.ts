@@ -46,6 +46,8 @@ describe("aiHandlers integration", () => {
         return Promise.resolve(
           JSON.stringify({
             "settings.title": "Preferencias",
+            "settings.updateCustomLanguageAction":
+              "Actualizar paquete de idioma seleccionado",
             "workspace.openWorkspace": "Abrir workspace",
           }),
         );
@@ -83,6 +85,10 @@ describe("aiHandlers integration", () => {
       "Spanish",
       [
         { key: "settings.title", text: "Settings" },
+        {
+          key: "settings.updateCustomLanguageAction",
+          text: "Update selected language pack",
+        },
         { key: "workspace.openWorkspace", text: "Open workspace" },
       ],
     )) as {
@@ -93,6 +99,10 @@ describe("aiHandlers integration", () => {
     expect(result).toMatchObject({
       entries: [
         { key: "settings.title", text: "Preferencias" },
+        {
+          key: "settings.updateCustomLanguageAction",
+          text: "Actualizar paquete de idioma seleccionado",
+        },
         { key: "workspace.openWorkspace", text: "Abrir workspace" },
       ],
       language: "Spanish",

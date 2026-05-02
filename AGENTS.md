@@ -18,6 +18,8 @@ All user-visible production text must come from the app language packs and be ac
 
 Do not hard-code production UI text in components, renderer services, or preload-facing surfaces. Stable protocol identifiers, persisted keys, external product names, test fixture text, and test expectations may remain literal when they are not user-facing production copy.
 
+When changing the wording or meaning of existing user-facing production text, add a new language-pack key and switch call sites to that new key instead of reusing the old key. This keeps stored custom language packs from showing stale translations for text whose intent has changed.
+
 ## Release Tagging Policy
 
 When pushing a production-ready feature or bug fix to the release branch, publish it as a new release version in the same handoff unless the user explicitly says not to release it:
