@@ -35,9 +35,32 @@ const applyManualPreferences = async (window: Page): Promise<void> => {
   await window.locator('.app-shell').waitFor({ state: 'visible' })
 }
 
+const normalizeManualWorkspaceLabels = async (window: Page): Promise<void> => {
+  await window.evaluate(() => {
+    const workspaceTrigger = document.querySelector<HTMLElement>(
+      '.workspace-manager-button'
+    )
+    const workspaceName = workspaceTrigger?.querySelector<HTMLElement>(
+      'span:first-child'
+    )
+    const workspacePath = workspaceTrigger?.querySelector<HTMLElement>(
+      'span:nth-child(2)'
+    )
+
+    if (workspaceName) {
+      workspaceName.textContent = 'mde-manual-workspace'
+    }
+
+    if (workspacePath) {
+      workspacePath.textContent = '/Manual/MDE Workspace'
+    }
+  })
+}
+
 const capture = async (window: Page, filename: string): Promise<void> => {
   await window.waitForLoadState('domcontentloaded')
   await window.waitForTimeout(500)
+  await normalizeManualWorkspaceLabels(window)
   await window.screenshot({
     fullPage: true,
     path: join(OUTPUT_DIR, filename)

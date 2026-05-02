@@ -994,6 +994,174 @@ test('renders and preserves YAML frontmatter outside the editor body', async () 
   }
 })
 
+test('renders Markdown body with compact document typography', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const renderStylePath = join(workspacePath, 'render-style.md')
+
+  await writeFile(
+    renderStylePath,
+    [
+      '---',
+      'owner: docs',
+      'status: review',
+      '---',
+      '# Render Style Fixture',
+      '',
+      'Technical paragraph with frontmatter, workspace, Codex, Claude Code, and release notes terms.',
+      '',
+      '## Document Density',
+      '',
+      'Body copy should remain readable without turning each block into a large note card.',
+      '',
+      '### Nested Signal',
+      '',
+      '- First compact list item',
+      '- Second compact list item',
+      '',
+      '> A short quote should read like Markdown context, not oversized annotation text.',
+      '',
+      '```ts',
+      'const workspace = "mde";',
+      '```'
+    ].join('\n')
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await window.setViewportSize({ width: 1440, height: 900 })
+    await openNewWorkspace(window)
+    await window
+      .getByRole('button', { name: /render-style\.md Markdown file/i })
+      .click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+    const editorSurface = editor.locator('.markdown-editor-surface')
+
+    await expect(editor).toContainText('Frontmatter')
+    await expect(editorSurface).toContainText('Render Style Fixture')
+    await expect(editorSurface).toContainText('Document Density')
+    await expect(editorSurface).toContainText('A short quote should read like Markdown context')
+
+    const styles = await window.evaluate(() => {
+      const readElement = (selector: string): HTMLElement => {
+        const element = document.querySelector<HTMLElement>(selector)
+
+        if (!element) {
+          const availableElements = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '.markdown-editor-surface [data-content-type], .markdown-editor-surface .bn-block-content'
+            )
+          )
+            .slice(0, 24)
+            .map((availableElement) => {
+              const contentType = availableElement.getAttribute('data-content-type')
+              const level = availableElement.getAttribute('data-level')
+              const className = availableElement.className
+              const text = availableElement.textContent?.trim().slice(0, 42) ?? ''
+
+              return `${className} ${contentType ?? ''} ${level ?? ''} ${text}`.trim()
+            })
+            .join('\n')
+
+          throw new Error(
+            `Missing editor render element: ${selector}\nAvailable:\n${availableElements}`
+          )
+        }
+
+        return element
+      }
+      const readStyle = (selector: string) => {
+        const element = readElement(selector)
+        const style = getComputedStyle(element)
+
+        return {
+          backgroundColor: style.backgroundColor,
+          borderBottomWidth: Number.parseFloat(style.borderBottomWidth),
+          borderLeftWidth: Number.parseFloat(style.borderLeftWidth),
+          color: style.color,
+          fontSize: Number.parseFloat(style.fontSize),
+          lineHeight: Number.parseFloat(style.lineHeight),
+          paddingBottom: Number.parseFloat(style.paddingBottom),
+          paddingLeft: Number.parseFloat(style.paddingLeft),
+          paddingTop: Number.parseFloat(style.paddingTop)
+        }
+      }
+      const content = readElement('.markdown-editor-content')
+      const sideMenus = Array.from(
+        document.querySelectorAll<HTMLElement>('.markdown-editor-content .bn-side-menu')
+      ).map((element) => {
+        const style = getComputedStyle(element)
+
+        return {
+          display: style.display,
+          opacity: Number.parseFloat(style.opacity),
+          visibility: style.visibility
+        }
+      })
+
+      return {
+        body: readStyle(
+          '.markdown-editor-surface .bn-block-content[data-content-type="paragraph"]'
+        ),
+        code: readStyle(
+          '.markdown-editor-surface .bn-block-content[data-content-type="codeBlock"] > pre'
+        ),
+        h1: readStyle(
+          '.markdown-editor-surface .bn-block-content[data-content-type="heading"]:not([data-level])'
+        ),
+        h2: readStyle(
+          '.markdown-editor-surface .bn-block-content[data-content-type="heading"][data-level="2"]'
+        ),
+        h3: readStyle(
+          '.markdown-editor-surface .bn-block-content[data-content-type="heading"][data-level="3"]'
+        ),
+        list: readStyle(
+          '.markdown-editor-surface .bn-block-content[data-content-type="bulletListItem"]'
+        ),
+        quote: readStyle('.markdown-editor-surface [data-content-type="quote"] blockquote'),
+        sideMenus,
+        spellcheck: content.spellcheck
+      }
+    })
+
+    expect(styles.spellcheck).toBe(false)
+    expect(styles.body.fontSize).toBeGreaterThanOrEqual(16)
+    expect(styles.body.fontSize).toBeLessThanOrEqual(17.5)
+    expect(styles.body.lineHeight).toBeGreaterThanOrEqual(25)
+    expect(styles.body.lineHeight).toBeLessThanOrEqual(30)
+    expect(styles.h1.fontSize).toBeGreaterThanOrEqual(38)
+    expect(styles.h1.fontSize).toBeLessThanOrEqual(46)
+    expect(styles.h1.lineHeight / styles.h1.fontSize).toBeLessThanOrEqual(1.22)
+    expect(styles.h1.borderBottomWidth).toBeGreaterThanOrEqual(1)
+    expect(styles.h2.fontSize).toBeGreaterThanOrEqual(26)
+    expect(styles.h2.fontSize).toBeLessThanOrEqual(30)
+    expect(styles.h2.borderBottomWidth).toBeGreaterThanOrEqual(1)
+    expect(styles.h3.fontSize).toBeGreaterThanOrEqual(21)
+    expect(styles.h3.fontSize).toBeLessThanOrEqual(24)
+    expect(styles.h3.borderBottomWidth).toBe(0)
+    expect(styles.list.paddingTop).toBeLessThanOrEqual(4)
+    expect(styles.quote.borderLeftWidth).toBeGreaterThanOrEqual(3)
+    expect(styles.quote.fontSize).toBeGreaterThanOrEqual(16)
+    expect(styles.quote.fontSize).toBeLessThanOrEqual(17.5)
+    expect(styles.quote.paddingLeft).toBeGreaterThanOrEqual(12)
+    expect(styles.code.paddingTop).toBeGreaterThanOrEqual(14)
+    expect(
+      styles.sideMenus.every(
+        (sideMenu) =>
+          sideMenu.display === 'none' ||
+          sideMenu.visibility === 'hidden' ||
+          sideMenu.opacity <= 0.05
+      )
+    ).toBe(true)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('keeps loaded markdown intact when undo is pressed before editing', async () => {
   const workspacePath = await createFixtureWorkspace()
   const readmePath = join(workspacePath, 'README.md')

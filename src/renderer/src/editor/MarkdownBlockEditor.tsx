@@ -973,7 +973,13 @@ export const MarkdownBlockEditor = forwardRef<
           text={text}
         />
       ) : null}
-      <div onInputCapture={markEditorInput}>
+      <div
+        className="markdown-editor-content"
+        data-read-only={isReadOnly ? "true" : "false"}
+        data-testid="markdown-editor-content"
+        onInputCapture={markEditorInput}
+        spellCheck={false}
+      >
         <BlockNoteView
           className="markdown-editor-surface"
           data-testid="blocknote-view"

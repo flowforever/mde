@@ -354,6 +354,61 @@ describe("MarkdownBlockEditor accessibility", () => {
     expect(onSaveRequest).not.toHaveBeenCalled();
   });
 
+  it("marks the markdown body render mode and disables browser spellcheck", () => {
+    const { rerender } = render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Technical frontmatter workspace notes"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Technical frontmatter workspace notes"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    expect(screen.getByTestId("markdown-editor-content")).toHaveAttribute(
+      "data-read-only",
+      "false",
+    );
+    expect(screen.getByTestId("markdown-editor-content")).toHaveAttribute(
+      "spellcheck",
+      "false",
+    );
+
+    rerender(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Cached AI result"
+        errorMessage={null}
+        isDirty={false}
+        isReadOnly
+        isSaving={false}
+        markdown="# Cached AI result"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path=".mde/translations/README-summary.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    expect(screen.getByTestId("markdown-editor-content")).toHaveAttribute(
+      "data-read-only",
+      "true",
+    );
+    expect(screen.getByTestId("markdown-editor-content")).toHaveAttribute(
+      "spellcheck",
+      "false",
+    );
+  });
+
   it("shows restore actions and read-only preview state in the editor", async () => {
     const user = userEvent.setup();
     const onExitHistoryPreview = vi.fn();
