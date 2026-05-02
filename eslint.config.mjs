@@ -16,7 +16,8 @@ export default tseslint.config(
       'out/**',
       'playwright-report/**',
       'release/**',
-      'test-results/**'
+      'test-results/**',
+      'user-manual/.vitepress/dist/**'
     ]
   },
   js.configs.recommended,
@@ -34,7 +35,12 @@ export default tseslint.config(
     }
   },
   {
-    files: ['*.config.ts', 'src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}'],
+    files: [
+      '*.config.ts',
+      'src/**/*.{ts,tsx}',
+      'tests/**/*.{ts,tsx}',
+      'user-manual/.vitepress/**/*.ts'
+    ],
     languageOptions: {
       parserOptions: {
         projectService: true,

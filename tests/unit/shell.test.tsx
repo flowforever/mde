@@ -2448,6 +2448,108 @@ describe("App shell", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("toggles the recovery history panel from a deleted document preview", async () => {
+    const deletedDocument = {
+      deletedAt: "2026-05-02T01:00:00.000Z",
+      documentId: "doc_deleted",
+      latestVersionId: "version_deleted",
+      path: "deleted.md",
+      reason: "deleted-in-mde" as const,
+      versionCount: 1,
+    };
+    const historyVersion = {
+      blobHash: "hash",
+      byteLength: 14,
+      createdAt: "2026-05-02T01:00:00.000Z",
+      documentId: "doc_deleted",
+      event: "delete" as const,
+      id: "version_deleted",
+      path: "deleted.md",
+    };
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDeletedDocumentHistory: vi.fn().mockResolvedValue([deletedDocument]),
+      listDirectory: vi.fn(),
+      listDocumentHistory: vi.fn().mockResolvedValue([historyVersion]),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readDocumentHistoryVersion: vi.fn().mockResolvedValue({
+        contents: "# Deleted",
+        version: historyVersion,
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Current",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      restoreDeletedDocumentHistoryVersion: vi.fn(),
+      restoreDocumentHistoryVersion: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: /recover deleted documents/i,
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: /preview deleted document deleted\.md/i,
+      }),
+    );
+
+    expect(editorApi.listDocumentHistory).toHaveBeenCalledWith(
+      "deleted.md",
+      "/workspace",
+    );
+    expect(await screen.findByTestId("mock-editor-readonly")).toBeVisible();
+    expect(
+      screen.getByRole("complementary", { name: /version history/i }),
+    ).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^version history$/i }),
+    );
+
+    expect(
+      screen.queryByRole("complementary", { name: /version history/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^version history$/i }),
+    );
+
+    expect(editorApi.listDocumentHistory).toHaveBeenLastCalledWith(
+      "deleted.md",
+      "/workspace",
+    );
+    expect(
+      await screen.findByRole("complementary", { name: /version history/i }),
+    ).toBeVisible();
+  });
+
   it("resizes the explorer sidebar from the drag separator", () => {
     render(<App />);
 

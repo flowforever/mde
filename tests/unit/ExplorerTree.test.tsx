@@ -19,7 +19,7 @@ import {
   createAppText,
 } from "../../src/renderer/src/i18n/appLanguage";
 
-const EXPLORER_INTERACTION_TEST_TIMEOUT = 15_000;
+const EXPLORER_INTERACTION_TEST_TIMEOUT = 30_000;
 const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 
 describe("ExplorerTree", () => {

@@ -62,6 +62,16 @@ When a feature requirement or bug fix is completed and released:
 
 * Leave incomplete or not-yet-released requirement and bug documents in their original active directories.
 
+## User Manual
+
+User-facing feature and bug-fix changes must update `user-manual/` in the same change when behavior, UI flows, settings, AI actions, search, links, workspace handling, update behavior, or troubleshooting guidance changes.
+
+Screenshots used by the manual must be generated through the E2E screenshot workflow and must not contain personal paths, secrets, real account data, or machine-specific state.
+
+When a production release includes user-visible behavior changes, update the user manual before tagging, include the documentation change in release notes, and verify the docs build when the manual or site configuration changed.
+
+Do not publish internal engineering docs under `docs/requirements`, `docs/bugs`, or `docs/superpowers` as part of the public user manual.
+
 ## Verification
 
 Before handing off work, run the relevant checks for the changed surface:
