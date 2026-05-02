@@ -272,7 +272,11 @@ const bootstrap = async (): Promise<void> => {
   registerFileHandlers({
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain,
-    markdownFileService: createMarkdownFileService()
+    markdownFileService: createMarkdownFileService({
+      moveEntryToTrash: async (entryPath) => {
+        await shell.trashItem(entryPath)
+      }
+    })
   })
   registerAiHandlers({
     aiService: createAiService(),

@@ -1,5 +1,9 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
+import {
+  createDocumentHistoryService,
+  type DocumentHistoryService
+} from '../services/documentHistoryService'
 import type { MarkdownFileService } from '../services/markdownFileService'
 import { FILE_CHANNELS } from './channels'
 
@@ -7,6 +11,7 @@ interface RegisterFileHandlersOptions {
   readonly getActiveWorkspaceRoot: (
     event?: Pick<IpcMainInvokeEvent, 'sender'> | null
   ) => string | null
+  readonly documentHistoryService?: DocumentHistoryService
   readonly ipcMain: Pick<IpcMain, 'handle'>
   readonly markdownFileService: MarkdownFileService
 }
@@ -48,6 +53,7 @@ const assertArrayBufferInput = (value: unknown, name: string): ArrayBuffer => {
 }
 
 export const registerFileHandlers = ({
+  documentHistoryService = createDocumentHistoryService(),
   getActiveWorkspaceRoot,
   ipcMain,
   markdownFileService
@@ -89,6 +95,70 @@ export const registerFileHandlers = ({
           assertStringInput(workspaceRoot, 'Workspace root')
         ),
         assertStringInput(query, 'Search query')
+      )
+  )
+
+  ipcMain.handle(
+    FILE_CHANNELS.listDocumentHistory,
+    async (event, filePath, workspaceRoot) =>
+      documentHistoryService.listDocumentHistory(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        assertStringInput(filePath, 'File path')
+      )
+  )
+
+  ipcMain.handle(
+    FILE_CHANNELS.listDeletedDocumentHistory,
+    async (event, workspaceRoot) =>
+      documentHistoryService.markExternalDeletes(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        )
+      )
+  )
+
+  ipcMain.handle(
+    FILE_CHANNELS.readDocumentHistoryVersion,
+    async (event, versionId, workspaceRoot) =>
+      documentHistoryService.readVersion(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        assertStringInput(versionId, 'Version id')
+      )
+  )
+
+  ipcMain.handle(
+    FILE_CHANNELS.restoreDocumentHistoryVersion,
+    async (event, versionId, workspaceRoot) =>
+      documentHistoryService.restoreVersion(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        assertStringInput(versionId, 'Version id')
+      )
+  )
+
+  ipcMain.handle(
+    FILE_CHANNELS.restoreDeletedDocumentHistoryVersion,
+    async (event, versionId, workspaceRoot) =>
+      documentHistoryService.restoreVersion(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        assertStringInput(versionId, 'Version id')
       )
   )
 

@@ -12,6 +12,7 @@ import type {
 } from "react";
 import {
   Bot,
+  ArchiveRestore,
   ChevronDown,
   ChevronRight,
   Check,
@@ -65,6 +66,7 @@ import {
 } from "../theme/appThemes";
 import type { RecentWorkspace } from "../workspaces/recentWorkspaces";
 import type { TreeNode } from "../../../shared/fileTree";
+import type { DeletedDocumentHistoryEntry } from "../../../shared/documentHistory";
 import type { AppLanguagePack, AppText, AppTextKey } from "../i18n/appLanguage";
 
 interface ExplorerPaneProps {
@@ -80,6 +82,7 @@ interface ExplorerPaneProps {
   readonly onCreateFolder: (folderPath: string) => void;
   readonly onDeleteEntry: () => void;
   readonly onForgetWorkspace?: (workspace: RecentWorkspace) => void;
+  readonly onOpenDeletedDocumentHistory?: () => Promise<void> | void;
   readonly onOpenFile?: () => void;
   readonly onOpenRecentFile?: (filePath: string) => void;
   readonly onOpenWorkspace: () => void;
@@ -97,11 +100,15 @@ interface ExplorerPaneProps {
   ) => Promise<WorkspaceSearchResult>;
   readonly onSelectTheme?: (themeId: AppThemeId) => void;
   readonly onSelectEntry: (entryPath: string | null) => void;
+  readonly onSelectDeletedDocumentHistoryEntry?: (
+    entry: DeletedDocumentHistoryEntry,
+  ) => void;
   readonly onSelectFile: (filePath: string) => void;
   readonly onGenerateAppLanguagePack?: (language: string) => Promise<void>;
   readonly onSwitchWorkspace?: (workspace: RecentWorkspace) => void;
   readonly onToggleCollapsed?: () => void;
   readonly onToggleSystemTheme?: (shouldFollowSystem: boolean) => void;
+  readonly deletedDocumentHistory?: readonly DeletedDocumentHistoryEntry[];
   readonly recentFilePaths?: readonly string[];
   readonly recentWorkspaces?: readonly RecentWorkspace[];
   readonly resolvedTheme?: AppTheme;
@@ -393,6 +400,7 @@ export const ExplorerPane = ({
   onCreateFolder,
   onDeleteEntry,
   onForgetWorkspace = () => undefined,
+  onOpenDeletedDocumentHistory = () => undefined,
   onOpenFile = () => undefined,
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
@@ -403,11 +411,13 @@ export const ExplorerPane = ({
   onSearchWorkspace,
   onSelectTheme = () => undefined,
   onSelectEntry,
+  onSelectDeletedDocumentHistoryEntry = () => undefined,
   onSelectFile,
   onGenerateAppLanguagePack = () => Promise.resolve(),
   onSwitchWorkspace = () => undefined,
   onToggleCollapsed = () => undefined,
   onToggleSystemTheme = () => undefined,
+  deletedDocumentHistory = [],
   recentFilePaths = [],
   recentWorkspaces = [],
   resolvedTheme = APP_THEMES[0],
@@ -435,6 +445,10 @@ export const ExplorerPane = ({
   const [recentFilesPanelState, setRecentFilesPanelState] = useState(
     readRecentFilesPanelState,
   );
+  const [isDeletedDocumentsVisible, setDeletedDocumentsVisible] =
+    useState(false);
+  const [isDeletedDocumentsExpanded, setDeletedDocumentsExpanded] =
+    useState(false);
   const [expandedDirectoryState, setExpandedDirectoryState] =
     useState<ExpandedDirectoryState>(() => ({
       paths: new Set(),
@@ -957,6 +971,7 @@ export const ExplorerPane = ({
   const isShowingHiddenEntries =
     Boolean(workspaceRoot) &&
     showingHiddenEntriesWorkspaceRoot === workspaceRoot;
+  const shouldShowHiddenEntries = hasHiddenEntries && isShowingHiddenEntries;
   const shouldShowAutoWorkspaceDialog =
     shouldAutoOpenWorkspaceDialog && !hasDismissedAutoWorkspaceDialog;
   const isWorkspaceDialogOpen =
@@ -1061,6 +1076,18 @@ export const ExplorerPane = ({
       ...currentState,
       isCollapsed: !currentState.isCollapsed,
     }));
+  };
+  const toggleDeletedDocumentsPanel = (): void => {
+    setDeletedDocumentsVisible((currentValue) => {
+      const nextValue = !currentValue;
+
+      if (nextValue) {
+        setDeletedDocumentsExpanded(true);
+        void onOpenDeletedDocumentHistory();
+      }
+
+      return nextValue;
+    });
   };
   const selectAiTool = (toolId: AiToolId): void => {
     onAiSettingsChange({
@@ -1917,12 +1944,21 @@ export const ExplorerPane = ({
               <FolderPlus aria-hidden="true" focusable="false" size={16} />
             </button>
             <button
+              aria-label={text("history.recoverDeletedDocuments")}
+              className="explorer-icon-button"
+              onClick={toggleDeletedDocumentsPanel}
+              title={text("history.recoverDeletedDocuments")}
+              type="button"
+            >
+              <ArchiveRestore aria-hidden="true" focusable="false" size={16} />
+            </button>
+            <button
               aria-label={
-                isShowingHiddenEntries
+                shouldShowHiddenEntries
                   ? text("explorer.hideHiddenEntries")
                   : text("explorer.showHiddenEntries")
               }
-              aria-pressed={isShowingHiddenEntries}
+              aria-pressed={shouldShowHiddenEntries}
               className="explorer-icon-button"
               disabled={!hasHiddenEntries}
               onClick={() => {
@@ -1931,13 +1967,13 @@ export const ExplorerPane = ({
                 );
               }}
               title={
-                isShowingHiddenEntries
+                shouldShowHiddenEntries
                   ? text("explorer.hideHiddenEntries")
                   : text("explorer.showHiddenEntries")
               }
               type="button"
             >
-              {isShowingHiddenEntries ? (
+              {shouldShowHiddenEntries ? (
                 <EyeOff aria-hidden="true" focusable="false" size={16} />
               ) : (
                 <Eye aria-hidden="true" focusable="false" size={16} />
@@ -2173,6 +2209,68 @@ export const ExplorerPane = ({
                 )
               ) : null}
             </section>
+            {isDeletedDocumentsVisible ? (
+              <section
+                aria-label={text("history.deletedDocuments")}
+                className="explorer-deleted-documents-section"
+              >
+                <button
+                  aria-expanded={isDeletedDocumentsExpanded}
+                  className="explorer-section-header-button"
+                  onClick={() => {
+                    setDeletedDocumentsExpanded((currentValue) => !currentValue);
+                  }}
+                  type="button"
+                >
+                  {isDeletedDocumentsExpanded ? (
+                    <ChevronDown
+                      aria-hidden="true"
+                      focusable="false"
+                      size={14}
+                    />
+                  ) : (
+                    <ChevronRight
+                      aria-hidden="true"
+                      focusable="false"
+                      size={14}
+                    />
+                  )}
+                  <span>{text("history.deletedDocuments")}</span>
+                  <span>{deletedDocumentHistory.length}</span>
+                </button>
+                {isDeletedDocumentsExpanded ? (
+                  deletedDocumentHistory.length > 0 ? (
+                    <div className="explorer-deleted-document-list">
+                      {deletedDocumentHistory.map((entry) => (
+                        <button
+                          aria-label={text("history.openDeletedDocument", {
+                            path: entry.path,
+                          })}
+                          className="explorer-deleted-document-button"
+                          key={entry.documentId}
+                          onClick={() => {
+                            onSelectDeletedDocumentHistoryEntry(entry);
+                          }}
+                          type="button"
+                        >
+                          <ArchiveRestore
+                            aria-hidden="true"
+                            focusable="false"
+                            size={14}
+                          />
+                          <span>{getEntryName(entry.path)}</span>
+                          <span>{entry.path}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="explorer-recent-empty">
+                      {text("history.noDeletedDocuments")}
+                    </p>
+                  )
+                ) : null}
+              </section>
+            ) : null}
           </div>
         </div>
       ) : (

@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import type { FormEventHandler, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
@@ -121,6 +121,7 @@ vi.mock("@blocknote/mantine", () => ({
     editable,
     editor,
     onChange,
+    onInputCapture,
     theme,
   }: {
     readonly children?: ReactNode;
@@ -129,12 +130,14 @@ vi.mock("@blocknote/mantine", () => ({
     readonly editable?: boolean;
     readonly editor: unknown;
     readonly onChange: (editor: unknown) => void;
+    readonly onInputCapture?: FormEventHandler<HTMLDivElement>;
     readonly theme: "dark" | "light";
   }) => (
     <div
       className={className}
       data-testid={testId}
       data-theme={theme}
+      onInputCapture={onInputCapture}
       tabIndex={0}
     >
       <div
@@ -351,6 +354,52 @@ describe("MarkdownBlockEditor accessibility", () => {
     expect(onSaveRequest).not.toHaveBeenCalled();
   });
 
+  it("shows restore actions and read-only preview state in the editor", async () => {
+    const user = userEvent.setup();
+    const onExitHistoryPreview = vi.fn();
+    const onRestoreHistoryPreview = vi.fn();
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Previous"
+        errorMessage={null}
+        historyPreview={{
+          createdAtLabel: "Today 16:42",
+          eventLabel: "Manual save before",
+          sourcePath: "README.md",
+        }}
+        isDirty={false}
+        isReadOnly
+        isSaving={false}
+        markdown="# Previous"
+        onExitHistoryPreview={onExitHistoryPreview}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onRestoreHistoryPreview={onRestoreHistoryPreview}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /exit preview/i }));
+    await user.click(
+      screen.getByRole("button", { name: /restore this version/i }),
+    );
+
+    expect(screen.getByText(/read-only version preview/i)).toBeVisible();
+    expect(screen.getByText(/manual save before/i)).toBeVisible();
+    expect(screen.getByText(/today 16:42/i)).toBeVisible();
+    expect(screen.getByTestId("mock-contenteditable")).toHaveAttribute(
+      "contenteditable",
+      "false",
+    );
+    expect(onExitHistoryPreview).toHaveBeenCalledTimes(1);
+    expect(onRestoreHistoryPreview).toHaveBeenCalledTimes(1);
+  });
+
   it("shows visible dirty state text for unsaved changes", () => {
     render(
       <MarkdownBlockEditor
@@ -380,11 +429,11 @@ describe("MarkdownBlockEditor accessibility", () => {
       <>
         <MarkdownBlockEditor
           colorScheme="light"
-          draftMarkdown="# Fixture Workspace"
+          draftMarkdown="# Saved by previous request"
           errorMessage={null}
           isDirty
           isSaving={false}
-          markdown="# Fixture Workspace"
+          markdown="# Saved by previous request"
           onImageUpload={vi.fn()}
           onMarkdownChange={vi.fn()}
           onSaveRequest={onSaveRequest}
@@ -401,7 +450,9 @@ describe("MarkdownBlockEditor accessibility", () => {
     );
     await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
-    expect(onSaveRequest).toHaveBeenCalledWith("");
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith("");
+    });
   });
 
   it("saves block editor changes on blur even after the draft has updated", async () => {
@@ -453,7 +504,222 @@ describe("MarkdownBlockEditor accessibility", () => {
 
     await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
-    expect(onSaveRequest).toHaveBeenCalledWith("");
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith("");
+    });
+  });
+
+  it("saves the latest draft when blur serialization still matches persisted markdown", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Saved"
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Saved"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      "# Saved",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={["# Saved", "", "Blur draft"].join("\n")}
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Saved"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        ["# Saved", "", "Blur draft"].join("\n"),
+      );
+    });
+  });
+
+  it("saves editor input on blur before the BlockNote change callback settles", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+
+    render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Saved"
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown="# Saved"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      ["# Saved", "", "Blur input"].join("\n"),
+    );
+
+    await user.click(screen.getByTestId("mock-contenteditable"));
+    fireEvent.input(screen.getByTestId("mock-contenteditable"));
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        ["# Saved", "", "Blur input"].join("\n"),
+      );
+    });
+  });
+
+  it("saves the latest dirty draft when focus already left the editor", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Saved"
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown="# Saved"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      "# Saved",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={["# Saved", "", "Late dirty draft"].join("\n")}
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Saved"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        ["# Saved", "", "Late dirty draft"].join("\n"),
+      );
+    });
+  });
+
+  it("queues a blur save while a previous save is still running", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Fixture Workspace"
+          errorMessage={null}
+          isDirty
+          isSaving
+          markdown="# Fixture Workspace"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    expect(onSaveRequest).not.toHaveBeenCalled();
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Fixture Workspace"
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Fixture Workspace"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith("");
+    });
   });
 
   it("reports serialized markdown after editor changes", async () => {
@@ -651,6 +917,61 @@ describe("MarkdownBlockEditor accessibility", () => {
         isDirty={false}
         isSaving={false}
         markdown={editedMarkdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("does not rehydrate stale persisted markdown over unsaved local edits", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Original"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Original"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+
+    rerender(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Local unsaved edit"
+        errorMessage={null}
+        isDirty
+        isSaving={false}
+        markdown="# Previous save completed"
         onImageUpload={vi.fn()}
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}

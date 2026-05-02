@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { appReducer, createInitialAppState } from '../../src/renderer/src/app/appReducer'
 import type { Workspace } from '../../src/shared/workspace'
+import type {
+  DeletedDocumentHistoryEntry,
+  DocumentHistoryVersion
+} from '../../src/shared/documentHistory'
 
 describe('appReducer', () => {
   const workspace: Workspace = {
@@ -136,6 +140,113 @@ describe('appReducer', () => {
       path: 'README.md'
     })
     expect(state.fileErrorMessage).toBeNull()
+  })
+
+  it('stores and clears a read-only history preview for the current workspace', () => {
+    const loadedState = {
+      ...createInitialAppState(),
+      loadedFile: {
+        contents: '# Current',
+        path: 'README.md'
+      },
+      selectedFilePath: 'README.md',
+      workspace
+    }
+    const version: DocumentHistoryVersion = {
+      blobHash: 'hash',
+      byteLength: 10,
+      createdAt: '2026-05-02T01:00:00.000Z',
+      documentId: 'doc_1',
+      event: 'manual-save',
+      id: 'version_1',
+      path: 'README.md'
+    }
+
+    const previewState = appReducer(loadedState, {
+      contents: '# Previous',
+      mode: 'current-file',
+      type: 'history/preview-loaded',
+      version,
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(previewState.historyPreview).toMatchObject({
+      contents: '# Previous',
+      mode: 'current-file',
+      version
+    })
+
+    const closedState = appReducer(previewState, {
+      type: 'history/preview-closed',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(closedState.historyPreview).toBeNull()
+  })
+
+  it('stores document history versions and selected filter', () => {
+    const version: DocumentHistoryVersion = {
+      blobHash: 'hash',
+      byteLength: 10,
+      createdAt: '2026-05-02T01:00:00.000Z',
+      documentId: 'doc_1',
+      event: 'manual-save',
+      id: 'version_1',
+      path: 'README.md'
+    }
+    const workspaceState = appReducer(createInitialAppState(), {
+      type: 'workspace/opened',
+      workspace
+    })
+    const loadedState = appReducer(workspaceState, {
+      type: 'history/versions-loaded',
+      versions: [version],
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(loadedState.documentHistoryVersions).toEqual([version])
+    expect(loadedState.documentHistoryFilterId).toBe('all')
+    expect(loadedState.isDocumentHistoryPanelVisible).toBe(true)
+
+    const filteredState = appReducer(loadedState, {
+      filterId: 'saves',
+      type: 'history/filter-selected',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(filteredState.documentHistoryFilterId).toBe('saves')
+
+    const hiddenState = appReducer(filteredState, {
+      isVisible: false,
+      type: 'history/panel-visibility-set',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(hiddenState.isDocumentHistoryPanelVisible).toBe(false)
+  })
+
+  it('stores deleted document history for the current workspace', () => {
+    const deletedDocument: DeletedDocumentHistoryEntry = {
+      deletedAt: '2026-05-02T01:00:00.000Z',
+      documentId: 'doc_1',
+      latestVersionId: 'version_1',
+      path: 'deleted.md',
+      reason: 'deleted-in-mde',
+      versionCount: 1
+    }
+    const workspaceState = appReducer(createInitialAppState(), {
+      type: 'workspace/opened',
+      workspace
+    })
+
+    const state = appReducer(workspaceState, {
+      documents: [deletedDocument],
+      type: 'history/deleted-documents-loaded',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(state.deletedDocumentHistory).toEqual([deletedDocument])
+    expect(state.isDeletedDocumentHistoryVisible).toBe(true)
   })
 
   it('stores file load failures', () => {

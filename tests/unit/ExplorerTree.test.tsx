@@ -330,11 +330,105 @@ describe("ExplorerTree", () => {
     expect(
       screen.queryByRole("button", { name: /delete selected/i }),
     ).not.toBeInTheDocument();
-    expect(toolbarButtons).toHaveLength(5);
+    expect(toolbarButtons).toHaveLength(6);
     expect(toolbarButtons.indexOf(searchButton)).toBe(0);
     expect(toolbarButtons.indexOf(refreshButton)).toBe(
       toolbarButtons.indexOf(showHiddenButton) + 1,
     );
+  });
+
+  it("toggles deleted documents independently from recent files", async () => {
+    const user = userEvent.setup();
+    const onOpenDeletedDocumentHistory = vi.fn();
+    const onSelectDeletedDocumentHistoryEntry = vi.fn();
+    const deletedDocument = {
+      deletedAt: "2026-05-02T01:00:00.000Z",
+      documentId: "doc_1",
+      latestVersionId: "version_1",
+      path: "drafts/old.md",
+      reason: "deleted-in-mde" as const,
+      versionCount: 2,
+    };
+    const state: AppState = {
+      draftMarkdown: "# Fixture Workspace",
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDeletedDocumentHistoryVisible: false,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: "# Fixture Workspace",
+        path: "README.md",
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: "README.md",
+      selectedFilePath: "README.md",
+      workspace: {
+        name: "workspace",
+        rootPath: "/workspace",
+        tree,
+      },
+      deletedDocumentHistory: [deletedDocument],
+      historyPreview: null,
+    };
+
+    render(
+      <ExplorerPane
+        deletedDocumentHistory={[deletedDocument]}
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenDeletedDocumentHistory={onOpenDeletedDocumentHistory}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectDeletedDocumentHistoryEntry={
+          onSelectDeletedDocumentHistoryEntry
+        }
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        text={text}
+        state={state}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /recover deleted documents/i }),
+    );
+
+    expect(onOpenDeletedDocumentHistory).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: /^deleted documents/i }),
+    ).toBeVisible();
+    expect(
+      screen
+        .getByRole("button", { name: /drafts\/old\.md/i })
+        .closest(".explorer-recent-files-section"),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /recent files/i }));
+
+    expect(
+      screen.getByRole("button", { name: /^deleted documents/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /drafts\/old\.md/i }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /drafts\/old\.md/i }));
+
+    expect(onSelectDeletedDocumentHistoryEntry).toHaveBeenCalledWith(
+      deletedDocument,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /recover deleted documents/i }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /^deleted documents/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("labels explorer rows with entry type and active state", () => {

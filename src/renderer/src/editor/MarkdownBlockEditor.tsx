@@ -1,6 +1,5 @@
 import {
   type CSSProperties,
-  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   forwardRef,
   useCallback,
@@ -26,6 +25,7 @@ import {
   ChevronRight,
   FilePlus2,
   Link as LinkIcon,
+  RotateCcw,
   X,
 } from "lucide-react";
 
@@ -63,15 +63,22 @@ interface MarkdownBlockEditorProps {
   readonly colorScheme: "dark" | "light";
   readonly draftMarkdown: string;
   readonly errorMessage: string | null;
+  readonly historyPreview?: {
+    readonly createdAtLabel: string;
+    readonly eventLabel: string;
+    readonly sourcePath?: string;
+  } | null;
   readonly isDirty: boolean;
   readonly isReadOnly?: boolean;
   readonly isSaving: boolean;
   readonly markdown: string;
   readonly markdownFilePaths?: readonly string[];
   readonly onCreateLinkedMarkdown?: (filePath: string) => Promise<string>;
+  readonly onExitHistoryPreview?: () => void;
   readonly onImageUpload: (file: File) => Promise<string>;
   readonly onOpenLink?: (href: string) => void;
   readonly onMarkdownChange: (contents: string) => void;
+  readonly onRestoreHistoryPreview?: () => void;
   readonly onSaveRequest: (contents: string) => void | Promise<void>;
   readonly onSearchStateChange?: (state: {
     readonly activeMatchIndex: number;
@@ -117,6 +124,9 @@ interface LinkDialogState {
 const SEARCH_MATCH_HIGHLIGHT_NAME = "mde-editor-search-match";
 const SEARCH_ACTIVE_HIGHLIGHT_NAME = "mde-editor-search-active";
 const LINK_SUGGESTION_LIMIT = 20;
+const BLUR_SAVE_SETTLE_DELAY_MS = 50;
+const BLUR_SAVE_RETRY_DELAY_MS = 100;
+const BLUR_SAVE_UNCHANGED_RETRY_LIMIT = 20;
 
 const joinWorkspacePath = (parentPath: string, entryName: string): string =>
   parentPath ? `${parentPath}/${entryName}` : entryName;
@@ -205,15 +215,18 @@ export const MarkdownBlockEditor = forwardRef<
     colorScheme,
     errorMessage,
     draftMarkdown,
+    historyPreview = null,
     isDirty,
     isReadOnly = false,
     isSaving,
     markdownFilePaths = [],
     markdown,
     onCreateLinkedMarkdown,
+    onExitHistoryPreview = () => undefined,
     onImageUpload,
     onOpenLink = () => undefined,
     onMarkdownChange,
+    onRestoreHistoryPreview = () => undefined,
     onSaveRequest,
     onSearchStateChange = () => undefined,
     path,
@@ -253,7 +266,14 @@ export const MarkdownBlockEditor = forwardRef<
   );
   const isHydratingRef = useRef(false);
   const hasLocalChangesRef = useRef(false);
+  const pendingSaveAfterCurrentRef = useRef(false);
+  const pendingBlurSaveTimeoutRef = useRef<number | null>(null);
   const latestDraftMarkdownRef = useRef(draftMarkdown);
+  const documentIdentity = useMemo(
+    () => `${workspaceRoot}:${path}`,
+    [path, workspaceRoot],
+  );
+  const activeDocumentIdentityRef = useRef(documentIdentity);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [parseErrorMessage, setParseErrorMessage] = useState<string | null>(
     null,
@@ -331,10 +351,7 @@ export const MarkdownBlockEditor = forwardRef<
   );
 
   const serializeMarkdown = useCallback(async (): Promise<string> => {
-    const exportedMarkdown = await exportBlocksToMarkdown(
-      editor,
-      editor.document,
-    );
+    const exportedMarkdown = await exportBlocksToMarkdown(editor);
     const portableMarkdown = prepareMarkdownForStorage(
       exportedMarkdown,
       assetContext,
@@ -347,21 +364,50 @@ export const MarkdownBlockEditor = forwardRef<
     return composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown);
   }, [assetContext, draftMarkdownDocument, editor]);
 
-  const saveMarkdown = useCallback(async (): Promise<void> => {
-    if (isReadOnly || isSaving || !hasLocalChangesRef.current) {
+  const saveMarkdown = useCallback(async (options: {
+    readonly preserveLocalChangesWhenUnchanged?: boolean;
+    readonly retryUnchangedCount?: number;
+  } = {}): Promise<void> => {
+    if (isReadOnly || !hasLocalChangesRef.current) {
+      return;
+    }
+
+    if (isSaving) {
+      pendingSaveAfterCurrentRef.current = true;
       return;
     }
 
     try {
       const contents = await serializeMarkdown();
+      const latestDraftMarkdown = latestDraftMarkdownRef.current;
+      const contentsToSave =
+        contents === markdown && latestDraftMarkdown !== markdown
+          ? latestDraftMarkdown
+          : contents;
 
-      if (contents === markdown) {
-        hasLocalChangesRef.current = false;
+      if (contentsToSave === markdown) {
+        if (
+          options.preserveLocalChangesWhenUnchanged &&
+          (options.retryUnchangedCount ?? 0) > 0
+        ) {
+          window.setTimeout(() => {
+            void saveMarkdown({
+              preserveLocalChangesWhenUnchanged: true,
+              retryUnchangedCount: (options.retryUnchangedCount ?? 0) - 1,
+            });
+          }, BLUR_SAVE_RETRY_DELAY_MS);
+          return;
+        }
+
+        if (!options.preserveLocalChangesWhenUnchanged) {
+          hasLocalChangesRef.current = false;
+        }
         return;
       }
 
       setSerializationErrorMessage(null);
-      await onSaveRequest(contents);
+      await onSaveRequest(contentsToSave);
+      pendingSaveAfterCurrentRef.current = false;
       hasLocalChangesRef.current = false;
     } catch (error) {
       setSerializationErrorMessage(
@@ -369,6 +415,15 @@ export const MarkdownBlockEditor = forwardRef<
       );
     }
   }, [isReadOnly, isSaving, markdown, onSaveRequest, serializeMarkdown, text]);
+
+  useEffect(() => {
+    if (isSaving || !pendingSaveAfterCurrentRef.current) {
+      return;
+    }
+
+    pendingSaveAfterCurrentRef.current = false;
+    void saveMarkdown();
+  }, [isSaving, saveMarkdown]);
 
   const closeLinkDialog = useCallback((): void => {
     setLinkDialogState(null);
@@ -567,14 +622,21 @@ export const MarkdownBlockEditor = forwardRef<
   );
 
   useEffect(() => {
+    if (activeDocumentIdentityRef.current === documentIdentity) {
+      return;
+    }
+
+    activeDocumentIdentityRef.current = documentIdentity;
+    pendingSaveAfterCurrentRef.current = false;
+    hasLocalChangesRef.current = false;
+  }, [documentIdentity]);
+
+  useEffect(() => {
     let isCurrent = true;
 
     const loadMarkdown = async (): Promise<void> => {
       try {
-        if (
-          hasLocalChangesRef.current &&
-          markdown === latestDraftMarkdownRef.current
-        ) {
+        if (hasLocalChangesRef.current) {
           return;
         }
 
@@ -608,15 +670,20 @@ export const MarkdownBlockEditor = forwardRef<
       isCurrent = false;
       isHydratingRef.current = false;
     };
-  }, [editor, editorMarkdown, markdown, text]);
+  }, [documentIdentity, editor, editorMarkdown, markdown, text]);
 
   useEffect(() => {
     latestDraftMarkdownRef.current = draftMarkdown;
   }, [draftMarkdown]);
 
   useEffect(() => {
+    if (isDirty || draftMarkdown !== markdown) {
+      return;
+    }
+
+    pendingSaveAfterCurrentRef.current = false;
     hasLocalChangesRef.current = false;
-  }, [markdown, path, workspaceRoot]);
+  }, [draftMarkdown, isDirty, markdown]);
 
   useEffect(() => {
     if (searchQuery.trim().length === 0) {
@@ -705,27 +772,101 @@ export const MarkdownBlockEditor = forwardRef<
     searchRevision,
   ]);
 
-  const saveMarkdownOnBlur = useCallback(
-    (event: ReactFocusEvent<HTMLDivElement>): void => {
-      const nextFocusedElement = event.relatedTarget;
+  useEffect(() => {
+    if (isReadOnly) {
+      return;
+    }
+
+    const scheduleSaveAfterLeavingEditor = (): void => {
+      if (pendingBlurSaveTimeoutRef.current !== null) {
+        window.clearTimeout(pendingBlurSaveTimeoutRef.current);
+      }
+
+      pendingBlurSaveTimeoutRef.current = window.setTimeout(() => {
+        pendingBlurSaveTimeoutRef.current = null;
+        void saveMarkdown({
+          preserveLocalChangesWhenUnchanged: true,
+          retryUnchangedCount: BLUR_SAVE_UNCHANGED_RETRY_LIMIT,
+        });
+      }, BLUR_SAVE_SETTLE_DELAY_MS);
+    };
+    const handlePointerDown = (event: PointerEvent): void => {
+      const shellElement = shellRef.current;
+      const eventTarget = event.target;
 
       if (
-        nextFocusedElement instanceof Node &&
-        event.currentTarget.contains(nextFocusedElement)
+        !shellElement ||
+        !(eventTarget instanceof Node) ||
+        shellElement.contains(eventTarget)
       ) {
         return;
       }
 
+      scheduleSaveAfterLeavingEditor();
+    };
+    const handleFocusOut = (event: FocusEvent): void => {
+      const shellElement = shellRef.current;
+      const nextFocusedElement = event.relatedTarget;
+
+      if (
+        !shellElement ||
+        (nextFocusedElement instanceof Node &&
+          shellElement.contains(nextFocusedElement))
+      ) {
+        return;
+      }
+
+      scheduleSaveAfterLeavingEditor();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("focusout", handleFocusOut, true);
+
+    return () => {
+      if (pendingBlurSaveTimeoutRef.current !== null) {
+        window.clearTimeout(pendingBlurSaveTimeoutRef.current);
+        pendingBlurSaveTimeoutRef.current = null;
+      }
+
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("focusout", handleFocusOut, true);
+    };
+  }, [isReadOnly, saveMarkdown]);
+  const markEditorInput = useCallback((): void => {
+    if (isReadOnly || isHydratingRef.current) {
+      return;
+    }
+
+    hasLocalChangesRef.current = true;
+  }, [isReadOnly]);
+
+  useEffect(() => {
+    if (isReadOnly || !isDirty || isSaving) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+
+    if (
+      activeElement instanceof Node &&
+      shellRef.current?.contains(activeElement)
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
       void saveMarkdown();
-    },
-    [saveMarkdown],
-  );
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [draftMarkdown, isDirty, isReadOnly, isSaving, saveMarkdown]);
 
   return (
     <div
       className="markdown-editor-shell"
       data-testid="markdown-block-editor"
-      onBlur={saveMarkdownOnBlur}
       ref={shellRef}
     >
       <div className="markdown-editor-titlebar">
@@ -749,7 +890,41 @@ export const MarkdownBlockEditor = forwardRef<
             </span>
           ) : null}
         </div>
+        <div className="markdown-editor-titlebar-actions">
+          {historyPreview ? (
+            <>
+              <button
+                className="markdown-editor-secondary-button"
+                onClick={onExitHistoryPreview}
+                type="button"
+              >
+                {text("history.exitPreview")}
+              </button>
+              <button
+                className="markdown-editor-primary-button"
+                onClick={onRestoreHistoryPreview}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" size={15} />
+                {text("history.restoreThisVersion")}
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
+      {historyPreview ? (
+        <section
+          aria-live="polite"
+          className="markdown-editor-history-preview-banner"
+          role="status"
+        >
+          <strong>{text("history.readOnlyPreview")}</strong>
+          <span>
+            {historyPreview.eventLabel} · {historyPreview.createdAtLabel}
+            {historyPreview.sourcePath ? ` · ${historyPreview.sourcePath}` : ""}
+          </span>
+        </section>
+      ) : null}
       {parseErrorMessage ? (
         <p className="markdown-editor-error" role="alert">
           {parseErrorMessage}
@@ -789,52 +964,57 @@ export const MarkdownBlockEditor = forwardRef<
           text={text}
         />
       ) : null}
-      <BlockNoteView
-        className="markdown-editor-surface"
-        data-testid="blocknote-view"
-        editable={!isReadOnly}
-        editor={editor}
-        onChange={(changedEditor) => {
-          if (isReadOnly || isHydratingRef.current) {
-            return;
-          }
+      <div onInputCapture={markEditorInput}>
+        <BlockNoteView
+          className="markdown-editor-surface"
+          data-testid="blocknote-view"
+          editable={!isReadOnly}
+          editor={editor}
+          onChange={(changedEditor) => {
+            if (isReadOnly || isHydratingRef.current) {
+              return;
+            }
 
-          hasLocalChangesRef.current = true;
-          void exportBlocksToMarkdown(changedEditor, changedEditor.document)
-            .then((contents) => {
-              const portableContents = prepareMarkdownForStorage(
-                contents,
-                assetContext,
-              );
-              const bodyMarkdown = replaceMermaidBlocksFromSource(
-                portableContents,
-                draftMarkdownDocument.body,
-              );
+            hasLocalChangesRef.current = true;
+            void exportBlocksToMarkdown(changedEditor)
+              .then((contents) => {
+                const portableContents = prepareMarkdownForStorage(
+                  contents,
+                  assetContext,
+                );
+                const bodyMarkdown = replaceMermaidBlocksFromSource(
+                  portableContents,
+                  draftMarkdownDocument.body,
+                );
 
-              setSerializationErrorMessage(null);
-              onMarkdownChange(
-                composeMarkdownWithFrontmatter(
-                  draftMarkdownDocument,
-                  bodyMarkdown,
-                ),
-              );
-            })
-            .catch((error: unknown) => {
-              setSerializationErrorMessage(
-                getErrorMessage(error, text("errors.markdownSerializeFailed")),
-              );
-            });
-        }}
-        slashMenu={false}
-        theme={colorScheme}
-      >
-        {!isReadOnly ? (
-          <SuggestionMenuController
-            getItems={linkSlashMenuItems}
-            triggerCharacter="/"
-          />
-        ) : null}
-      </BlockNoteView>
+                setSerializationErrorMessage(null);
+                onMarkdownChange(
+                  composeMarkdownWithFrontmatter(
+                    draftMarkdownDocument,
+                    bodyMarkdown,
+                  ),
+                );
+              })
+              .catch((error: unknown) => {
+                setSerializationErrorMessage(
+                  getErrorMessage(
+                    error,
+                    text("errors.markdownSerializeFailed"),
+                  ),
+                );
+              });
+          }}
+          slashMenu={false}
+          theme={colorScheme}
+        >
+          {!isReadOnly ? (
+            <SuggestionMenuController
+              getItems={linkSlashMenuItems}
+              triggerCharacter="/"
+            />
+          ) : null}
+        </BlockNoteView>
+      </div>
       {linkDialogState ? (
         <div
           aria-label={text("editor.linkDialogTitle")}

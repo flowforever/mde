@@ -68,6 +68,24 @@ describe("app language preferences", () => {
     expect(englishKeys.length).toBeGreaterThan(80);
   });
 
+  it("covers document history text in English and Chinese", () => {
+    const englishText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+    const chineseText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);
+
+    expect(englishText("history.versionHistory")).toBe("Version history");
+    expect(englishText("history.deletedDocuments")).toBe("Deleted Documents");
+    expect(englishText("history.panelTitle")).toBe("Document history");
+    expect(englishText("history.noVersions")).toBe("No versions yet");
+    expect(englishText("history.emptyAutosaveConfirm")).toContain(
+      "clear this document",
+    );
+    expect(chineseText("history.versionHistory")).toBe("版本历史");
+    expect(chineseText("history.deletedDocuments")).toBe("已删除文档");
+    expect(chineseText("history.panelTitle")).toBe("文档历史");
+    expect(chineseText("history.noVersions")).toBe("暂无版本");
+    expect(chineseText("history.emptyAutosaveConfirm")).toContain("清空文档");
+  });
+
   it("formats parameterized language pack text", () => {
     const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 

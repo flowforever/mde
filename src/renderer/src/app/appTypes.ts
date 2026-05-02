@@ -1,10 +1,28 @@
 import type { TreeNode } from '../../../shared/fileTree'
 import type { FileContents, Workspace } from '../../../shared/workspace'
+import type {
+  DeletedDocumentHistoryEntry,
+  DocumentHistoryFilterId,
+  DocumentHistoryVersion
+} from '../../../shared/documentHistory'
+
+export interface HistoryPreviewState {
+  readonly contents: string
+  readonly deletedDocument?: DeletedDocumentHistoryEntry
+  readonly mode: 'current-file' | 'deleted-document'
+  readonly version: DocumentHistoryVersion
+}
 
 export interface AppState {
+  readonly deletedDocumentHistory?: readonly DeletedDocumentHistoryEntry[]
+  readonly documentHistoryFilterId?: DocumentHistoryFilterId
+  readonly documentHistoryVersions?: readonly DocumentHistoryVersion[]
   readonly draftMarkdown: string | null
   readonly errorMessage: string | null
   readonly fileErrorMessage: string | null
+  readonly historyPreview?: HistoryPreviewState | null
+  readonly isDocumentHistoryPanelVisible?: boolean
+  readonly isDeletedDocumentHistoryVisible?: boolean
   readonly isDirty: boolean
   readonly isLoadingFile: boolean
   readonly isOpeningWorkspace: boolean
@@ -29,6 +47,44 @@ export type AppAction =
   | {
       readonly type: 'workspace/operation-failed'
       readonly message: string
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly type: 'history/deleted-documents-loaded'
+      readonly documents: readonly DeletedDocumentHistoryEntry[]
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly type: 'history/versions-loaded'
+      readonly versions: readonly DocumentHistoryVersion[]
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly filterId: DocumentHistoryFilterId
+      readonly type: 'history/filter-selected'
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly isVisible: boolean
+      readonly type: 'history/panel-visibility-set'
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly type: 'history/preview-loaded'
+      readonly contents: string
+      readonly deletedDocument?: DeletedDocumentHistoryEntry
+      readonly mode: 'current-file' | 'deleted-document'
+      readonly version: DocumentHistoryVersion
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly type: 'history/preview-closed'
+      readonly workspaceRoot: string
+    }
+  | {
+      readonly type: 'file/content-restored'
+      readonly contents: string
+      readonly filePath: string
       readonly workspaceRoot: string
     }
   | { readonly type: 'explorer/entry-selected'; readonly entryPath: string | null }

@@ -13,6 +13,7 @@ describe('workspaceService', () => {
 
     await mkdir(join(rootPath, 'z-folder'))
     await mkdir(join(rootPath, 'a-folder'))
+    await mkdir(join(rootPath, '.mde'))
     await mkdir(join(rootPath, 'node_modules'))
     await writeFile(join(rootPath, 'README.md'), '# Readme')
     await writeFile(join(rootPath, 'alpha.md'), '# Alpha')

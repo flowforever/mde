@@ -93,6 +93,37 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       filePath,
       workspaceRoot
     ) as Promise<FileContents>,
+  listDocumentHistory: (filePath, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.listDocumentHistory,
+      filePath,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['listDocumentHistory']>>,
+  listDeletedDocumentHistory: (workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.listDeletedDocumentHistory,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['listDeletedDocumentHistory']>>,
+  readDocumentHistoryVersion: (versionId, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.readDocumentHistoryVersion,
+      versionId,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['readDocumentHistoryVersion']>>,
+  restoreDocumentHistoryVersion: (versionId, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.restoreDocumentHistoryVersion,
+      versionId,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['restoreDocumentHistoryVersion']>>,
+  restoreDeletedDocumentHistoryVersion: (versionId, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.restoreDeletedDocumentHistoryVersion,
+      versionId,
+      workspaceRoot
+    ) as ReturnType<
+      NonNullable<EditorApi['restoreDeletedDocumentHistoryVersion']>
+    >,
   searchWorkspaceMarkdown: (query, workspaceRoot) =>
     ipcRenderer.invoke(
       FILE_CHANNELS.searchWorkspaceMarkdown,

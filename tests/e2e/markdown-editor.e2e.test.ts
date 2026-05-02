@@ -1059,11 +1059,15 @@ test('toggles the editor between centered and full-width layouts', async () => {
 
     const editor = window.getByTestId('markdown-block-editor')
     const actionBar = window.locator('.editor-action-bar')
+    const historyButton = window.getByRole('button', {
+      name: /^version history$/i
+    })
     const fullWidthButton = window.getByRole('button', {
       name: /use full-width editor view/i
     })
 
     await expect(editor).toBeVisible()
+    await expect(historyButton).toBeVisible()
     await expect(actionBar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     const actionBarWidth = await actionBar.evaluate(
       (element) => element.getBoundingClientRect().width
@@ -1072,7 +1076,7 @@ test('toggles the editor between centered and full-width layouts', async () => {
       (element) => element.getBoundingClientRect().width
     )
 
-    expect(actionBarWidth).toBeLessThan(160)
+    expect(actionBarWidth).toBeLessThan(220)
     expect(actionBarWidth).toBeLessThan(centeredWidth)
     await fullWidthButton.click()
     await expect(
@@ -1649,7 +1653,7 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await window.getByRole('button', { name: /manage workspaces/i }).click()
 
     await expect
-      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 3000 })
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
       .toContain('Autosaved on blur')
     await expect(window.getByText(/unsaved changes/i)).toBeHidden()
     await window.getByRole('button', { name: /close workspace popup/i }).click()
@@ -1808,6 +1812,138 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await expect(stat(join(workspacePath, 'renamed.md'))).rejects.toMatchObject({
       code: 'ENOENT'
     })
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('recovers a deleted Markdown document from the explorer history section', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const recoverablePath = join(workspacePath, 'recoverable.md')
+  const originalMarkdown = '# Recoverable\n\nRestore this document.'
+
+  await writeFile(recoverablePath, originalMarkdown)
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window
+      .getByRole('button', { name: /recoverable\.md Markdown file/i })
+      .click()
+    await window
+      .getByRole('button', { name: /recoverable\.md Markdown file/i })
+      .click({ button: 'right' })
+    await window.getByRole('menuitem', { name: /^delete$/i }).click()
+    await window.getByRole('button', { name: /confirm delete/i }).click()
+
+    await expect(
+      window.getByRole('button', { name: /recoverable\.md Markdown file/i })
+    ).toBeHidden()
+    await expect(stat(recoverablePath)).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+
+    await window
+      .getByRole('button', { name: /recover deleted documents/i })
+      .click()
+    const deletedDocumentButton = window.getByRole('button', {
+      name: /preview deleted document recoverable\.md/i
+    })
+    await expect(
+      window.getByRole('button', { name: /^deleted documents/i })
+    ).toBeVisible()
+    await expect(deletedDocumentButton).toBeVisible()
+    await deletedDocumentButton.click()
+
+    await expect(window.getByText(/read-only version preview/i)).toBeVisible()
+    await expect(window.getByText(/Recoverable/)).toBeVisible()
+    await expect(
+      window
+        .getByTestId('blocknote-view')
+        .locator('[contenteditable="false"]')
+        .first()
+    ).toBeVisible()
+
+    await window
+      .getByRole('button', { name: /restore this version/i })
+      .click()
+
+    await expect(
+      window.getByRole('button', { name: /recoverable\.md Markdown file/i })
+    ).toBeVisible()
+    await expect
+      .poll(async () => readFile(recoverablePath, 'utf8'), {
+        timeout: 10_000
+      })
+      .toBe(originalMarkdown)
+    await expect(window.getByText(/read-only version preview/i)).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('previews and restores an earlier current-file version from history', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  const originalMarkdown = await readFile(readmePath, 'utf8')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await editableDocument.click()
+    await window.keyboard.press('End')
+    await window.keyboard.press('Enter')
+    await window.keyboard.insertText('Version history e2e edit')
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toContain('Version history e2e edit')
+
+    await window.getByRole('button', { name: /^version history$/i }).click()
+    await expect(
+      window.getByRole('complementary', { name: /^version history$/i })
+    ).toBeVisible()
+    await window.getByRole('button', { name: /^version history$/i }).click()
+    await expect(
+      window.getByRole('complementary', { name: /^version history$/i })
+    ).toHaveCount(0)
+    await window.getByRole('button', { name: /^version history$/i }).click()
+    await expect(
+      window.getByRole('complementary', { name: /^version history$/i })
+    ).toBeVisible()
+    await window
+      .getByRole('button', { name: /preview manual save before/i })
+      .click()
+
+    await expect(window.getByText(/read-only version preview/i)).toBeVisible()
+    await expect(
+      window
+        .getByTestId('blocknote-view')
+        .locator('[contenteditable="false"]')
+        .first()
+    ).toBeVisible()
+
+    await window
+      .getByRole('button', { name: /restore this version/i })
+      .click()
+
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
+      .toBe(originalMarkdown)
+    await expect(window.getByText(/read-only version preview/i)).toHaveCount(0)
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

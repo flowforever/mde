@@ -8,6 +8,7 @@ import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 const ignoredEntryNames = new Set([
   '.DS_Store',
   '.git',
+  '.mde',
   'dist',
   'node_modules',
   'out',

@@ -12,12 +12,21 @@ import {
 } from "react";
 import {
   AlignHorizontalSpaceAround,
+  History,
   Search,
   StretchHorizontal,
   X,
 } from "lucide-react";
 
 import type { AiApi, AiGenerationResult, AiTool } from "../../../shared/ai";
+import {
+  DOCUMENT_HISTORY_EVENT_LABEL_KEYS,
+  DOCUMENT_HISTORY_FILTERS,
+  type DeletedDocumentHistoryEntry,
+  type DocumentHistoryEvent,
+  type DocumentHistoryFilterId,
+  type DocumentHistoryVersion,
+} from "../../../shared/documentHistory";
 import type {
   EditorApi,
   Workspace,
@@ -101,6 +110,8 @@ import {
   readCustomAppLanguagePacks,
   writeAppLanguagePreference,
   writeCustomAppLanguagePacks,
+  type AppText,
+  type AppTextKey,
 } from "../i18n/appLanguage";
 
 declare global {
@@ -113,6 +124,42 @@ declare global {
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
+
+const getHistoryEventLabel = (
+  event: DocumentHistoryEvent,
+  text: AppText,
+): string => text(DOCUMENT_HISTORY_EVENT_LABEL_KEYS[event] as AppTextKey);
+
+const formatHistoryTimestamp = (timestamp: string): string =>
+  new Date(timestamp).toLocaleString();
+
+const HISTORY_FILTER_LABEL_KEYS = Object.fromEntries(
+  DOCUMENT_HISTORY_FILTERS.map((filter) => [filter.id, filter.labelKey]),
+) as Record<DocumentHistoryFilterId, AppTextKey>;
+
+const filterHistoryVersions = (
+  versions: readonly DocumentHistoryVersion[],
+  filterId: DocumentHistoryFilterId,
+): readonly DocumentHistoryVersion[] => {
+  switch (filterId) {
+    case "ai":
+      return versions.filter((version) => version.event === "ai-write");
+    case "delete":
+      return versions.filter(
+        (version) =>
+          version.event === "delete" || version.event === "external-delete",
+      );
+    case "saves":
+      return versions.filter(
+        (version) =>
+          version.event === "manual-save" ||
+          version.event === "autosave" ||
+          version.event === "restore",
+      );
+    case "all":
+      return versions;
+  }
+};
 
 const findNodeByPath = (
   nodes: readonly TreeNode[],
@@ -204,6 +251,10 @@ const EXPLORER_WIDTH_MAX = 440;
 const AUTO_SAVE_IDLE_DELAY_MS = 5000;
 const SYSTEM_DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 const APP_VERSION = packageJson.version;
+
+interface SaveCurrentFileOptions {
+  readonly source?: "autosave" | "manual";
+}
 type ActiveAiActionBusyState = Exclude<AiActionBusyState, "idle">;
 
 interface ScopedAiGenerationResult {
@@ -1170,19 +1221,16 @@ export const App = (): React.JSX.Element => {
   );
 
   const saveCurrentFile = useCallback(
-    async (serializedMarkdown?: string): Promise<void> => {
+    async (
+      serializedMarkdown?: string,
+      options: SaveCurrentFileOptions = {},
+    ): Promise<void> => {
       const loadedFile = state.loadedFile;
       const workspaceRoot = state.workspace?.rootPath;
 
       if (!loadedFile || !workspaceRoot) {
         return;
       }
-
-      dispatch({
-        filePath: loadedFile.path,
-        type: "file/save-started",
-        workspaceRoot,
-      });
 
       try {
         if (!window.editorApi) {
@@ -1194,6 +1242,28 @@ export const App = (): React.JSX.Element => {
           state.draftMarkdown ??
           (await editorRef.current?.getMarkdown()) ??
           loadedFile.contents;
+
+        if (
+          options.source === "autosave" &&
+          loadedFile.contents.trim().length > 0 &&
+          contents.trim().length === 0 &&
+          !window.confirm(text("history.emptyAutosaveConfirm"))
+        ) {
+          dispatch({
+            contents: loadedFile.contents,
+            filePath: loadedFile.path,
+            type: "file/content-restored",
+            workspaceRoot,
+          });
+
+          return;
+        }
+
+        dispatch({
+          filePath: loadedFile.path,
+          type: "file/save-started",
+          workspaceRoot,
+        });
 
         await window.editorApi.writeMarkdownFile(
           loadedFile.path,
@@ -1217,6 +1287,228 @@ export const App = (): React.JSX.Element => {
     },
     [state.draftMarkdown, state.loadedFile, state.workspace?.rootPath, text],
   );
+
+  const openDeletedDocumentHistory = useCallback(async (): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!workspaceRoot) {
+      return;
+    }
+
+    try {
+      if (!window.editorApi?.listDeletedDocumentHistory) {
+        throw new Error(text("errors.editorApiUnavailable"));
+      }
+
+      const documents =
+        await window.editorApi.listDeletedDocumentHistory(workspaceRoot);
+
+      dispatch({
+        documents,
+        type: "history/deleted-documents-loaded",
+        workspaceRoot,
+      });
+    } catch (error) {
+      dispatch({
+        message: getErrorMessage(error, text("errors.openHistoryFailed")),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
+    }
+  }, [state.workspace?.rootPath, text]);
+
+  const loadDocumentHistoryVersions = useCallback(
+    async (
+      filePath: string,
+      workspaceRoot: string,
+    ): Promise<readonly DocumentHistoryVersion[]> => {
+      if (!window.editorApi?.listDocumentHistory) {
+        throw new Error(text("errors.editorApiUnavailable"));
+      }
+
+      const versions = await window.editorApi.listDocumentHistory(
+        filePath,
+        workspaceRoot,
+      );
+
+      dispatch({
+        type: "history/versions-loaded",
+        versions,
+        workspaceRoot,
+      });
+
+      return versions;
+    },
+    [text],
+  );
+
+  const previewHistoryVersion = useCallback(
+    async (
+      versionId: string,
+      mode: "current-file" | "deleted-document",
+      deletedDocument?: DeletedDocumentHistoryEntry,
+    ): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      try {
+        if (!window.editorApi?.readDocumentHistoryVersion) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
+
+        const preview = await window.editorApi.readDocumentHistoryVersion(
+          versionId,
+          workspaceRoot,
+        );
+
+        dispatch({
+          contents: preview.contents,
+          deletedDocument,
+          mode,
+          type: "history/preview-loaded",
+          version: preview.version,
+          workspaceRoot,
+        });
+      } catch (error) {
+        dispatch({
+          message: getErrorMessage(error, text("errors.openHistoryFailed")),
+          type: "workspace/operation-failed",
+          workspaceRoot,
+        });
+      }
+    },
+    [state.workspace?.rootPath, text],
+  );
+
+  const previewDeletedDocumentHistoryEntry = useCallback(
+    (entry: DeletedDocumentHistoryEntry): void => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      void loadDocumentHistoryVersions(entry.path, workspaceRoot)
+        .then(() =>
+          previewHistoryVersion(
+            entry.latestVersionId,
+            "deleted-document",
+            entry,
+          ),
+        )
+        .catch((error) => {
+          dispatch({
+            message: getErrorMessage(error, text("errors.openHistoryFailed")),
+            type: "workspace/operation-failed",
+            workspaceRoot,
+          });
+        });
+    },
+    [
+      loadDocumentHistoryVersions,
+      previewHistoryVersion,
+      state.workspace?.rootPath,
+      text,
+    ],
+  );
+
+  const toggleVersionHistory = useCallback(async (): Promise<void> => {
+    const loadedFile = state.loadedFile;
+    const historyPreview = state.historyPreview ?? null;
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!workspaceRoot) {
+      return;
+    }
+
+    if (state.isDocumentHistoryPanelVisible) {
+      dispatch({
+        isVisible: false,
+        type: "history/panel-visibility-set",
+        workspaceRoot,
+      });
+      return;
+    }
+
+    const historyPath =
+      historyPreview?.deletedDocument?.path ??
+      historyPreview?.version.path ??
+      loadedFile?.path;
+
+    if (!historyPath) {
+      return;
+    }
+
+    try {
+      await loadDocumentHistoryVersions(historyPath, workspaceRoot);
+    } catch (error) {
+      dispatch({
+        message: getErrorMessage(error, text("errors.openHistoryFailed")),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
+    }
+  }, [
+    loadDocumentHistoryVersions,
+    state.historyPreview,
+    state.isDocumentHistoryPanelVisible,
+    state.loadedFile,
+    state.workspace?.rootPath,
+    text,
+  ]);
+
+  const closeHistoryPreview = useCallback((): void => {
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!workspaceRoot) {
+      return;
+    }
+
+    dispatch({ type: "history/preview-closed", workspaceRoot });
+  }, [state.workspace?.rootPath]);
+
+  const restoreHistoryPreview = useCallback(async (): Promise<void> => {
+    const historyPreview = state.historyPreview;
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!historyPreview || !workspaceRoot) {
+      return;
+    }
+
+    try {
+      const restoreVersion =
+        historyPreview.mode === "deleted-document"
+          ? window.editorApi?.restoreDeletedDocumentHistoryVersion
+          : window.editorApi?.restoreDocumentHistoryVersion;
+
+      if (!restoreVersion) {
+        throw new Error(text("errors.editorApiUnavailable"));
+      }
+
+      const file = await restoreVersion(historyPreview.version.id, workspaceRoot);
+
+      dispatch({ type: "history/preview-closed", workspaceRoot });
+      await refreshWorkspaceTree(workspaceRoot, [getParentPath(file.path)]);
+      await openDeletedDocumentHistory();
+      await loadFile(file.path);
+    } catch (error) {
+      dispatch({
+        message: getErrorMessage(error, text("errors.restoreHistoryFailed")),
+        type: "workspace/operation-failed",
+        workspaceRoot,
+      });
+    }
+  }, [
+    loadFile,
+    openDeletedDocumentHistory,
+    refreshWorkspaceTree,
+    state.historyPreview,
+    state.workspace?.rootPath,
+    text,
+  ]);
 
   const uploadImageAsset = useCallback(
     async (file: File): Promise<string> => {
@@ -1436,7 +1728,9 @@ export const App = (): React.JSX.Element => {
     }
 
     const timeoutId = window.setTimeout(() => {
-      void saveCurrentFile(state.draftMarkdown ?? undefined);
+      void saveCurrentFile(state.draftMarkdown ?? undefined, {
+        source: "autosave",
+      });
     }, AUTO_SAVE_IDLE_DELAY_MS);
 
     return () => {
@@ -1852,6 +2146,30 @@ export const App = (): React.JSX.Element => {
   const recentFilePaths = state.workspace
     ? getWorkspaceRecentFiles(workspaceFileHistory, state.workspace.rootPath)
     : [];
+  const historyPreview = state.historyPreview ?? null;
+  const editorFilePath =
+    historyPreview?.deletedDocument?.path ??
+    historyPreview?.version.path ??
+    state.loadedFile?.path ??
+    "";
+  const editorMarkdown =
+    historyPreview?.contents ??
+    state.draftMarkdown ??
+    state.loadedFile?.contents ??
+    "";
+  const historyPreviewDisplay = historyPreview
+    ? {
+        createdAtLabel: formatHistoryTimestamp(historyPreview.version.createdAt),
+        eventLabel: getHistoryEventLabel(historyPreview.version.event, text),
+        sourcePath: historyPreview.deletedDocument?.path ?? historyPreview.version.path,
+      }
+    : null;
+  const historyFilterId = state.documentHistoryFilterId ?? "all";
+  const historyVersions = state.documentHistoryVersions ?? [];
+  const visibleHistoryVersions = filterHistoryVersions(
+    historyVersions,
+    historyFilterId,
+  );
 
   return (
     <main
@@ -1889,7 +2207,11 @@ export const App = (): React.JSX.Element => {
         onDeleteEntry={() => {
           void deleteSelectedEntry();
         }}
+        deletedDocumentHistory={state.deletedDocumentHistory ?? []}
         onForgetWorkspace={forgetWorkspace}
+        onOpenDeletedDocumentHistory={() => {
+          void openDeletedDocumentHistory();
+        }}
         onOpenFile={() => {
           void openFile();
         }}
@@ -1912,6 +2234,7 @@ export const App = (): React.JSX.Element => {
         onSelectEntry={(entryPath) => {
           dispatch({ type: "explorer/entry-selected", entryPath });
         }}
+        onSelectDeletedDocumentHistoryEntry={previewDeletedDocumentHistoryEntry}
         onSelectFile={(filePath) => {
           void loadFile(filePath);
         }}
@@ -2060,6 +2383,20 @@ export const App = (): React.JSX.Element => {
               text={text}
             />
           ) : null}
+          {state.loadedFile || historyPreview ? (
+            <button
+              aria-label={text("history.versionHistory")}
+              aria-pressed={Boolean(state.isDocumentHistoryPanelVisible)}
+              className="editor-action-button"
+              onClick={() => {
+                void toggleVersionHistory();
+              }}
+              title={text("history.versionHistory")}
+              type="button"
+            >
+              <History aria-hidden="true" size={17} strokeWidth={2} />
+            </button>
+          ) : null}
           <button
             aria-label={editorViewToggleLabel}
             aria-pressed={isEditorFullWidth}
@@ -2093,7 +2430,7 @@ export const App = (): React.JSX.Element => {
             {currentAiErrorMessage}
           </p>
         ) : null}
-        {currentAiResult ? (
+        {currentAiResult && !historyPreview ? (
           <AiResultPanel
             colorScheme={resolvedTheme.family}
             isRegeneratingSummary={currentAiBusyState === "refining-summary"}
@@ -2109,21 +2446,28 @@ export const App = (): React.JSX.Element => {
             text={text}
             workspaceRoot={state.workspace?.rootPath ?? ""}
           />
-        ) : state.loadedFile ? (
+        ) : state.loadedFile || historyPreview ? (
           <MarkdownBlockEditor
-            key={`${state.workspace?.rootPath ?? ""}:${state.loadedFile.path}`}
-            draftMarkdown={state.draftMarkdown ?? state.loadedFile.contents}
+            key={
+              historyPreview
+                ? `${state.workspace?.rootPath ?? ""}:history:${historyPreview.version.id}`
+                : `${state.workspace?.rootPath ?? ""}:${state.loadedFile?.path ?? ""}`
+            }
+            draftMarkdown={editorMarkdown}
             colorScheme={resolvedTheme.family}
             errorMessage={state.fileErrorMessage}
-            isDirty={state.isDirty}
-            isSaving={state.isSavingFile}
+            historyPreview={historyPreviewDisplay}
+            isDirty={historyPreview ? false : state.isDirty}
+            isReadOnly={Boolean(historyPreview)}
+            isSaving={historyPreview ? false : state.isSavingFile}
             markdownFilePaths={
               state.workspace
                 ? collectMarkdownFilePaths(state.workspace.tree)
                 : []
             }
-            markdown={state.loadedFile.contents}
+            markdown={editorMarkdown}
             onCreateLinkedMarkdown={createMarkdownFileFromEditorLink}
+            onExitHistoryPreview={closeHistoryPreview}
             onImageUpload={uploadImageAsset}
             onOpenLink={(href) => {
               void openEditorLink(href).catch((error) => {
@@ -2140,7 +2484,7 @@ export const App = (): React.JSX.Element => {
             onMarkdownChange={(contents) => {
               const workspaceRoot = state.workspace?.rootPath;
 
-              if (!workspaceRoot || !state.loadedFile) {
+              if (!workspaceRoot || !state.loadedFile || historyPreview) {
                 return;
               }
 
@@ -2151,9 +2495,12 @@ export const App = (): React.JSX.Element => {
                 workspaceRoot,
               });
             }}
+            onRestoreHistoryPreview={() => {
+              void restoreHistoryPreview();
+            }}
             onSaveRequest={saveCurrentFile}
             onSearchStateChange={setEditorSearchState}
-            path={state.loadedFile.path}
+            path={editorFilePath}
             ref={editorRef}
             searchQuery={editorSearchQuery}
             text={text}
@@ -2173,6 +2520,82 @@ export const App = (): React.JSX.Element => {
             ) : null}
           </div>
         )}
+        {state.isDocumentHistoryPanelVisible ? (
+          <aside
+            aria-label={text("history.versionHistory")}
+            className="document-history-panel"
+          >
+            <h2>{text("history.panelTitle")}</h2>
+            <div className="document-history-filters">
+              {DOCUMENT_HISTORY_FILTERS.map((filter) => (
+                <button
+                  aria-pressed={historyFilterId === filter.id}
+                  className={
+                    historyFilterId === filter.id ? "is-active" : undefined
+                  }
+                  key={filter.id}
+                  onClick={() => {
+                    const workspaceRoot = state.workspace?.rootPath;
+
+                    if (!workspaceRoot) {
+                      return;
+                    }
+
+                    dispatch({
+                      filterId: filter.id,
+                      type: "history/filter-selected",
+                      workspaceRoot,
+                    });
+                  }}
+                  type="button"
+                >
+                  {text(HISTORY_FILTER_LABEL_KEYS[filter.id])}
+                </button>
+              ))}
+            </div>
+            {visibleHistoryVersions.length > 0 ? (
+              <div className="document-history-version-list">
+                {visibleHistoryVersions.map((version) => {
+                  const eventLabel = getHistoryEventLabel(version.event, text);
+                  const createdAtLabel = formatHistoryTimestamp(
+                    version.createdAt,
+                  );
+
+                  return (
+                    <button
+                      aria-label={text("history.previewVersion", {
+                        event: eventLabel,
+                        time: createdAtLabel,
+                      })}
+                      className={
+                        historyPreview?.version.id === version.id
+                          ? "is-active"
+                          : undefined
+                      }
+                      key={version.id}
+                      onClick={() => {
+                        void previewHistoryVersion(
+                          version.id,
+                          historyPreview?.mode ?? "current-file",
+                          historyPreview?.deletedDocument,
+                        );
+                      }}
+                      type="button"
+                    >
+                      <span>{eventLabel}</span>
+                      <span>{createdAtLabel}</span>
+                      <span>{version.path}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="document-history-empty">
+                {text("history.noVersions")}
+              </p>
+            )}
+          </aside>
+        ) : null}
       </section>
       {availableUpdate && updateStatus && !isUpdateDismissed ? (
         <UpdateDialog

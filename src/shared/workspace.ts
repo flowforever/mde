@@ -1,4 +1,9 @@
 import type { TreeNode } from './fileTree'
+import type {
+  DeletedDocumentHistoryEntry,
+  DocumentHistoryPreview,
+  DocumentHistoryVersion
+} from './documentHistory'
 
 export interface Workspace {
   readonly filePath?: string
@@ -77,6 +82,25 @@ export interface EditorApi {
   readonly listDirectory: (directoryPath: string) => Promise<readonly TreeNode[]>
   readonly readMarkdownFile: (
     filePath: string,
+    workspaceRoot: string
+  ) => Promise<FileContents>
+  readonly listDocumentHistory?: (
+    filePath: string,
+    workspaceRoot: string
+  ) => Promise<readonly DocumentHistoryVersion[]>
+  readonly listDeletedDocumentHistory?: (
+    workspaceRoot: string
+  ) => Promise<readonly DeletedDocumentHistoryEntry[]>
+  readonly readDocumentHistoryVersion?: (
+    versionId: string,
+    workspaceRoot: string
+  ) => Promise<DocumentHistoryPreview>
+  readonly restoreDocumentHistoryVersion?: (
+    versionId: string,
+    workspaceRoot: string
+  ) => Promise<FileContents>
+  readonly restoreDeletedDocumentHistoryVersion?: (
+    versionId: string,
     workspaceRoot: string
   ) => Promise<FileContents>
   readonly searchWorkspaceMarkdown?: (

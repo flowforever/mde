@@ -3,6 +3,8 @@ import {
   mkdir,
   link,
   readFile,
+  realpath,
+  rm,
   stat,
   symlink,
   writeFile
@@ -10,7 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createMarkdownFileService } from '../../src/main/services/markdownFileService'
 
@@ -364,9 +366,17 @@ describe('markdownFileService', () => {
   it('deletes entries inside the workspace', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await writeFile(join(rootPath, 'old.md'), '# Old')
+    const absoluteEntryPath = await realpath(join(rootPath, 'old.md'))
+    const moveEntryToTrash = vi.fn(async (entryPath: string) => {
+      await rm(entryPath, { force: false, recursive: true })
+    })
 
-    await createMarkdownFileService().deleteEntry(rootPath, 'old.md')
+    await createMarkdownFileService({ moveEntryToTrash }).deleteEntry(
+      rootPath,
+      'old.md'
+    )
 
+    expect(moveEntryToTrash).toHaveBeenCalledWith(absoluteEntryPath)
     await expect(stat(join(rootPath, 'old.md'))).rejects.toMatchObject({
       code: 'ENOENT'
     })

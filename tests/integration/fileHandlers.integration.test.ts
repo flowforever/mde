@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
@@ -17,6 +18,7 @@ import { FILE_CHANNELS, WORKSPACE_CHANNELS } from '../../src/main/ipc/channels'
 import { registerFileHandlers } from '../../src/main/ipc/registerFileHandlers'
 import { registerWorkspaceHandlers } from '../../src/main/ipc/registerWorkspaceHandlers'
 import { createMarkdownFileService } from '../../src/main/services/markdownFileService'
+import { createDocumentHistoryService } from '../../src/main/services/documentHistoryService'
 import { createWorkspaceService } from '../../src/main/services/workspaceService'
 import type { FileContents } from '../../src/shared/workspace'
 
@@ -26,9 +28,14 @@ interface RegisteredHandlers {
   readonly handlers: Map<string, (...args: unknown[]) => unknown>
 }
 
+interface RegisterHandlerOptions {
+  readonly moveEntryToTrash?: (entryPath: string) => Promise<void>
+}
+
 describe('fileHandlers integration', () => {
   const registerHandlers = (
-    workspacePath = fixtureWorkspacePath
+    workspacePath = fixtureWorkspacePath,
+    options: RegisterHandlerOptions = {}
   ): RegisteredHandlers => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
@@ -47,7 +54,9 @@ describe('fileHandlers integration', () => {
     registerFileHandlers({
       getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
       ipcMain,
-      markdownFileService: createMarkdownFileService()
+      markdownFileService: createMarkdownFileService({
+        moveEntryToTrash: options.moveEntryToTrash
+      })
     })
 
     return { handlers }
@@ -395,6 +404,54 @@ describe('fileHandlers integration', () => {
     )
   })
 
+  it('captures the previous Markdown contents before writing through the file IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Original\n')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers
+      .get(FILE_CHANNELS.writeMarkdownFile)
+      ?.({}, 'README.md', '# Edited\n', workspace.rootPath)
+
+    const historyService = createDocumentHistoryService()
+    const [version] = await historyService.listDocumentHistory(
+      workspacePath,
+      'README.md'
+    )
+    const preview = await historyService.readVersion(workspacePath, version.id)
+
+    expect(version).toMatchObject({
+      event: 'manual-save',
+      path: 'README.md'
+    })
+    expect(preview.contents).toBe('# Original\n')
+  })
+
+  it('blocks Markdown overwrites when the history directory is symlinked', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'mde-history-outside-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Original\n')
+    await mkdir(join(workspacePath, '.mde'))
+    await symlink(outsidePath, join(workspacePath, '.mde', 'history'))
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.writeMarkdownFile)
+        ?.({}, 'README.md', '# Edited\n', workspace.rootPath)
+    ).rejects.toThrow(/symlink/i)
+    await expect(readFile(join(workspacePath, 'README.md'), 'utf8')).resolves.toBe(
+      '# Original\n'
+    )
+  })
+
   it('saves pasted image assets through the file IPC handler', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
 
@@ -480,9 +537,54 @@ describe('fileHandlers integration', () => {
     })
   })
 
+  it('records rename history and keeps the document identity on the new path', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await writeFile(join(workspacePath, 'draft.md'), '# Draft\n')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers
+      .get(FILE_CHANNELS.renameEntry)
+      ?.({}, 'draft.md', 'final.md', workspace.rootPath)
+
+    const historyService = createDocumentHistoryService()
+    const versions = await historyService.listDocumentHistory(
+      workspacePath,
+      'final.md'
+    )
+
+    expect(versions).toHaveLength(1)
+    expect(versions[0]).toMatchObject({
+      event: 'rename',
+      path: 'draft.md'
+    })
+  })
+
   it('deletes an entry through the file IPC handler', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     await writeFile(join(workspacePath, 'old.md'), '# Old')
+    const absoluteEntryPath = await realpath(join(workspacePath, 'old.md'))
+    const moveEntryToTrash = vi.fn(async (entryPath: string) => {
+      await rm(entryPath, { force: false, recursive: true })
+    })
+    const { handlers } = registerHandlers(workspacePath, { moveEntryToTrash })
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers.get(FILE_CHANNELS.deleteEntry)?.({}, 'old.md', workspace.rootPath)
+
+    expect(moveEntryToTrash).toHaveBeenCalledWith(absoluteEntryPath)
+    await expect(stat(join(workspacePath, 'old.md'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
+  it('records deleted Markdown documents as recoverable history entries', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await writeFile(join(workspacePath, 'old.md'), '# Old\n')
     const { handlers } = registerHandlers(workspacePath)
 
     const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
@@ -490,8 +592,160 @@ describe('fileHandlers integration', () => {
     }
     await handlers.get(FILE_CHANNELS.deleteEntry)?.({}, 'old.md', workspace.rootPath)
 
-    await expect(stat(join(workspacePath, 'old.md'))).rejects.toMatchObject({
-      code: 'ENOENT'
+    const historyService = createDocumentHistoryService()
+    const deletedDocuments = await historyService.listDeletedDocumentHistory(
+      workspacePath
+    )
+
+    expect(deletedDocuments).toEqual([
+      expect.objectContaining({
+        path: 'old.md',
+        reason: 'deleted-in-mde'
+      })
+    ])
+  })
+
+  it('excludes app-managed history blobs from workspace search', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await mkdir(join(workspacePath, '.mde', 'history', 'blobs'), {
+      recursive: true
     })
+    await writeFile(join(workspacePath, 'README.md'), '# Visible\n')
+    await writeFile(
+      join(workspacePath, '.mde', 'history', 'blobs', 'hidden.md'),
+      'secret-history-keyword'
+    )
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    const result = await handlers
+      .get(FILE_CHANNELS.searchWorkspaceMarkdown)
+      ?.({}, 'secret-history-keyword', workspace.rootPath)
+
+    expect(result).toMatchObject({
+      limited: false,
+      query: 'secret-history-keyword',
+      results: []
+    })
+  })
+
+  it('lists document history through an intent-level IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Original\n')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers
+      .get(FILE_CHANNELS.writeMarkdownFile)
+      ?.({}, 'README.md', '# Edited\n', workspace.rootPath)
+
+    const history = await handlers
+      .get(FILE_CHANNELS.listDocumentHistory)
+      ?.({}, 'README.md', workspace.rootPath)
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        event: 'manual-save',
+        path: 'README.md'
+      })
+    ])
+  })
+
+  it('rejects stale document history list requests', async () => {
+    const originalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-original-'))
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    registerFileHandlers({
+      getActiveWorkspaceRoot: () => activeWorkspacePath,
+      ipcMain,
+      markdownFileService: createMarkdownFileService()
+    })
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.listDocumentHistory)
+        ?.({}, 'README.md', originalWorkspacePath)
+    ).rejects.toThrow(/workspace changed/i)
+  })
+
+  it('reads and restores document history versions through IPC handlers', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await writeFile(join(workspacePath, 'README.md'), '# Original\n')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers
+      .get(FILE_CHANNELS.writeMarkdownFile)
+      ?.({}, 'README.md', '# Edited\n', workspace.rootPath)
+    const [version] = (await handlers
+      .get(FILE_CHANNELS.listDocumentHistory)
+      ?.({}, 'README.md', workspace.rootPath)) as readonly { id: string }[]
+
+    const preview = await handlers
+      .get(FILE_CHANNELS.readDocumentHistoryVersion)
+      ?.({}, version.id, workspace.rootPath)
+
+    expect(preview).toMatchObject({
+      contents: '# Original\n',
+      version: {
+        id: version.id,
+        path: 'README.md'
+      }
+    })
+
+    await handlers
+      .get(FILE_CHANNELS.restoreDocumentHistoryVersion)
+      ?.({}, version.id, workspace.rootPath)
+
+    await expect(readFile(join(workspacePath, 'README.md'), 'utf8')).resolves.toBe(
+      '# Original\n'
+    )
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.listDocumentHistory)
+        ?.({}, 'README.md', workspace.rootPath)
+    ).resolves.toEqual([
+      expect.objectContaining({
+        event: 'restore',
+        sourceVersionId: version.id
+      }),
+      expect.objectContaining({
+        event: 'manual-save'
+      })
+    ])
+  })
+
+  it('lists deleted documents through a workspace-level IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    await writeFile(join(workspacePath, 'old.md'), '# Old\n')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    await handlers.get(FILE_CHANNELS.deleteEntry)?.({}, 'old.md', workspace.rootPath)
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.listDeletedDocumentHistory)
+        ?.({}, workspace.rootPath)
+    ).resolves.toEqual([
+      expect.objectContaining({
+        path: 'old.md',
+        reason: 'deleted-in-mde'
+      })
+    ])
   })
 })

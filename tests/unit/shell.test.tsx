@@ -18,8 +18,10 @@ interface MockMarkdownBlockEditorProps {
   readonly isReadOnly?: boolean;
   readonly isSaving: boolean;
   readonly markdown: string;
+  readonly onExitHistoryPreview?: () => void;
   readonly onMarkdownChange: (contents: string) => void;
   readonly onOpenLink?: (href: string) => void;
+  readonly onRestoreHistoryPreview?: () => void;
   readonly onSearchStateChange?: (state: {
     readonly activeMatchIndex: number;
     readonly matchCount: number;
@@ -59,6 +61,34 @@ vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
         type="button"
       >
         Change mock markdown
+      </button>
+      <button
+        onClick={() => {
+          if (props.isReadOnly) {
+            return;
+          }
+
+          props.onMarkdownChange("");
+        }}
+        type="button"
+      >
+        Clear mock markdown
+      </button>
+      <button
+        onClick={() => {
+          props.onExitHistoryPreview?.();
+        }}
+        type="button"
+      >
+        Exit preview
+      </button>
+      <button
+        onClick={() => {
+          props.onRestoreHistoryPreview?.();
+        }}
+        type="button"
+      >
+        Restore this version
       </button>
       <button
         onClick={() => {
@@ -2274,6 +2304,148 @@ describe("App shell", () => {
       "# Changed 2",
       "/workspace",
     );
+  });
+
+  it("blocks empty autosave when a non-empty document would be cleared", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    const clearButton = await screen.findByRole("button", {
+      name: /clear mock markdown/i,
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(clearButton);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Autosave detected this operation would clear this document. Continue saving it as an empty document?",
+    );
+    expect(editorApi.writeMarkdownFile).not.toHaveBeenCalled();
+    expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument();
+  });
+
+  it("opens document history and previews a selected version in the editor", async () => {
+    const historyVersion = {
+      blobHash: "hash",
+      byteLength: 10,
+      createdAt: "2026-05-02T01:00:00.000Z",
+      documentId: "doc_1",
+      event: "manual-save" as const,
+      id: "version_1",
+      path: "README.md",
+    };
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      listDocumentHistory: vi.fn().mockResolvedValue([historyVersion]),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readDocumentHistoryVersion: vi.fn().mockResolvedValue({
+        contents: "# Previous",
+        version: historyVersion,
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Current",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      restoreDeletedDocumentHistoryVersion: vi.fn(),
+      restoreDocumentHistoryVersion: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^version history$/i }),
+    );
+
+    expect(editorApi.listDocumentHistory).toHaveBeenCalledWith(
+      "README.md",
+      "/workspace",
+    );
+    expect(screen.getByRole("complementary", { name: /version history/i }));
+    expect(screen.getByText(/document history/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^all$/i })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /preview manual save before/i }),
+    ).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /preview manual save before/i }),
+    );
+
+    expect(editorApi.readDocumentHistoryVersion).toHaveBeenCalledWith(
+      "version_1",
+      "/workspace",
+    );
+    expect(await screen.findByTestId("mock-editor-readonly")).toBeVisible();
+    expect(screen.getByText("# Previous")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^version history$/i }),
+    );
+
+    expect(
+      screen.queryByRole("complementary", { name: /version history/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("resizes the explorer sidebar from the drag separator", () => {

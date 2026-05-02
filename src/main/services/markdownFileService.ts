@@ -25,6 +25,10 @@ import {
   normalizeSearchQuery
 } from '../../shared/search'
 import { splitMarkdownFrontmatter } from '../../shared/frontmatter'
+import {
+  createDocumentHistoryService,
+  type DocumentHistoryService
+} from './documentHistoryService'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 
 const ignoredEntryNames = new Set([
@@ -66,6 +70,11 @@ export interface MarkdownFileService {
     newPath: string
   ) => Promise<RenamedEntry>
   readonly deleteEntry: (workspacePath: string, entryPath: string) => Promise<void>
+}
+
+interface MarkdownFileServiceOptions {
+  readonly documentHistoryService?: DocumentHistoryService
+  readonly moveEntryToTrash?: (entryPath: string) => Promise<void>
 }
 
 const MAX_SEARCH_FILE_RESULTS = 50
@@ -370,6 +379,52 @@ const resolveMutableEntry = async (
   throw new Error('Unsupported workspace entry')
 }
 
+const isPathAtOrInside = (entryPath: string, targetPath: string): boolean =>
+  targetPath === entryPath || targetPath.startsWith(`${entryPath}/`)
+
+const replacePathPrefix = (
+  targetPath: string,
+  oldPath: string,
+  newPath: string
+): string =>
+  targetPath === oldPath
+    ? newPath
+    : `${newPath}/${targetPath.slice(oldPath.length + 1)}`
+
+const collectMarkdownEntryPaths = async (
+  entry: MutableEntry,
+  workspaceEntryPath: string
+): Promise<readonly string[]> => {
+  if (entry.type === 'file') {
+    return [workspaceEntryPath]
+  }
+
+  const collectDirectory = async (
+    absoluteDirectoryPath: string,
+    directoryPath: string
+  ): Promise<readonly string[]> => {
+    const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
+    const nestedPaths = await Promise.all(
+      entries.map(async (childEntry): Promise<readonly string[]> => {
+        const childWorkspacePath = joinWorkspacePath(directoryPath, childEntry.name)
+        const childAbsolutePath = join(absoluteDirectoryPath, childEntry.name)
+
+        if (childEntry.isDirectory()) {
+          return collectDirectory(childAbsolutePath, childWorkspacePath)
+        }
+
+        return childEntry.isFile() && isMarkdownPath(childEntry.name)
+          ? [childWorkspacePath]
+          : []
+      })
+    )
+
+    return nestedPaths.flat()
+  }
+
+  return collectDirectory(entry.absolutePath, workspaceEntryPath)
+}
+
 const prepareMutableNewPath = async (
   workspacePath: string,
   targetPath: string
@@ -389,7 +444,15 @@ const prepareMutableNewPath = async (
   return absoluteTargetPath
 }
 
-export const createMarkdownFileService = (): MarkdownFileService => ({
+export const createMarkdownFileService = ({
+  documentHistoryService = createDocumentHistoryService(),
+  moveEntryToTrash = async (entryPath) => {
+    await rm(entryPath, {
+      force: false,
+      recursive: true
+    })
+  }
+}: MarkdownFileServiceOptions = {}): MarkdownFileService => ({
   async readMarkdownFile(workspacePath, filePath) {
     const realFilePath = await resolveExistingMarkdownFile(workspacePath, filePath)
 
@@ -416,7 +479,7 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
       const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
       const nestedPaths = await Promise.all(
         entries.map(async (entry): Promise<readonly string[]> => {
-          if (ignoredEntryNames.has(entry.name)) {
+          if (ignoredEntryNames.has(entry.name) || entry.name === '.mde') {
             return []
           }
 
@@ -485,6 +548,11 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
   async writeMarkdownFile(workspacePath, filePath, contents) {
     const absoluteFilePath = await resolveMutableMarkdownFile(workspacePath, filePath)
 
+    await documentHistoryService.captureSnapshot({
+      event: 'manual-save',
+      filePath,
+      workspacePath
+    })
     await writeFile(absoluteFilePath, contents, 'utf8')
 
     return Object.freeze({
@@ -559,6 +627,20 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
     const absoluteNewPath = await prepareMutableNewPath(workspacePath, newPath)
 
     await assertPathDoesNotExist(absoluteNewPath)
+    await Promise.all(
+      (
+        await collectMarkdownEntryPaths(oldEntry, oldPath)
+      ).map((markdownPath) =>
+        documentHistoryService.captureSnapshot({
+          event: 'rename',
+          filePath: markdownPath,
+          nextPath: isPathAtOrInside(oldPath, markdownPath)
+            ? replacePathPrefix(markdownPath, oldPath, newPath)
+            : newPath,
+          workspacePath
+        })
+      )
+    )
     await rename(oldEntry.absolutePath, absoluteNewPath)
 
     return Object.freeze({
@@ -570,9 +652,17 @@ export const createMarkdownFileService = (): MarkdownFileService => ({
 
     const entry = await resolveMutableEntry(workspacePath, entryPath)
 
-    await rm(entry.absolutePath, {
-      force: false,
-      recursive: true
-    })
+    await Promise.all(
+      (
+        await collectMarkdownEntryPaths(entry, entryPath)
+      ).map((markdownPath) =>
+        documentHistoryService.captureSnapshot({
+          event: 'delete',
+          filePath: markdownPath,
+          workspacePath
+        })
+      )
+    )
+    await moveEntryToTrash(entry.absolutePath)
   }
 })

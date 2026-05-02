@@ -1,9 +1,15 @@
 import type { AppAction, AppState } from './appTypes'
 
 export const createInitialAppState = (): AppState => ({
+  deletedDocumentHistory: [],
+  documentHistoryFilterId: 'all',
+  documentHistoryVersions: [],
   draftMarkdown: null,
   errorMessage: null,
   fileErrorMessage: null,
+  historyPreview: null,
+  isDocumentHistoryPanelVisible: false,
+  isDeletedDocumentHistoryVisible: false,
   isDirty: false,
   isLoadingFile: false,
   isOpeningWorkspace: false,
@@ -48,6 +54,12 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         isDirty: false,
         isLoadingFile: false,
         isSavingFile: false,
+        deletedDocumentHistory: [],
+        documentHistoryFilterId: 'all',
+        documentHistoryVersions: [],
+        historyPreview: null,
+        isDocumentHistoryPanelVisible: false,
+        isDeletedDocumentHistoryVisible: false,
         loadedFile: null,
         loadingWorkspaceRoot: null,
         selectedEntryPath: null,
@@ -87,6 +99,69 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         ...state,
         errorMessage: action.message
       }
+    case 'history/deleted-documents-loaded':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        deletedDocumentHistory: action.documents,
+        isDeletedDocumentHistoryVisible: true
+      }
+    case 'history/versions-loaded':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        documentHistoryFilterId: 'all',
+        documentHistoryVersions: action.versions,
+        isDocumentHistoryPanelVisible: true
+      }
+    case 'history/filter-selected':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        documentHistoryFilterId: action.filterId
+      }
+    case 'history/panel-visibility-set':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        isDocumentHistoryPanelVisible: action.isVisible
+      }
+    case 'history/preview-loaded':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        historyPreview: {
+          contents: action.contents,
+          deletedDocument: action.deletedDocument,
+          mode: action.mode,
+          version: action.version
+        },
+        isDocumentHistoryPanelVisible: true
+      }
+    case 'history/preview-closed':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        historyPreview: null
+      }
     case 'explorer/entry-selected':
       return {
         ...state,
@@ -107,7 +182,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         ...state,
         draftMarkdown: null,
         fileErrorMessage: null,
+        historyPreview: null,
         isDirty: false,
+        isDocumentHistoryPanelVisible: false,
         isLoadingFile: true,
         isSavingFile: false,
         loadedFile: null,
@@ -152,6 +229,20 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         loadingWorkspaceRoot: null
       }
     case 'file/content-changed':
+      if (
+        state.loadedFile?.path !== action.filePath ||
+        !isCurrentWorkspace(state, action.workspaceRoot)
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        draftMarkdown: action.contents,
+        fileErrorMessage: null,
+        isDirty: action.contents !== state.loadedFile.contents
+      }
+    case 'file/content-restored':
       if (
         state.loadedFile?.path !== action.filePath ||
         !isCurrentWorkspace(state, action.workspaceRoot)
