@@ -1,4 +1,11 @@
-# 优化 MDE editor render 的样式 - IN PROGRESS
+# 优化 MDE editor render 的样式 - DONE
+
+## Status
+
+* 2026-05-02: Completed and released in `v1.3.16`.
+* Completion summary: Markdown editor rendering now uses compact document typography for headings, body text, lists, blockquotes, dividers, inline code, and code blocks. Browser spellcheck is disabled for the editor body, idle BlockNote side-menu affordances are visually reduced, read-only previews hide side-menu affordances, and user manual screenshots were refreshed with stable workspace labels.
+* Verification: `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`, `npm run docs:screenshots`, `npm run docs:build`, `npx npm@10.9.7 ci --dry-run`, and `npm audit`.
+* Release verification: GitHub Release `v1.3.16` succeeded with macOS and Windows artifacts. The Deploy User Manual workflow built the Pages artifact but still cannot deploy until a repository administrator enables GitHub Pages with GitHub Actions as the source.
 
 ## 开发状态
 
