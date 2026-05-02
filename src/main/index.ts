@@ -18,6 +18,7 @@ import { getLaunchPathFromArgv } from './launchArgs'
 import { registerAiHandlers } from './ipc/registerAiHandlers'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createAiService } from './services/aiService'
+import { registerMdeCliInBackground } from './services/cliRegistrationService'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
 import {
@@ -257,6 +258,7 @@ const bootstrap = async (): Promise<void> => {
   })
 
   await app.whenReady()
+  registerMdeCliInBackground({ app })
   configureAutoUpdates({
     app,
     autoUpdater: resolveAutoUpdater(electronUpdaterModule),
