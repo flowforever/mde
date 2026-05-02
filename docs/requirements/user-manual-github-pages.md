@@ -1,4 +1,12 @@
-# 用户手册与 GitHub Pages 发布 - READY
+# 用户手册与 GitHub Pages 发布 - BLOCKED
+
+## Status
+
+* 2026-05-02: Implementation shipped in `v1.3.15`. The release includes the VitePress user manual, generated screenshots, GitHub Pages workflow, README guidance, release workflow updates, and package lockfile synchronization for GitHub Actions.
+* Verification completed for the shipped code: `npm run docs:screenshots`, `npm run docs:build`, `npm run typecheck`, `npm run lint`, `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`, `npx npm@10.9.7 ci --dry-run`, and `npm audit`.
+* GitHub Release `v1.3.15` succeeded and uploaded macOS and Windows artifacts.
+* The Deploy User Manual workflow currently builds and uploads the Pages artifact, then fails at deployment with `HttpError: Not Found` because GitHub Pages is not enabled for `flowforever/mde`. The current `gh` token only has `READ` permission on the repository, so Pages cannot be enabled from this session.
+* This requirement remains active until a repository administrator enables GitHub Pages with GitHub Actions as the source and reruns the Deploy User Manual workflow successfully.
 
 ## 开发状态
 
