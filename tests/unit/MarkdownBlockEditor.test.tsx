@@ -935,6 +935,100 @@ describe("MarkdownBlockEditor accessibility", () => {
     );
   });
 
+  it("does not rehydrate the editor after a completed save is reflected as persisted markdown", async () => {
+    const user = userEvent.setup();
+    const editedMarkdown = ["# Original", "", "Autosaved middle line"].join(
+      "\n",
+    );
+    const onSaveRequest = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Original"
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown="# Original"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      editedMarkdown,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={editedMarkdown}
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Original"
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith(editedMarkdown);
+    });
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={editedMarkdown}
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown={editedMarkdown}
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
   it("does not rehydrate stale persisted markdown over unsaved local edits", async () => {
     const user = userEvent.setup();
     const { rerender } = render(

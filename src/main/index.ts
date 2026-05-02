@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import type {
@@ -78,6 +79,20 @@ export const configureRuntimeIdentity = (app: RuntimeIdentityApp): void => {
 
   app.setPath('userData', getDevelopmentUserDataPath(app.getPath('userData')))
 }
+
+export const createMoveEntryToTrash =
+  (
+    shell: Pick<Electron.Shell, 'trashItem'>,
+    env: NodeJS.ProcessEnv = process.env
+  ) =>
+  async (entryPath: string): Promise<void> => {
+    if (env[E2E_USER_DATA_PATH_ENV]) {
+      await rm(entryPath, { force: false, recursive: true })
+      return
+    }
+
+    await shell.trashItem(entryPath)
+  }
 
 const getStartupDiagnostics = (): StartupDiagnostics | undefined => {
   if (process.env[CAPTURE_STARTUP_DIAGNOSTICS_ENV] !== '1') {
@@ -273,9 +288,7 @@ const bootstrap = async (): Promise<void> => {
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain,
     markdownFileService: createMarkdownFileService({
-      moveEntryToTrash: async (entryPath) => {
-        await shell.trashItem(entryPath)
-      }
+      moveEntryToTrash: createMoveEntryToTrash(shell)
     })
   })
   registerAiHandlers({

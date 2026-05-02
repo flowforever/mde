@@ -269,6 +269,7 @@ export const MarkdownBlockEditor = forwardRef<
   const pendingSaveAfterCurrentRef = useRef(false);
   const pendingBlurSaveTimeoutRef = useRef<number | null>(null);
   const latestDraftMarkdownRef = useRef(draftMarkdown);
+  const lastSerializedEditorMarkdownRef = useRef<string | null>(null);
   const documentIdentity = useMemo(
     () => `${workspaceRoot}:${path}`,
     [path, workspaceRoot],
@@ -407,6 +408,7 @@ export const MarkdownBlockEditor = forwardRef<
 
       setSerializationErrorMessage(null);
       await onSaveRequest(contentsToSave);
+      lastSerializedEditorMarkdownRef.current = contentsToSave;
       pendingSaveAfterCurrentRef.current = false;
       hasLocalChangesRef.current = false;
     } catch (error) {
@@ -629,6 +631,7 @@ export const MarkdownBlockEditor = forwardRef<
     activeDocumentIdentityRef.current = documentIdentity;
     pendingSaveAfterCurrentRef.current = false;
     hasLocalChangesRef.current = false;
+    lastSerializedEditorMarkdownRef.current = null;
   }, [documentIdentity]);
 
   useEffect(() => {
@@ -640,6 +643,11 @@ export const MarkdownBlockEditor = forwardRef<
           return;
         }
 
+        if (lastSerializedEditorMarkdownRef.current === markdown) {
+          setParseErrorMessage(null);
+          return;
+        }
+
         const blocks = await importMarkdownToBlocks(editor, editorMarkdown);
 
         if (!isCurrent) {
@@ -648,6 +656,7 @@ export const MarkdownBlockEditor = forwardRef<
 
         isHydratingRef.current = true;
         replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[]);
+        lastSerializedEditorMarkdownRef.current = markdown;
         setParseErrorMessage(null);
         window.setTimeout(() => {
           if (isCurrent) {
@@ -986,14 +995,14 @@ export const MarkdownBlockEditor = forwardRef<
                   portableContents,
                   draftMarkdownDocument.body,
                 );
+                const nextMarkdown = composeMarkdownWithFrontmatter(
+                  draftMarkdownDocument,
+                  bodyMarkdown,
+                );
 
                 setSerializationErrorMessage(null);
-                onMarkdownChange(
-                  composeMarkdownWithFrontmatter(
-                    draftMarkdownDocument,
-                    bodyMarkdown,
-                  ),
-                );
+                lastSerializedEditorMarkdownRef.current = nextMarkdown;
+                onMarkdownChange(nextMarkdown);
               })
               .catch((error: unknown) => {
                 setSerializationErrorMessage(

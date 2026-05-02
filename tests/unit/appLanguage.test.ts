@@ -18,6 +18,7 @@ import {
 describe("app language preferences", () => {
   it("selects Chinese for Chinese system locales and English otherwise", () => {
     expect(resolveSystemAppLanguageId(["zh-CN", "en-US"])).toBe("zh");
+    expect(resolveSystemAppLanguageId(["en-US", "zh-Hans-CN"])).toBe("en");
     expect(resolveSystemAppLanguageId("zh-Hant-TW")).toBe("zh");
     expect(resolveSystemAppLanguageId(["fr-FR", "en-US"])).toBe("en");
     expect(resolveSystemAppLanguageId(undefined)).toBe("en");

@@ -1,5 +1,6 @@
-import { basename, normalize, sep } from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join, normalize, sep } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -10,6 +11,7 @@ import {
   STARTUP_DIAGNOSTICS_GLOBAL_KEY,
   configureRuntimeIdentity,
   createPreloadPath,
+  createMoveEntryToTrash,
   createWindowOptions
 } from '../../src/main/index'
 
@@ -100,6 +102,36 @@ describe('Electron window config', () => {
 
     expect(app.setName).not.toHaveBeenCalled()
     expect(app.setPath).not.toHaveBeenCalled()
+  })
+
+  it('uses system Trash in production and deterministic removal in E2E', async () => {
+    const shell = {
+      trashItem: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await createMoveEntryToTrash(shell, {})('/workspace/old.md')
+
+    expect(shell.trashItem).toHaveBeenCalledWith('/workspace/old.md')
+
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-trash-'))
+    const filePath = join(workspacePath, 'old.md')
+    const e2eShell = {
+      trashItem: vi.fn().mockResolvedValue(undefined)
+    }
+
+    try {
+      await writeFile(filePath, '# Old')
+      await createMoveEntryToTrash(e2eShell, {
+        [E2E_USER_DATA_PATH_ENV]: '/tmp/mde-e2e-user-data'
+      })(filePath)
+
+      expect(e2eShell.trashItem).not.toHaveBeenCalled()
+      await expect(stat(filePath)).rejects.toMatchObject({
+        code: 'ENOENT'
+      })
+    } finally {
+      await rm(workspacePath, { force: true, recursive: true })
+    }
   })
 })
 

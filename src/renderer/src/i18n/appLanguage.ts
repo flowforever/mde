@@ -691,11 +691,19 @@ export const resolveSystemAppLanguageId = (
       ? [locales]
       : [];
 
-  return candidateLocales.some((locale) =>
-    String(locale).trim().toLocaleLowerCase().startsWith("zh"),
-  )
-    ? "zh"
-    : "en";
+  for (const locale of candidateLocales) {
+    const normalizedLocale = String(locale).trim().toLocaleLowerCase();
+
+    if (normalizedLocale.startsWith("zh")) {
+      return "zh";
+    }
+
+    if (normalizedLocale.startsWith("en")) {
+      return "en";
+    }
+  }
+
+  return "en";
 };
 
 const getNavigatorLocales = (): readonly string[] => {
