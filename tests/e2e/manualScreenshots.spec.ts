@@ -7,7 +7,8 @@ import { expect, test, type Page } from '@playwright/test'
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
 
-const SCREENSHOT_TIMEOUT_MS = 180_000
+const SCREENSHOT_TIMEOUT_MS = 300_000
+const AI_RESULT_TIMEOUT_MS = 90_000
 const OUTPUT_DIR = resolve('user-manual/public/screenshots/zh-CN')
 
 test.setTimeout(SCREENSHOT_TIMEOUT_MS)
@@ -187,7 +188,7 @@ test('generates zh-CN user manual screenshots', async () => {
       .getByRole('button', { name: /总结 Markdown|Summarize Markdown/i })
       .click()
     await expect(window.getByRole('region', { name: /AI 结果|AI result/i }))
-      .toContainText(/手册截图摘要|manual/i, { timeout: 30_000 })
+      .toContainText(/手册截图摘要|manual/i, { timeout: AI_RESULT_TIMEOUT_MS })
     await capture(window, 'ai-result.png')
 
     await window.getByRole('button', { name: /打开设置|Open settings/i }).click()

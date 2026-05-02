@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { FormEventHandler, ReactNode } from "react";
+import type { FormEventHandler, KeyboardEventHandler, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
@@ -37,6 +37,11 @@ const mockBlockNoteState = vi.hoisted(() => ({
         transaction: { setMeta: ReturnType<typeof vi.fn> };
         transact: ReturnType<typeof vi.fn>;
         tryParseMarkdownToBlocks: ReturnType<typeof vi.fn>;
+        _tiptapEditor: {
+          commands: {
+            selectAll: ReturnType<typeof vi.fn>;
+          };
+        };
       }
     | undefined,
   lastOptions: undefined as
@@ -45,6 +50,7 @@ const mockBlockNoteState = vi.hoisted(() => ({
           isValidLink?: (href: string) => boolean;
           onClick?: (event: MouseEvent) => boolean | void;
         };
+        schema?: unknown;
         uploadFile?: (file: File, blockId?: string) => Promise<string>;
       }
     | undefined,
@@ -87,6 +93,7 @@ vi.mock("@blocknote/react", () => ({
       onClick?: (event: MouseEvent) => boolean | void;
     };
     uploadFile?: (file: File, blockId?: string) => Promise<string>;
+    schema?: unknown;
   }) => {
     mockBlockNoteState.lastOptions = options;
 
@@ -106,6 +113,11 @@ vi.mock("@blocknote/react", () => ({
           callback(transaction),
         ),
         tryParseMarkdownToBlocks: vi.fn().mockResolvedValue(blocks),
+        _tiptapEditor: {
+          commands: {
+            selectAll: vi.fn(),
+          },
+        },
       };
     }
 
@@ -122,7 +134,9 @@ vi.mock("@blocknote/mantine", () => ({
     editor,
     onChange,
     onInputCapture,
+    onKeyDownCapture,
     theme,
+    "data-line-spacing": lineSpacing,
   }: {
     readonly children?: ReactNode;
     readonly className?: string;
@@ -131,13 +145,17 @@ vi.mock("@blocknote/mantine", () => ({
     readonly editor: unknown;
     readonly onChange: (editor: unknown) => void;
     readonly onInputCapture?: FormEventHandler<HTMLDivElement>;
+    readonly onKeyDownCapture?: KeyboardEventHandler<HTMLDivElement>;
     readonly theme: "dark" | "light";
+    readonly "data-line-spacing"?: string;
   }) => (
     <div
       className={className}
+      data-line-spacing={lineSpacing}
       data-testid={testId}
       data-theme={theme}
       onInputCapture={onInputCapture}
+      onKeyDownCapture={onKeyDownCapture}
       tabIndex={0}
     >
       <div
@@ -407,6 +425,65 @@ describe("MarkdownBlockEditor accessibility", () => {
       "spellcheck",
       "false",
     );
+  });
+
+  it("applies the selected line spacing mode to the BlockNote surface", () => {
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Technical frontmatter workspace notes"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        lineSpacing="relaxed"
+        markdown="# Technical frontmatter workspace notes"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    expect(screen.getByTestId("blocknote-view")).toHaveAttribute(
+      "data-line-spacing",
+      "relaxed",
+    );
+  });
+
+  it("keeps select-all scoped to the editor when the editor has focus", () => {
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Selectable"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Selectable"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    const content = screen.getByTestId("markdown-editor-content");
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "a",
+      metaKey: true,
+    });
+
+    content.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(
+      mockBlockNoteState.lastEditor?._tiptapEditor.commands.selectAll,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it("shows restore actions and read-only preview state in the editor", async () => {
@@ -1406,6 +1483,53 @@ describe("MarkdownBlockEditor accessibility", () => {
     });
   });
 
+  it("closes the link picker from Escape even after focus leaves the input", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown="# Current"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Current"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+        workspaceTree={[
+          {
+            children: [
+              {
+                name: "intro.md",
+                path: "docs/intro.md",
+                type: "file",
+              },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /open link picker/i }));
+    await user.type(screen.getByRole("textbox", { name: /link target/i }), "intro");
+    screen.getByRole("textbox", { name: /link target/i }).blur();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: /insert link/i }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("saves immediately after creating and inserting a new document link", async () => {
     const user = userEvent.setup();
     const onCreateLinkedMarkdown = vi.fn().mockResolvedValue("docs/new-note.md");
@@ -1566,6 +1690,89 @@ describe("MarkdownBlockEditor accessibility", () => {
         "  B --> C",
         "```",
       ].join("\n"),
+    );
+  });
+
+  it("keeps Mermaid previews below the editor content instead of the editor top", async () => {
+    const markdown = [
+      "## End-to-End Flow",
+      "",
+      "```mermaid",
+      "flowchart TD",
+      "  A --> B",
+      "```",
+    ].join("\n");
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={markdown}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={markdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await screen.findByTestId("mermaid-flowchart-preview-0");
+
+    const editorContent = screen.getByTestId("markdown-editor-content");
+    const preview = screen.getByTestId("mermaid-flowchart-preview-0");
+
+    expect(
+      editorContent.compareDocumentPosition(preview) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("opens Mermaid previews in a zoomable read-only dialog", async () => {
+    const user = userEvent.setup();
+    const markdown = [
+      "## End-to-End Flow",
+      "",
+      "```mermaid",
+      "flowchart TD",
+      "  A --> B",
+      "```",
+    ].join("\n");
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={markdown}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={markdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open flowchart preview 1/i,
+      }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: /flowchart preview/i }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /zoom in/i }));
+
+    expect(screen.getByTestId("mermaid-flowchart-dialog-preview")).toHaveStyle(
+      "--flowchart-preview-scale: 1.25",
     );
   });
 });

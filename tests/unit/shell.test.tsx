@@ -17,6 +17,7 @@ interface MockMarkdownBlockEditorProps {
   readonly isDirty: boolean;
   readonly isReadOnly?: boolean;
   readonly isSaving: boolean;
+  readonly lineSpacing?: "compact" | "relaxed" | "standard";
   readonly markdown: string;
   readonly onExitHistoryPreview?: () => void;
   readonly onMarkdownChange: (contents: string) => void;
@@ -40,6 +41,9 @@ vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
       <span>{props.path}</span>
       <span>{props.markdown}</span>
       <span data-testid="mock-editor-color-scheme">{props.colorScheme}</span>
+      <span data-testid="mock-editor-line-spacing">
+        {props.lineSpacing ?? "standard"}
+      </span>
       {props.searchQuery ? (
         <span data-testid="mock-editor-search-query">{props.searchQuery}</span>
       ) : null}
@@ -1464,6 +1468,102 @@ describe("App shell", () => {
         name: /use centered editor view/i,
       }),
     ).toBeVisible();
+  });
+
+  it("changes and persists editor line spacing from the toolbar", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByTestId("mock-editor-line-spacing")).toHaveTextContent(
+      "standard",
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /editor line spacing/i,
+      }),
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: /relaxed/i }));
+
+    expect(screen.getByTestId("mock-editor-line-spacing")).toHaveTextContent(
+      "relaxed",
+    );
+    expect(localStorage.getItem("mde.editorLineSpacing")).toBe("relaxed");
+  });
+
+  it("restores the remembered editor line spacing on launch", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem("mde.editorLineSpacing", "compact");
+
+    render(<App />);
+
+    expect(await screen.findByTestId("mock-editor-line-spacing")).toHaveTextContent(
+      "compact",
+    );
   });
 
   it("shows AI actions for detected CLIs and renders read-only generated results", async () => {

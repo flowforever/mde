@@ -929,6 +929,37 @@ test('loads README markdown into the block editor surface', async () => {
   }
 })
 
+test('selects only editor content when select all is pressed inside the editor', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await expect(editableDocument).toBeVisible()
+    await editableDocument.click()
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A')
+
+    const selectionText = await window.evaluate(() => getSelection()?.toString() ?? '')
+
+    expect(selectionText).toContain('Fixture Workspace')
+    expect(selectionText).toContain('Root markdown file.')
+    expect(selectionText).not.toContain('Recent Files')
+    expect(selectionText).not.toContain('Explorer')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('renders and preserves YAML frontmatter outside the editor body', async () => {
   const workspacePath = await createFixtureWorkspace()
   const readmePath = join(workspacePath, 'README.md')
@@ -1160,10 +1191,10 @@ test('renders Markdown body with compact document typography', async () => {
     expect(styles.h1.fontSize).toBeGreaterThanOrEqual(38)
     expect(styles.h1.fontSize).toBeLessThanOrEqual(46)
     expect(styles.h1.lineHeight / styles.h1.fontSize).toBeLessThanOrEqual(1.22)
-    expect(styles.h1.borderBottomWidth).toBeGreaterThanOrEqual(1)
+    expect(styles.h1.borderBottomWidth).toBe(0)
     expect(styles.h2.fontSize).toBeGreaterThanOrEqual(26)
     expect(styles.h2.fontSize).toBeLessThanOrEqual(30)
-    expect(styles.h2.borderBottomWidth).toBeGreaterThanOrEqual(1)
+    expect(styles.h2.borderBottomWidth).toBe(0)
     expect(styles.h3.fontSize).toBeGreaterThanOrEqual(21)
     expect(styles.h3.fontSize).toBeLessThanOrEqual(24)
     expect(styles.h3.borderBottomWidth).toBe(0)
@@ -1181,6 +1212,30 @@ test('renders Markdown body with compact document typography', async () => {
           sideMenu.opacity <= 0.05
       )
     ).toBe(true)
+
+    await expect(editor.locator('.markdown-editor-surface .shiki').first()).toBeVisible({
+      timeout: 15_000
+    })
+
+    await window.getByRole('button', { name: /editor line spacing/i }).click()
+    await window.getByRole('menuitemradio', { name: /relaxed/i }).click()
+
+    const relaxedLineHeight = await window.evaluate(() => {
+      const paragraph = document.querySelector<HTMLElement>(
+        '.markdown-editor-surface .bn-block-content[data-content-type="paragraph"]'
+      )
+
+      if (!paragraph) {
+        throw new Error('Missing paragraph after changing line spacing')
+      }
+
+      return Number.parseFloat(getComputedStyle(paragraph).lineHeight)
+    })
+
+    expect(relaxedLineHeight).toBeGreaterThan(styles.body.lineHeight)
+    expect(
+      await window.evaluate(() => localStorage.getItem('mde.editorLineSpacing'))
+    ).toBe('relaxed')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -1415,6 +1470,39 @@ test('renders Mermaid flowcharts and saves pasted images beside the Markdown fil
     const preview = window.getByTestId('mermaid-flowchart-preview-0')
 
     await expect(preview.locator('svg')).toBeVisible({ timeout: 15_000 })
+
+    const flowchartPlacement = await window.evaluate(() => {
+      const codeBlock = document.querySelector<HTMLElement>(
+        '.markdown-editor-surface .bn-block-content[data-content-type="codeBlock"]'
+      )
+      const flowchartPreview = document.querySelector<HTMLElement>(
+        '[data-testid="mermaid-flowchart-preview-0"]'
+      )
+
+      if (!codeBlock || !flowchartPreview) {
+        throw new Error('Missing flowchart source or preview')
+      }
+
+      return {
+        sourceBottom: codeBlock.getBoundingClientRect().bottom,
+        previewTop: flowchartPreview.getBoundingClientRect().top
+      }
+    })
+
+    expect(flowchartPlacement.previewTop).toBeGreaterThan(
+      flowchartPlacement.sourceBottom
+    )
+
+    await window.getByRole('button', { name: /open flowchart preview 1/i }).click()
+    await expect(
+      window.getByRole('dialog', { name: /flowchart preview/i })
+    ).toBeVisible()
+    await window.getByRole('button', { name: /zoom in/i }).click()
+    await expect(window.getByTestId('mermaid-flowchart-dialog-preview')).toHaveCSS(
+      '--flowchart-preview-scale',
+      '1.25'
+    )
+    await window.getByRole('button', { name: /close flowchart preview/i }).click()
 
     await window
       .getByLabel(/mermaid source 1/i)

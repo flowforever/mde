@@ -1,4 +1,10 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   extractMermaidBlocks,
@@ -8,6 +14,7 @@ import type { AppText } from "../i18n/appLanguage";
 
 interface MermaidFlowchartPanelProps {
   readonly colorScheme: "dark" | "light";
+  readonly isReadOnly?: boolean;
   readonly markdown: string;
   readonly onMarkdownChange: (contents: string) => void;
   readonly text: AppText;
@@ -43,6 +50,7 @@ const loadMermaid = async (): Promise<MermaidApi> => {
 
 export const MermaidFlowchartPanel = ({
   colorScheme,
+  isReadOnly = false,
   markdown,
   onMarkdownChange,
   text,
@@ -52,6 +60,10 @@ export const MermaidFlowchartPanel = ({
   const [renderedFlowcharts, setRenderedFlowcharts] = useState<
     readonly RenderedFlowchart[]
   >([]);
+  const [activePreviewIndex, setActivePreviewIndex] = useState<number | null>(
+    null,
+  );
+  const [previewScale, setPreviewScale] = useState(1);
 
   useEffect(() => {
     let isCurrent = true;
@@ -125,57 +137,140 @@ export const MermaidFlowchartPanel = ({
   }
 
   return (
-    <aside
-      aria-label={text("flowchart.label")}
-      className="mermaid-flowchart-panel"
-    >
-      {blocks.map((block) => {
-        const rendered = renderedFlowcharts[block.index];
+    <>
+      <aside
+        aria-label={text("flowchart.label")}
+        className="mermaid-flowchart-panel"
+      >
+        {blocks.map((block) => {
+          const rendered = renderedFlowcharts[block.index];
 
-        return (
-          <section className="mermaid-flowchart-card" key={block.index}>
-            <div className="mermaid-flowchart-preview-shell">
-              <div
-                className="mermaid-flowchart-preview"
-                data-testid={`mermaid-flowchart-preview-${block.index}`}
-              >
+          return (
+            <section className="mermaid-flowchart-card" key={block.index}>
+              <div className="mermaid-flowchart-preview-shell">
                 {rendered?.svg ? (
+                  <button
+                    aria-label={text("flowchart.openPreview", {
+                      index: block.index + 1,
+                    })}
+                    className="mermaid-flowchart-preview"
+                    data-testid={`mermaid-flowchart-preview-${block.index}`}
+                    onClick={() => {
+                      setActivePreviewIndex(block.index);
+                      setPreviewScale(1);
+                    }}
+                    type="button"
+                  >
+                    <span
+                      dangerouslySetInnerHTML={{ __html: rendered.svg }}
+                      className="mermaid-flowchart-svg"
+                    />
+                  </button>
+                ) : (
                   <div
-                    dangerouslySetInnerHTML={{ __html: rendered.svg }}
-                    className="mermaid-flowchart-svg"
-                  />
-                ) : rendered?.errorMessage ? (
-                  <p className="mermaid-flowchart-error" role="alert">
-                    {rendered.errorMessage}
-                  </p>
-                ) : null}
+                    className="mermaid-flowchart-preview"
+                    data-testid={`mermaid-flowchart-preview-${block.index}`}
+                  >
+                    {rendered?.errorMessage ? (
+                      <p className="mermaid-flowchart-error" role="alert">
+                        {rendered.errorMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
               </div>
-            </div>
-            <label className="mermaid-flowchart-source-label">
-              <span>
-                {text("flowchart.source", { index: block.index + 1 })}
-              </span>
-              <textarea
-                aria-label={text("flowchart.source", {
-                  index: block.index + 1,
-                })}
-                className="mermaid-flowchart-source"
-                onChange={(event) => {
-                  onMarkdownChange(
-                    replaceMermaidBlockSource(
-                      markdown,
-                      block.index,
-                      event.currentTarget.value,
-                    ),
+              <label className="mermaid-flowchart-source-label">
+                <span>
+                  {text("flowchart.source", { index: block.index + 1 })}
+                </span>
+                <textarea
+                  aria-label={text("flowchart.source", {
+                    index: block.index + 1,
+                  })}
+                  className="mermaid-flowchart-source"
+                  disabled={isReadOnly}
+                  onChange={(event) => {
+                    onMarkdownChange(
+                      replaceMermaidBlockSource(
+                        markdown,
+                        block.index,
+                        event.currentTarget.value,
+                      ),
+                    );
+                  }}
+                  spellCheck={false}
+                  value={block.source}
+                />
+              </label>
+            </section>
+          );
+        })}
+      </aside>
+      {activePreviewIndex !== null &&
+      renderedFlowcharts[activePreviewIndex]?.svg ? (
+        <div
+          aria-label={text("flowchart.previewDialog")}
+          aria-modal="true"
+          className="mermaid-flowchart-dialog-backdrop"
+          role="dialog"
+        >
+          <section className="mermaid-flowchart-dialog">
+            <div className="mermaid-flowchart-dialog-toolbar">
+              <button
+                onClick={() => {
+                  setPreviewScale((currentValue) =>
+                    Math.max(0.5, currentValue - 0.25),
                   );
                 }}
-                spellCheck={false}
-                value={block.source}
+                type="button"
+              >
+                {text("flowchart.zoomOut")}
+              </button>
+              <button
+                onClick={() => {
+                  setPreviewScale(1);
+                }}
+                type="button"
+              >
+                {text("flowchart.resetZoom")}
+              </button>
+              <button
+                onClick={() => {
+                  setPreviewScale((currentValue) =>
+                    Math.min(2.5, currentValue + 0.25),
+                  );
+                }}
+                type="button"
+              >
+                {text("flowchart.zoomIn")}
+              </button>
+              <button
+                aria-label={text("flowchart.closePreview")}
+                onClick={() => {
+                  setActivePreviewIndex(null);
+                }}
+                type="button"
+              >
+                {text("common.close")}
+              </button>
+            </div>
+            <div className="mermaid-flowchart-dialog-viewport">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: renderedFlowcharts[activePreviewIndex]?.svg ?? "",
+                }}
+                className="mermaid-flowchart-dialog-preview"
+                data-testid="mermaid-flowchart-dialog-preview"
+                style={
+                  {
+                    "--flowchart-preview-scale": String(previewScale),
+                  } as CSSProperties
+                }
               />
-            </label>
+            </div>
           </section>
-        );
-      })}
-    </aside>
+        </div>
+      ) : null}
+    </>
   );
 };

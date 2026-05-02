@@ -88,6 +88,15 @@ describe("app language preferences", () => {
     expect(chineseText("history.emptyAutosaveConfirm")).toContain("清空文档");
   });
 
+  it("keeps slash command names stable while localizing supporting editor text", () => {
+    const englishText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+    const chineseText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);
+
+    expect(englishText("editor.linkSlashTitle")).toBe("Link");
+    expect(chineseText("editor.linkSlashTitle")).toBe("Link");
+    expect(chineseText("editor.linkSlashDescription")).toContain("Markdown");
+  });
+
   it("formats parameterized language pack text", () => {
     const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 

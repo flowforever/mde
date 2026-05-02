@@ -1,6 +1,6 @@
 {
   "name": "mde",
-  "version": "1.3.18",
+  "version": "1.3.19",
   "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
   "productName": "MDE",
   "private": true,
@@ -27,7 +27,7 @@
     "test:unit": "vitest run --project unit --testTimeout=30000",
     "test:integration": "vitest run --project integration --testTimeout=30000",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test tests/e2e/markdown-editor.e2e.test.ts",
     "test": "npm run test:unit && npm run test:integration && npm run test:e2e",
     "docs:screenshots": "playwright test tests/e2e/manualScreenshots.spec.ts",
     "docs:dev": "vitepress dev user-manual",
@@ -72,7 +72,8 @@
     "lucide-react": "^1.12.0",
     "mermaid": "^11.14.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "shiki": "^4.0.2"
   },
   "build": {
     "appId": "com.huashu.mde",

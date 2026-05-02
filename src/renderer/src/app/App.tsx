@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   AlignHorizontalSpaceAround,
+  AlignVerticalSpaceAround,
   History,
   Search,
   StretchHorizontal,
@@ -49,6 +50,11 @@ import {
   readEditorViewMode,
   writeEditorViewMode,
 } from "../editor/editorViewMode";
+import {
+  EDITOR_LINE_SPACING_OPTIONS,
+  readEditorLineSpacing,
+  writeEditorLineSpacing,
+} from "../editor/editorLineSpacing";
 import {
   collectMarkdownFilePaths,
   resolveEditorLinkTarget,
@@ -395,6 +401,11 @@ export const App = (): React.JSX.Element => {
   const [explorerWidth, setExplorerWidth] = useState(EXPLORER_WIDTH_DEFAULT);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [editorViewMode, setEditorViewMode] = useState(readEditorViewMode);
+  const [editorLineSpacing, setEditorLineSpacing] = useState(
+    readEditorLineSpacing,
+  );
+  const [isEditorLineSpacingMenuOpen, setIsEditorLineSpacingMenuOpen] =
+    useState(false);
   const [themePreference, setThemePreference] = useState(readThemePreference);
   const [customAppLanguagePacks, setCustomAppLanguagePacks] = useState(
     readCustomAppLanguagePacks,
@@ -2156,6 +2167,7 @@ export const App = (): React.JSX.Element => {
   const editorViewToggleLabel = isEditorFullWidth
     ? text("editor.useCenteredView")
     : text("editor.useFullWidthView");
+  const editorLineSpacingLabel = text("editor.lineSpacing");
   const currentAiDocumentKey =
     state.workspace && state.loadedFile
       ? createAiDocumentKey(state.workspace.rootPath, state.loadedFile.path)
@@ -2426,6 +2438,68 @@ export const App = (): React.JSX.Element => {
               <History aria-hidden="true" size={17} strokeWidth={2} />
             </button>
           ) : null}
+          {state.loadedFile || historyPreview ? (
+            <div
+              className="editor-line-spacing-menu-shell"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setIsEditorLineSpacingMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                aria-expanded={isEditorLineSpacingMenuOpen}
+                aria-haspopup="menu"
+                aria-label={editorLineSpacingLabel}
+                className="editor-action-button"
+                onClick={() => {
+                  setIsEditorLineSpacingMenuOpen(
+                    (currentValue) => !currentValue,
+                  );
+                }}
+                title={editorLineSpacingLabel}
+                type="button"
+              >
+                <AlignVerticalSpaceAround
+                  aria-hidden="true"
+                  size={17}
+                  strokeWidth={2}
+                />
+              </button>
+              {isEditorLineSpacingMenuOpen ? (
+                <div
+                  aria-label={text("editor.lineSpacingMenu")}
+                  className="editor-line-spacing-menu"
+                  role="menu"
+                >
+                  {EDITOR_LINE_SPACING_OPTIONS.map((option) => (
+                    <button
+                      aria-checked={editorLineSpacing === option.id}
+                      className={
+                        editorLineSpacing === option.id
+                          ? "is-active"
+                          : undefined
+                      }
+                      key={option.id}
+                      onClick={() => {
+                        setEditorLineSpacing(option.id);
+                        writeEditorLineSpacing(
+                          globalThis.localStorage,
+                          option.id,
+                        );
+                        setIsEditorLineSpacingMenuOpen(false);
+                      }}
+                      role="menuitemradio"
+                      type="button"
+                    >
+                      {text(option.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <button
             aria-label={editorViewToggleLabel}
             aria-pressed={isEditorFullWidth}
@@ -2489,6 +2563,7 @@ export const App = (): React.JSX.Element => {
             isDirty={historyPreview ? false : state.isDirty}
             isReadOnly={Boolean(historyPreview)}
             isSaving={historyPreview ? false : state.isSavingFile}
+            lineSpacing={editorLineSpacing}
             markdownFilePaths={
               state.workspace
                 ? collectMarkdownFilePaths(state.workspace.tree)

@@ -9,7 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Block } from "@blocknote/core";
+import {
+  BlockNoteSchema,
+  createCodeBlockSpec,
+  defaultBlockSpecs,
+  type Block,
+} from "@blocknote/core";
 import { filterSuggestionItems } from "@blocknote/core/extensions";
 import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/core/fonts/inter.css";
@@ -28,9 +33,11 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
+import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
+import type { EditorLineSpacing } from "./editorLineSpacing";
 import { replaceEditorDocumentWithoutUndoHistory } from "./editorHydration";
 import {
   collectMarkdownFilePaths,
@@ -71,6 +78,7 @@ interface MarkdownBlockEditorProps {
   readonly isDirty: boolean;
   readonly isReadOnly?: boolean;
   readonly isSaving: boolean;
+  readonly lineSpacing?: EditorLineSpacing;
   readonly markdown: string;
   readonly markdownFilePaths?: readonly string[];
   readonly onCreateLinkedMarkdown?: (filePath: string) => Promise<string>;
@@ -127,6 +135,35 @@ const LINK_SUGGESTION_LIMIT = 20;
 const BLUR_SAVE_SETTLE_DELAY_MS = 50;
 const BLUR_SAVE_RETRY_DELAY_MS = 100;
 const BLUR_SAVE_UNCHANGED_RETRY_LIMIT = 20;
+const SUPPORTED_CODE_LANGUAGES = {
+  bash: { aliases: ["sh", "shell", "zsh"], name: "Bash" },
+  css: { name: "CSS" },
+  html: { name: "HTML" },
+  javascript: { aliases: ["js"], name: "JavaScript" },
+  json: { name: "JSON" },
+  markdown: { aliases: ["md"], name: "Markdown" },
+  mermaid: { name: "Mermaid" },
+  python: { aliases: ["py"], name: "Python" },
+  text: { aliases: ["plaintext", "txt"], name: "Plain text" },
+  tsx: { name: "TSX" },
+  typescript: { aliases: ["ts"], name: "TypeScript" },
+  yaml: { aliases: ["yml"], name: "YAML" },
+};
+const editorSchema = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    codeBlock: createCodeBlockSpec({
+      createHighlighter: () =>
+        createHighlighter({
+          engine: createJavaScriptRegexEngine(),
+          langs: Object.keys(SUPPORTED_CODE_LANGUAGES),
+          themes: ["github-light", "github-dark"],
+        }),
+      defaultLanguage: "text",
+      supportedLanguages: SUPPORTED_CODE_LANGUAGES,
+    }),
+  },
+});
 
 const joinWorkspacePath = (parentPath: string, entryName: string): string =>
   parentPath ? `${parentPath}/${entryName}` : entryName;
@@ -219,6 +256,7 @@ export const MarkdownBlockEditor = forwardRef<
     isDirty,
     isReadOnly = false,
     isSaving,
+    lineSpacing = "standard",
     markdownFilePaths = [],
     markdown,
     onCreateLinkedMarkdown,
@@ -260,6 +298,7 @@ export const MarkdownBlockEditor = forwardRef<
           return true;
         },
       },
+      schema: editorSchema,
       uploadFile: onImageUpload,
     },
     [onImageUpload],
@@ -433,6 +472,27 @@ export const MarkdownBlockEditor = forwardRef<
       editor.focus();
     }, 0);
   }, [editor]);
+
+  useEffect(() => {
+    if (!linkDialogState) {
+      return undefined;
+    }
+
+    const closeLinkDialogOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      closeLinkDialog();
+    };
+
+    window.addEventListener("keydown", closeLinkDialogOnEscape);
+
+    return () => {
+      window.removeEventListener("keydown", closeLinkDialogOnEscape);
+    };
+  }, [closeLinkDialog, linkDialogState]);
 
   const openLinkDialog = useCallback((): void => {
     const visibleWorkspaceTree = createVisibleEditorLinkTree(
@@ -848,6 +908,32 @@ export const MarkdownBlockEditor = forwardRef<
 
     hasLocalChangesRef.current = true;
   }, [isReadOnly]);
+  const selectAllEditorContent = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+      if (
+        event.key.toLocaleLowerCase() !== "a" ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const eventTarget = event.target;
+
+      if (
+        eventTarget instanceof HTMLInputElement ||
+        eventTarget instanceof HTMLTextAreaElement ||
+        eventTarget instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      editor._tiptapEditor.commands.selectAll();
+    },
+    [editor],
+  );
 
   useEffect(() => {
     if (isReadOnly || !isDirty || isSaving) {
@@ -949,22 +1035,6 @@ export const MarkdownBlockEditor = forwardRef<
           {errorMessage}
         </p>
       ) : null}
-      {!isReadOnly ? (
-        <MermaidFlowchartPanel
-          colorScheme={colorScheme}
-          markdown={draftMarkdownDocument.body}
-          onMarkdownChange={(bodyMarkdown) => {
-            hasLocalChangesRef.current = true;
-            onMarkdownChange(
-              composeMarkdownWithFrontmatter(
-                draftMarkdownDocument,
-                bodyMarkdown,
-              ),
-            );
-          }}
-          text={text}
-        />
-      ) : null}
       {draftMarkdownDocument.frontmatter ? (
         <FrontmatterPanel
           frontmatter={draftMarkdownDocument.frontmatter}
@@ -978,10 +1048,12 @@ export const MarkdownBlockEditor = forwardRef<
         data-read-only={isReadOnly ? "true" : "false"}
         data-testid="markdown-editor-content"
         onInputCapture={markEditorInput}
+        onKeyDownCapture={selectAllEditorContent}
         spellCheck={false}
       >
         <BlockNoteView
           className="markdown-editor-surface"
+          data-line-spacing={lineSpacing}
           data-testid="blocknote-view"
           editable={!isReadOnly}
           editor={editor}
@@ -1030,6 +1102,22 @@ export const MarkdownBlockEditor = forwardRef<
           ) : null}
         </BlockNoteView>
       </div>
+      <MermaidFlowchartPanel
+        colorScheme={colorScheme}
+        isReadOnly={isReadOnly}
+        markdown={draftMarkdownDocument.body}
+        onMarkdownChange={(bodyMarkdown) => {
+          if (isReadOnly) {
+            return;
+          }
+
+          hasLocalChangesRef.current = true;
+          onMarkdownChange(
+            composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown),
+          );
+        }}
+        text={text}
+      />
       {linkDialogState ? (
         <div
           aria-label={text("editor.linkDialogTitle")}
