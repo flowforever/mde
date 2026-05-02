@@ -1317,6 +1317,28 @@ export const App = (): React.JSX.Element => {
     }
   }, [state.workspace?.rootPath, text]);
 
+  const setDeletedDocumentHistoryVisible = useCallback(
+    async (isVisible: boolean): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      if (isVisible) {
+        await openDeletedDocumentHistory();
+        return;
+      }
+
+      dispatch({
+        isVisible: false,
+        type: "history/deleted-documents-visibility-set",
+        workspaceRoot,
+      });
+    },
+    [openDeletedDocumentHistory, state.workspace?.rootPath],
+  );
+
   const loadDocumentHistoryVersions = useCallback(
     async (
       filePath: string,
@@ -1430,6 +1452,9 @@ export const App = (): React.JSX.Element => {
         type: "history/panel-visibility-set",
         workspaceRoot,
       });
+      if (historyPreview?.mode === "deleted-document") {
+        await setDeletedDocumentHistoryVisible(false);
+      }
       return;
     }
 
@@ -1443,6 +1468,9 @@ export const App = (): React.JSX.Element => {
     }
 
     try {
+      if (historyPreview?.mode === "deleted-document") {
+        await setDeletedDocumentHistoryVisible(true);
+      }
       await loadDocumentHistoryVersions(historyPath, workspaceRoot);
     } catch (error) {
       dispatch({
@@ -1453,6 +1481,7 @@ export const App = (): React.JSX.Element => {
     }
   }, [
     loadDocumentHistoryVersions,
+    setDeletedDocumentHistoryVisible,
     state.historyPreview,
     state.isDocumentHistoryPanelVisible,
     state.loadedFile,
@@ -2209,9 +2238,6 @@ export const App = (): React.JSX.Element => {
         }}
         deletedDocumentHistory={state.deletedDocumentHistory ?? []}
         onForgetWorkspace={forgetWorkspace}
-        onOpenDeletedDocumentHistory={() => {
-          void openDeletedDocumentHistory();
-        }}
         onOpenFile={() => {
           void openFile();
         }}
@@ -2237,6 +2263,9 @@ export const App = (): React.JSX.Element => {
         onSelectDeletedDocumentHistoryEntry={previewDeletedDocumentHistoryEntry}
         onSelectFile={(filePath) => {
           void loadFile(filePath);
+        }}
+        onSetDeletedDocumentHistoryVisible={(isVisible) => {
+          void setDeletedDocumentHistoryVisible(isVisible);
         }}
         onGenerateAppLanguagePack={generateAppLanguagePack}
         onSwitchWorkspace={(workspace) => {

@@ -2061,6 +2061,22 @@ test('recovers a deleted Markdown document from the explorer history section', a
         .first()
     ).toBeVisible()
 
+    await window.getByRole('button', { name: /^version history$/i }).click()
+    await expect(
+      window.getByRole('complementary', { name: /^version history$/i })
+    ).toHaveCount(0)
+    await expect(
+      window.getByRole('button', { name: /^deleted documents/i })
+    ).toHaveCount(0)
+
+    await window.getByRole('button', { name: /^version history$/i }).click()
+    await expect(
+      window.getByRole('button', { name: /^deleted documents/i })
+    ).toBeVisible()
+    await expect(
+      window.getByRole('complementary', { name: /^version history$/i })
+    ).toBeVisible()
+
     await window
       .getByRole('button', { name: /restore this version/i })
       .click()

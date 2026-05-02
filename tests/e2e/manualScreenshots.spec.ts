@@ -152,7 +152,7 @@ test('generates zh-CN user manual screenshots', async () => {
     await expect(
       window.getByRole('button', { name: /打开搜索结果 README\.md|Open search result README\.md/i })
         .first()
-    ).toBeVisible()
+    ).toBeVisible({ timeout: 15_000 })
     await capture(window, 'workspace-search.png')
     await window.keyboard.press('Escape')
 

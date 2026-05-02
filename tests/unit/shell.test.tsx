@@ -2615,6 +2615,9 @@ describe("App shell", () => {
     expect(
       screen.getByRole("complementary", { name: /version history/i }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /^deleted documents/i }),
+    ).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: /^version history$/i }),
@@ -2623,17 +2626,24 @@ describe("App shell", () => {
     expect(
       screen.queryByRole("complementary", { name: /version history/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^deleted documents/i }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: /^version history$/i }),
     );
 
+    expect(editorApi.listDeletedDocumentHistory).toHaveBeenCalledTimes(2);
     expect(editorApi.listDocumentHistory).toHaveBeenLastCalledWith(
       "deleted.md",
       "/workspace",
     );
     expect(
       await screen.findByRole("complementary", { name: /version history/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /^deleted documents/i }),
     ).toBeVisible();
   });
 

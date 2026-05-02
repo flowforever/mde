@@ -87,7 +87,6 @@ interface ExplorerPaneProps {
   readonly onCreateFolder: (folderPath: string) => void;
   readonly onDeleteEntry: () => void;
   readonly onForgetWorkspace?: (workspace: RecentWorkspace) => void;
-  readonly onOpenDeletedDocumentHistory?: () => Promise<void> | void;
   readonly onOpenFile?: () => void;
   readonly onOpenRecentFile?: (filePath: string) => void;
   readonly onOpenWorkspace: () => void;
@@ -109,6 +108,9 @@ interface ExplorerPaneProps {
     entry: DeletedDocumentHistoryEntry,
   ) => void;
   readonly onSelectFile: (filePath: string) => void;
+  readonly onSetDeletedDocumentHistoryVisible?: (
+    isVisible: boolean,
+  ) => Promise<void> | void;
   readonly onGenerateAppLanguagePack?: (language: string) => Promise<void>;
   readonly onSwitchWorkspace?: (workspace: RecentWorkspace) => void;
   readonly onToggleCollapsed?: () => void;
@@ -406,7 +408,6 @@ export const ExplorerPane = ({
   onCreateFolder,
   onDeleteEntry,
   onForgetWorkspace = () => undefined,
-  onOpenDeletedDocumentHistory = () => undefined,
   onOpenFile = () => undefined,
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
@@ -419,6 +420,7 @@ export const ExplorerPane = ({
   onSelectEntry,
   onSelectDeletedDocumentHistoryEntry = () => undefined,
   onSelectFile,
+  onSetDeletedDocumentHistoryVisible = () => undefined,
   onGenerateAppLanguagePack = () => Promise.resolve(),
   onSwitchWorkspace = () => undefined,
   onToggleCollapsed = () => undefined,
@@ -451,8 +453,6 @@ export const ExplorerPane = ({
   const [recentFilesPanelState, setRecentFilesPanelState] = useState(
     readRecentFilesPanelState,
   );
-  const [isDeletedDocumentsVisible, setDeletedDocumentsVisible] =
-    useState(false);
   const [isDeletedDocumentsExpanded, setDeletedDocumentsExpanded] =
     useState(false);
   const [expandedDirectoryState, setExpandedDirectoryState] =
@@ -1060,6 +1060,8 @@ export const ExplorerPane = ({
       }
     : null;
   const isRecentFilesCollapsed = recentFilesPanelState.isCollapsed;
+  const isDeletedDocumentsVisible =
+    state.isDeletedDocumentHistoryVisible === true;
   const recentFilesSectionStyle = {
     "--recent-files-height": `${recentFilesPanelState.height}px`,
   } as CSSProperties;
@@ -1106,16 +1108,15 @@ export const ExplorerPane = ({
     }));
   };
   const toggleDeletedDocumentsPanel = (): void => {
-    setDeletedDocumentsVisible((currentValue) => {
-      const nextValue = !currentValue;
+    const nextValue = !isDeletedDocumentsVisible;
 
-      if (nextValue) {
-        setDeletedDocumentsExpanded(true);
-        void onOpenDeletedDocumentHistory();
-      }
+    if (nextValue) {
+      setDeletedDocumentsExpanded(true);
+    }
 
-      return nextValue;
-    });
+    void Promise.resolve(
+      onSetDeletedDocumentHistoryVisible(nextValue),
+    ).catch(() => undefined);
   };
   const selectAiTool = (toolId: AiToolId): void => {
     onAiSettingsChange({

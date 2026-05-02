@@ -247,6 +247,15 @@ describe('appReducer', () => {
 
     expect(state.deletedDocumentHistory).toEqual([deletedDocument])
     expect(state.isDeletedDocumentHistoryVisible).toBe(true)
+
+    const hiddenState = appReducer(state, {
+      isVisible: false,
+      type: 'history/deleted-documents-visibility-set',
+      workspaceRoot: workspace.rootPath
+    })
+
+    expect(hiddenState.deletedDocumentHistory).toEqual([deletedDocument])
+    expect(hiddenState.isDeletedDocumentHistoryVisible).toBe(false)
   })
 
   it('stores file load failures', () => {

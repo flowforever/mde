@@ -60,6 +60,11 @@ export type AppAction =
       readonly workspaceRoot: string
     }
   | {
+      readonly isVisible: boolean
+      readonly type: 'history/deleted-documents-visibility-set'
+      readonly workspaceRoot: string
+    }
+  | {
       readonly filterId: DocumentHistoryFilterId
       readonly type: 'history/filter-selected'
       readonly workspaceRoot: string

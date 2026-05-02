@@ -339,7 +339,7 @@ describe("ExplorerTree", () => {
 
   it("toggles deleted documents independently from recent files", async () => {
     const user = userEvent.setup();
-    const onOpenDeletedDocumentHistory = vi.fn();
+    const onSetDeletedDocumentHistoryVisible = vi.fn();
     const onSelectDeletedDocumentHistoryEntry = vi.fn();
     const deletedDocument = {
       deletedAt: "2026-05-02T01:00:00.000Z",
@@ -374,13 +374,12 @@ describe("ExplorerTree", () => {
       historyPreview: null,
     };
 
-    render(
+    const { rerender } = render(
       <ExplorerPane
         deletedDocumentHistory={[deletedDocument]}
         onCreateFile={vi.fn()}
         onCreateFolder={vi.fn()}
         onDeleteEntry={vi.fn()}
-        onOpenDeletedDocumentHistory={onOpenDeletedDocumentHistory}
         onOpenWorkspace={vi.fn()}
         onRenameEntry={vi.fn()}
         onSelectDeletedDocumentHistoryEntry={
@@ -388,6 +387,9 @@ describe("ExplorerTree", () => {
         }
         onSelectEntry={vi.fn()}
         onSelectFile={vi.fn()}
+        onSetDeletedDocumentHistoryVisible={
+          onSetDeletedDocumentHistoryVisible
+        }
         text={text}
         state={state}
       />,
@@ -397,7 +399,27 @@ describe("ExplorerTree", () => {
       screen.getByRole("button", { name: /recover deleted documents/i }),
     );
 
-    expect(onOpenDeletedDocumentHistory).toHaveBeenCalledTimes(1);
+    expect(onSetDeletedDocumentHistoryVisible).toHaveBeenCalledWith(true);
+    rerender(
+      <ExplorerPane
+        deletedDocumentHistory={[deletedDocument]}
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectDeletedDocumentHistoryEntry={
+          onSelectDeletedDocumentHistoryEntry
+        }
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        onSetDeletedDocumentHistoryVisible={
+          onSetDeletedDocumentHistoryVisible
+        }
+        text={text}
+        state={{ ...state, isDeletedDocumentHistoryVisible: true }}
+      />,
+    );
     expect(
       screen.getByRole("button", { name: /^deleted documents/i }),
     ).toBeVisible();
@@ -426,6 +448,27 @@ describe("ExplorerTree", () => {
       screen.getByRole("button", { name: /recover deleted documents/i }),
     );
 
+    expect(onSetDeletedDocumentHistoryVisible).toHaveBeenLastCalledWith(false);
+    rerender(
+      <ExplorerPane
+        deletedDocumentHistory={[deletedDocument]}
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onRenameEntry={vi.fn()}
+        onSelectDeletedDocumentHistoryEntry={
+          onSelectDeletedDocumentHistoryEntry
+        }
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        onSetDeletedDocumentHistoryVisible={
+          onSetDeletedDocumentHistoryVisible
+        }
+        text={text}
+        state={state}
+      />,
+    );
     expect(
       screen.queryByRole("button", { name: /^deleted documents/i }),
     ).not.toBeInTheDocument();

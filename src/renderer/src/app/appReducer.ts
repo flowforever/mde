@@ -120,6 +120,15 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         documentHistoryVersions: action.versions,
         isDocumentHistoryPanelVisible: true
       }
+    case 'history/deleted-documents-visibility-set':
+      if (!isCurrentWorkspace(state, action.workspaceRoot)) {
+        return state
+      }
+
+      return {
+        ...state,
+        isDeletedDocumentHistoryVisible: action.isVisible
+      }
     case 'history/filter-selected':
       if (!isCurrentWorkspace(state, action.workspaceRoot)) {
         return state
