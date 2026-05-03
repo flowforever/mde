@@ -3,6 +3,11 @@
 ## Status
 
 * 2026-05-03: Auto-pick started. Autonomy gate passed: the required behavior, UI constraints, i18n requirement, test plan, and referenced prototype are present in this document and can be implemented from existing global-search code and tests without external credentials or human input.
+* Released in `v1.4.14`.
+* Completed the workspace search history tag layout with a 16-entry cap, type-to-filter behavior, hidden empty-match state, and focus-preserving tag clicks.
+* Added global search result preview keyword highlighting and removed the platform-native blue clear control from both workspace search and current-editor search fields.
+* Updated the Chinese user manual search guide and refreshed screenshots through the E2E screenshot workflow.
+* Verification completed: `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`, `npm run build`, `npm run docs:screenshots`, `npm run docs:build`, pre-push verification, Release workflow `25282501006`, and User Manual workflow `25282501003`.
 
 ## 背景
 
