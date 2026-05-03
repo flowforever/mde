@@ -2,7 +2,14 @@
 
 ## Status
 
-In development: implementing explorer copy/paste for Markdown files and directories, including Cmd/Ctrl+C/V, context menu copy/paste, relative/absolute path copy, and image asset migration for copied Markdown.
+Completed in v1.4.11.
+
+- Added Explorer copy/paste for Markdown files and folders through context menus and Cmd/Ctrl+C/V.
+- Added copy relative path and copy absolute path actions.
+- Migrated local `.mde/assets` images for workspace copies and external Markdown paste, including macOS Finder file URL clipboard entries.
+- Adjusted expanded-folder clicks to collapse without selecting, aligned Explorer footer controls, and widened context menus.
+- Updated `user-manual/zh-CN/workspace.md`.
+- Verification: `npm run lint`; `npm run typecheck`; `npm run test:unit`; `npm run test:integration`; `npm run test:coverage`; `npm run docs:build`; `npm run build`; `npm audit --audit-level=high`; `npx npm@10 ci --dry-run`; `npm run test:e2e`; GitHub Release workflow v1.4.11; Deploy User Manual workflow v1.4.11.
 
 ## MDE left panel 树形菜单应该提供 copy / paste 操作
 
