@@ -15,6 +15,7 @@ describe('cli registration integration', () => {
         getPath: (name) => (name === 'exe' ? '/Applications/MDE.app/Contents/MacOS/MDE' : tmpdir()),
         isPackaged: true
       },
+      commonCommandDirectories: [],
       env: { PATH: binPath },
       platform: 'darwin'
     })

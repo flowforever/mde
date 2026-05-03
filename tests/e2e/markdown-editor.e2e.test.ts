@@ -22,6 +22,34 @@ const E2E_TEST_TIMEOUT_MS = 120_000
 const E2E_BUILD_TIMEOUT_MS = 600_000
 const E2E_UI_READY_TIMEOUT_MS = 20_000
 const E2E_AI_RESULT_TIMEOUT_MS = 30_000
+const AUTO_SUPERPOWER_FLOWCHART = [
+  'flowchart TD',
+  '    S1[init] --> C1{single-project run ready?}',
+  '    C1 -->|confirm project + branch/base| S2[pre-setup]',
+  '    C1 -->|multi-project: choose one project| S1R[resume init with selected project]',
+  '    S1R --> S2',
+  '    C1 -->|no clean single-project slice| SX[stop and split ticket]',
+  '    S2 --> S3a[brainstorm feature]',
+  '    S2 --> S3b[debug bug]',
+  '    S3a --> S4[spec-auto-review]',
+  '    S3b --> S4',
+  '    S4 --> S5[spec-approval manual gate]',
+  '    S5 --> S6[write-plan]',
+  '    S6 --> S7[plan-auto-review]',
+  '    S7 --> S8[plan-approval manual gate]',
+  '    S8 --> S9[dev]',
+  '    S9 --> RB[review_baseline_sha fixed]',
+  '    RB --> S10[code-auto-review parallel-capable]',
+  '    RB --> S11[post-dev-review parallel-capable]',
+  '    RB --> S12[code-review parallel-capable]',
+  '    S10 --> SF[serial fallback only when subagents unavailable]',
+  '    S11 --> SF',
+  '    S12 --> SF',
+  '    S10 --> S13[finish human gate + post-deploy validation when reachable]',
+  '    S11 --> S13',
+  '    S12 --> S13',
+  '    SF --> S13'
+]
 
 test.setTimeout(E2E_TEST_TIMEOUT_MS)
 
@@ -1217,6 +1245,32 @@ test('renders Markdown body with compact document typography', async () => {
       timeout: 15_000
     })
 
+    const codeLanguageSelector = await window.evaluate(() => {
+      const selector = document.querySelector<HTMLSelectElement>(
+        '.markdown-editor-surface .bn-block-content[data-content-type="codeBlock"] > div > select'
+      )
+
+      if (!selector) {
+        throw new Error('Missing code block language selector')
+      }
+
+      const rect = selector.getBoundingClientRect()
+      const styles = getComputedStyle(selector)
+
+      return {
+        color: styles.color,
+        height: rect.height,
+        opacity: Number.parseFloat(styles.opacity),
+        text: selector.options[selector.selectedIndex]?.textContent?.trim() ?? '',
+        width: rect.width
+      }
+    })
+
+    expect(codeLanguageSelector.text.length).toBeGreaterThan(0)
+    expect(codeLanguageSelector.opacity).toBeGreaterThanOrEqual(0.95)
+    expect(codeLanguageSelector.width).toBeGreaterThan(54)
+    expect(codeLanguageSelector.height).toBeGreaterThan(22)
+
     await window.getByRole('button', { name: /editor line spacing/i }).click()
     await window.getByRole('menuitemradio', { name: /relaxed/i }).click()
 
@@ -1440,7 +1494,7 @@ test('searches the workspace and opens a matched file with editor highlights', a
   }
 })
 
-test('renders Mermaid flowcharts and saves pasted images beside the Markdown file', async () => {
+test('renders consecutive Mermaid flowcharts inline with complete thumbnail previews', async () => {
   const workspacePath = await createFixtureWorkspace()
   const diagramPath = join(workspacePath, 'docs', 'diagram.md')
 
@@ -1449,10 +1503,37 @@ test('renders Mermaid flowcharts and saves pasted images beside the Markdown fil
     [
       '## End-to-End Flow',
       '',
+      '```text',
+      'init',
+      '  -> confirm project + branch/base',
+      '  -> if multi-project and one clean slice exists: choose one project for this run',
+      '  -> if no clean single-project slice: stop and split ticket',
+      '  -> pre-setup',
+      '  -> prepare research seed when dependency/scope clues already exist',
+      '  -> brainstorm (feature) OR debug (bug)',
+      '  -> spec-auto-review',
+      '  -> spec-approval (manual gate)',
+      '  -> write-plan',
+      '  -> plan-auto-review',
+      '  -> plan-approval (manual gate)',
+      '  -> dev',
+      '  -> code-auto-review  \\',
+      '  -> post-dev-review    > subagent-first review steps (same review_baseline_sha; serial fallback only when subagents are unavailable and must be recorded)',
+      '  -> code-review       /',
+      '  -> finish (human release gate + post-deploy validation when environment is reachable)',
+      '```',
+      '',
       '```mermaid',
-      'flowchart TD',
-      '  S[Start] --> D[Done]',
-      '```'
+      ...AUTO_SUPERPOWER_FLOWCHART,
+      '```',
+      '',
+      '```mermaid',
+      ...AUTO_SUPERPOWER_FLOWCHART,
+      '```',
+      '',
+      '## Steps Table',
+      '',
+      '| Step | ID | Mode | Primary Executor |'
     ].join('\n')
   )
 
@@ -1467,50 +1548,234 @@ test('renders Mermaid flowcharts and saves pasted images beside the Markdown fil
       .getByRole('button', { name: /diagram\.md Markdown file/i })
       .click()
 
-    const preview = window.getByTestId('mermaid-flowchart-preview-0')
+    await expect(window.getByText(/End-to-End Flow/i)).toBeVisible({
+      timeout: 15_000
+    })
 
-    await expect(preview.locator('svg')).toBeVisible({ timeout: 15_000 })
+    const previews = window.getByTestId(/mermaid-flowchart-preview-\d+/)
 
-    const flowchartPlacement = await window.evaluate(() => {
-      const codeBlock = document.querySelector<HTMLElement>(
-        '.markdown-editor-surface .bn-block-content[data-content-type="codeBlock"]'
+    await expect(previews).toHaveCount(2, { timeout: 15_000 })
+    await expect(window.getByTestId('mermaid-flowchart-preview-0').locator('svg')).toBeVisible({
+      timeout: 15_000
+    })
+    await expect(window.getByTestId('mermaid-flowchart-preview-1').locator('svg')).toBeVisible({
+      timeout: 15_000
+    })
+
+    const flowchartPlacements = await window.evaluate(() => {
+      const codeBlocks = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.markdown-editor-surface .bn-block-content[data-content-type="codeBlock"][data-language="mermaid"]'
+        )
       )
-      const flowchartPreview = document.querySelector<HTMLElement>(
-        '[data-testid="mermaid-flowchart-preview-0"]'
+      const trailingBlock = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.markdown-editor-surface .bn-block-content'
+        )
+      ).find((element) =>
+        element.textContent?.includes('Steps Table')
+      )
+      const flowchartCards = codeBlocks.map((_block, index) =>
+        document
+          .querySelector<HTMLElement>(`[data-testid="mermaid-flowchart-preview-${index}"]`)
+          ?.closest<HTMLElement>('.mermaid-flowchart-card')
       )
 
-      if (!codeBlock || !flowchartPreview) {
+      if (
+        codeBlocks.length !== 2 ||
+        !trailingBlock ||
+        flowchartCards.some((flowchartCard) => !flowchartCard)
+      ) {
         throw new Error('Missing flowchart source or preview')
       }
 
+      return codeBlocks.map((codeBlock, index) => {
+        const sourceContent = codeBlock.querySelector<HTMLElement>('pre') ?? codeBlock
+        const flowchartCard = flowchartCards[index]
+        const nextBlock = codeBlocks[index + 1] ?? trailingBlock
+
+        if (!flowchartCard || !nextBlock) {
+          throw new Error('Missing flowchart neighbor nodes')
+        }
+
+        return {
+          nextBlockTop: nextBlock.getBoundingClientRect().top,
+          sourceBottom: sourceContent.getBoundingClientRect().bottom,
+          previewBottom: flowchartCard.getBoundingClientRect().bottom,
+          previewTop: flowchartCard.getBoundingClientRect().top
+        }
+      })
+    })
+
+    for (const flowchartPlacement of flowchartPlacements) {
+      expect(flowchartPlacement.previewTop).toBeGreaterThan(
+        flowchartPlacement.sourceBottom
+      )
+      expect(flowchartPlacement.previewBottom).toBeLessThan(
+        flowchartPlacement.nextBlockTop
+      )
+    }
+
+    const thumbnailBounds = await window.evaluate(() => {
+      const shell = document
+        .querySelector<HTMLElement>('[data-testid="mermaid-flowchart-preview-0"]')
+        ?.closest<HTMLElement>('.mermaid-flowchart-preview-shell')
+      const svg = document.querySelector<SVGElement>(
+        '[data-testid="mermaid-flowchart-preview-0"] svg'
+      )
+
+      if (!shell || !svg) {
+        throw new Error('Missing flowchart thumbnail bounds')
+      }
+
+      const shellBounds = shell.getBoundingClientRect()
+      const svgBounds = svg.getBoundingClientRect()
+
       return {
-        sourceBottom: codeBlock.getBoundingClientRect().bottom,
-        previewTop: flowchartPreview.getBoundingClientRect().top
+        shellBottom: shellBounds.bottom,
+        shellLeft: shellBounds.left,
+        shellRight: shellBounds.right,
+        shellTop: shellBounds.top,
+        svgBottom: svgBounds.bottom,
+        svgLeft: svgBounds.left,
+        svgRight: svgBounds.right,
+        svgTop: svgBounds.top
       }
     })
 
-    expect(flowchartPlacement.previewTop).toBeGreaterThan(
-      flowchartPlacement.sourceBottom
+    expect(thumbnailBounds.svgLeft).toBeGreaterThanOrEqual(
+      thumbnailBounds.shellLeft
     )
+    expect(thumbnailBounds.svgRight).toBeLessThanOrEqual(
+      thumbnailBounds.shellRight + 1
+    )
+    expect(thumbnailBounds.svgTop).toBeGreaterThanOrEqual(
+      thumbnailBounds.shellTop
+    )
+    expect(thumbnailBounds.svgBottom).toBeLessThanOrEqual(
+      thumbnailBounds.shellBottom + 1
+    )
+    await expect(
+      window.locator('.mermaid-flowchart-preview-viewport')
+    ).toHaveCount(0)
 
     await window.getByRole('button', { name: /open flowchart preview 1/i }).click()
     await expect(
       window.getByRole('dialog', { name: /flowchart preview/i })
     ).toBeVisible()
-    await window.getByRole('button', { name: /zoom in/i }).click()
-    await expect(window.getByTestId('mermaid-flowchart-dialog-preview')).toHaveCSS(
-      '--flowchart-preview-scale',
-      '1.25'
+    const previewViewport = window.getByTestId('mermaid-flowchart-dialog-viewport')
+    const dialogPreview = window.getByTestId('mermaid-flowchart-dialog-preview')
+
+    await previewViewport.evaluate((element) => {
+      element.dispatchEvent(
+        new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: -120
+        })
+      )
+    })
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-scale', '1')
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-pan-y', '120px')
+    await window.getByRole('button', { name: /reset view/i }).click()
+
+    await previewViewport.evaluate((element) => {
+      element.dispatchEvent(
+        new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          deltaY: -120
+        })
+      )
+    })
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-scale', '1.25')
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-pan-y', '0px')
+
+    const viewportBox = await previewViewport.boundingBox()
+
+    if (!viewportBox) {
+      throw new Error('Missing flowchart preview viewport bounds')
+    }
+
+    await window.getByRole('button', { name: /reset view/i }).click()
+
+    const dragStartX = viewportBox.x + 24
+    const dragStartY = viewportBox.y + 24
+
+    await window.mouse.move(dragStartX, dragStartY)
+    await window.mouse.down()
+    await window.mouse.move(dragStartX + 48, dragStartY + 32)
+    await window.mouse.up()
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-pan-x', '48px')
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-pan-y', '32px')
+    await window.getByRole('button', { name: /reset view/i }).click()
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-scale', '1')
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-pan-x', '0px')
+    await expect(dialogPreview).toHaveCSS('--flowchart-preview-pan-y', '0px')
+    await expect(
+      dialogPreview.locator('text, tspan, .nodeLabel').first()
+    ).toHaveCSS('user-select', 'text')
+    const dialog = window.getByRole('dialog', { name: /flowchart preview/i })
+    const dialogSurface = window.locator('.mermaid-flowchart-dialog')
+
+    await window.getByRole('button', { name: /use full-page preview/i }).click()
+    await expect(dialog).toHaveAttribute('data-view-mode', 'full')
+    await expect(dialogSurface).toHaveAttribute('data-view-mode', 'full')
+    const fullDialogBounds = await dialogSurface.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+
+      return {
+        height: bounds.height,
+        width: bounds.width
+      }
+    })
+    const appViewport = await window.evaluate(() => ({
+      height: globalThis.innerHeight,
+      width: globalThis.innerWidth
+    }))
+
+    expect(Math.round(fullDialogBounds.width)).toBeGreaterThanOrEqual(
+      appViewport.width - 2
     )
+    expect(Math.round(fullDialogBounds.height)).toBeGreaterThanOrEqual(
+      appViewport.height - 2
+    )
+    await window.getByRole('button', { name: /use centered preview/i }).click()
+    await expect(dialog).toHaveAttribute('data-view-mode', 'centered')
+    await expect(dialogSurface).toHaveAttribute('data-view-mode', 'centered')
     await window.getByRole('button', { name: /close flowchart preview/i }).click()
 
+    await expect(window.getByLabel(/mermaid source 1/i)).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('saves pasted images beside the Markdown file', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const diagramPath = join(workspacePath, 'docs', 'diagram.md')
+
+  await writeFile(
+    diagramPath,
+    [
+      '## Diagram Notes',
+      '',
+      'Paste an image into this document.'
+    ].join('\n')
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /expand docs/i }).click()
     await window
-      .getByLabel(/mermaid source 1/i)
-      .fill('flowchart LR\n  S[Start] --> R[Review]\n  R --> D[Done]')
-    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
-    await expect
-      .poll(async () => readFile(diagramPath, 'utf8'), { timeout: 5000 })
-      .toContain('R[Review]')
+      .getByRole('button', { name: /diagram\.md Markdown file/i })
+      .click()
 
     const editableDocument = window
       .getByTestId('blocknote-view')

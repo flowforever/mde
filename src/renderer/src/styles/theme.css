@@ -3503,27 +3503,50 @@ body.is-resizing-explorer-panel {
   padding: 18px 0 4px;
 }
 
+.mermaid-flowchart-host {
+  display: none;
+}
+
+.mermaid-flowchart-inline-target {
+  display: block;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 12px 12px;
+}
+
+.mermaid-flowchart-inline-card {
+  display: block;
+  min-width: 0;
+  margin: 10px 0 0;
+  user-select: none;
+}
+
 .mermaid-flowchart-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
-  gap: 14px;
-  padding: 14px;
+  min-width: 0;
+  padding: 12px;
   border: 1px solid var(--editor-border);
   border-radius: 8px;
   background: var(--editor-surface);
 }
 
 .mermaid-flowchart-preview-shell {
+  display: grid;
+  height: clamp(220px, 36vh, 360px);
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
+  place-items: center;
 }
 
 .mermaid-flowchart-preview {
-  min-height: 180px;
-  min-width: 360px;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  min-width: 0;
   display: grid;
-  place-items: center;
-  padding: 0;
+  align-items: stretch;
+  justify-items: stretch;
+  padding: 10px;
   color: inherit;
   background: transparent;
   border: 0;
@@ -3532,15 +3555,21 @@ body.is-resizing-explorer-panel {
 }
 
 .mermaid-flowchart-svg {
+  display: grid;
+  height: 100%;
   width: 100%;
   min-width: 0;
+  max-height: 100%;
+  overflow: hidden;
+  place-items: center;
 }
 
 .mermaid-flowchart-svg svg {
   display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  height: 100% !important;
   user-select: none;
 }
 
@@ -3593,6 +3622,11 @@ body.is-resizing-explorer-panel {
   background: color-mix(in srgb, var(--editor-bg) 70%, rgba(0, 0, 0, 0.5));
 }
 
+.mermaid-flowchart-dialog-backdrop[data-view-mode='full'] {
+  place-items: stretch;
+  padding: 0;
+}
+
 .mermaid-flowchart-dialog {
   display: grid;
   width: min(1040px, 100%);
@@ -3602,6 +3636,13 @@ body.is-resizing-explorer-panel {
   border: 1px solid var(--editor-border);
   border-radius: 8px;
   box-shadow: 0 18px 48px var(--shadow-strong);
+}
+
+.mermaid-flowchart-dialog[data-view-mode='full'] {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
 }
 
 .mermaid-flowchart-dialog-toolbar {
@@ -3615,8 +3656,12 @@ body.is-resizing-explorer-panel {
 }
 
 .mermaid-flowchart-dialog-toolbar button {
-  min-height: 28px;
-  padding: 0 10px;
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  place-items: center;
   color: var(--editor-text);
   background: var(--editor-surface);
   border: 1px solid var(--editor-border);
@@ -3634,29 +3679,55 @@ body.is-resizing-explorer-panel {
 
 .mermaid-flowchart-dialog-viewport {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 24px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.mermaid-flowchart-dialog-viewport[data-dragging='true'] {
+  cursor: grabbing;
 }
 
 .mermaid-flowchart-dialog-preview {
   width: max-content;
   min-width: 100%;
-  transform: scale(var(--flowchart-preview-scale, 1));
+  transform: translate(
+      var(--flowchart-preview-pan-x, 0px),
+      var(--flowchart-preview-pan-y, 0px)
+    )
+    scale(var(--flowchart-preview-scale, 1));
   transform-origin: top left;
-  user-select: none;
+  user-select: text;
 }
 
 .mermaid-flowchart-dialog-preview svg {
   display: block;
   max-width: none;
   height: auto;
+  user-select: text;
+}
+
+.mermaid-flowchart-dialog-preview text {
+  cursor: text;
+  user-select: text;
+}
+
+.mermaid-flowchart-dialog-preview tspan {
+  cursor: text;
+  user-select: text;
+}
+
+.mermaid-flowchart-dialog-preview .nodeLabel {
+  cursor: text;
+  user-select: text;
 }
 
 .markdown-editor-surface {
   --mde-document-body-font-size: 16.5px;
   --mde-document-body-line-height: 1.75;
-  flex: 1;
-  min-height: 0;
+  position: relative;
+  min-height: calc(100vh - 140px);
   padding: 22px 0 150px;
   background: transparent;
   scroll-padding-bottom: 150px;
@@ -3675,8 +3746,7 @@ body.is-resizing-explorer-panel {
 }
 
 .markdown-editor-content {
-  display: flex;
-  flex: 1;
+  display: block;
   min-height: 0;
 }
 
@@ -3818,7 +3888,11 @@ body.is-resizing-explorer-panel {
 }
 
 .markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
   margin: 8px 0;
+  overflow: visible;
   color: var(--editor-text);
   background: var(--editor-surface);
   border: 1px solid var(--editor-border);
@@ -3827,9 +3901,37 @@ body.is-resizing-explorer-panel {
 
 .markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] > pre {
   padding: 14px 16px;
+  padding-top: 42px;
   color: var(--editor-text);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] > div > select {
+  z-index: 2;
+  top: 8px;
+  left: 12px;
+  min-width: 88px;
+  min-height: 28px;
+  padding: 0 28px 0 10px;
+  color: var(--editor-text);
+  background: var(--editor-bg);
+  border: 1px solid var(--editor-border);
+  border-radius: 5px;
+  opacity: 1;
+  font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+.markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] > div > select:hover,
+.markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] > div > select:focus {
+  border-color: var(--focus-ring);
+  outline: 3px solid color-mix(in srgb, var(--focus-ring) 20%, transparent);
+}
+
+.markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] > div > select > option {
+  color: var(--editor-text);
+  background: var(--editor-bg);
 }
 
 .markdown-editor-content .bn-side-menu {

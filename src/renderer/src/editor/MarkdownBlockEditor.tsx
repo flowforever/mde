@@ -37,6 +37,10 @@ import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
+import {
+  normalizeImportedCodeBlockLanguages,
+  SUPPORTED_CODE_LANGUAGES,
+} from "./editorCodeBlockLanguages";
 import type { EditorLineSpacing } from "./editorLineSpacing";
 import { replaceEditorDocumentWithoutUndoHistory } from "./editorHydration";
 import {
@@ -135,33 +139,54 @@ const LINK_SUGGESTION_LIMIT = 20;
 const BLUR_SAVE_SETTLE_DELAY_MS = 50;
 const BLUR_SAVE_RETRY_DELAY_MS = 100;
 const BLUR_SAVE_UNCHANGED_RETRY_LIMIT = 20;
-const SUPPORTED_CODE_LANGUAGES = {
-  bash: { aliases: ["sh", "shell", "zsh"], name: "Bash" },
-  css: { name: "CSS" },
-  html: { name: "HTML" },
-  javascript: { aliases: ["js"], name: "JavaScript" },
-  json: { name: "JSON" },
-  markdown: { aliases: ["md"], name: "Markdown" },
-  mermaid: { name: "Mermaid" },
-  python: { aliases: ["py"], name: "Python" },
-  text: { aliases: ["plaintext", "txt"], name: "Plain text" },
-  tsx: { name: "TSX" },
-  typescript: { aliases: ["ts"], name: "TypeScript" },
-  yaml: { aliases: ["yml"], name: "YAML" },
+const createEditorCodeBlockSpec = (): ReturnType<typeof createCodeBlockSpec> => {
+  const baseCodeBlockSpec = createCodeBlockSpec({
+    createHighlighter: () =>
+      createHighlighter({
+        engine: createJavaScriptRegexEngine(),
+        langs: Object.keys(SUPPORTED_CODE_LANGUAGES),
+        themes: ["github-light", "github-dark"],
+      }),
+    defaultLanguage: "text",
+    supportedLanguages: SUPPORTED_CODE_LANGUAGES,
+  });
+
+  return {
+    ...baseCodeBlockSpec,
+    implementation: {
+      ...baseCodeBlockSpec.implementation,
+      render: (block, editor) => {
+        const rendered = baseCodeBlockSpec.implementation.render.call(
+          {},
+          block,
+          editor,
+        );
+
+        if (block.props.language !== "mermaid") {
+          return rendered;
+        }
+
+        const previewTarget = document.createElement("div");
+        previewTarget.className = "mermaid-flowchart-inline-target";
+        previewTarget.contentEditable = "false";
+        previewTarget.dataset.mermaidFlowchartTarget = "true";
+        rendered.dom.appendChild(previewTarget);
+
+        return {
+          ...rendered,
+          ignoreMutation: (mutation) =>
+            previewTarget.contains(mutation.target) ||
+            rendered.ignoreMutation?.(mutation) === true,
+        };
+      },
+    },
+  };
 };
+
 const editorSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
-    codeBlock: createCodeBlockSpec({
-      createHighlighter: () =>
-        createHighlighter({
-          engine: createJavaScriptRegexEngine(),
-          langs: Object.keys(SUPPORTED_CODE_LANGUAGES),
-          themes: ["github-light", "github-dark"],
-        }),
-      defaultLanguage: "text",
-      supportedLanguages: SUPPORTED_CODE_LANGUAGES,
-    }),
+    codeBlock: createEditorCodeBlockSpec(),
   },
 });
 
@@ -708,7 +733,9 @@ export const MarkdownBlockEditor = forwardRef<
           return;
         }
 
-        const blocks = await importMarkdownToBlocks(editor, editorMarkdown);
+        const blocks = normalizeImportedCodeBlockLanguages(
+          await importMarkdownToBlocks(editor, editorMarkdown),
+        );
 
         if (!isCurrent) {
           return;
@@ -1104,18 +1131,7 @@ export const MarkdownBlockEditor = forwardRef<
       </div>
       <MermaidFlowchartPanel
         colorScheme={colorScheme}
-        isReadOnly={isReadOnly}
         markdown={draftMarkdownDocument.body}
-        onMarkdownChange={(bodyMarkdown) => {
-          if (isReadOnly) {
-            return;
-          }
-
-          hasLocalChangesRef.current = true;
-          onMarkdownChange(
-            composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown),
-          );
-        }}
         text={text}
       />
       {linkDialogState ? (

@@ -32,6 +32,7 @@ export type CliRegistrationResult =
 
 export interface EnsureMdeCliRegisteredOptions {
   readonly app: CliRegistrationApp
+  readonly commonCommandDirectories?: readonly string[]
   readonly env?: NodeJS.ProcessEnv
   readonly logger?: CliRegistrationLogger
   readonly platform?: SupportedCliRegistrationPlatform
@@ -99,11 +100,15 @@ const getCommonCommandDirectories = (
 const getCandidateCommandDirectories = (
   homePath: string,
   env: NodeJS.ProcessEnv,
-  platform: SupportedCliRegistrationPlatform
+  platform: SupportedCliRegistrationPlatform,
+  commonCommandDirectories: readonly string[] = getCommonCommandDirectories(
+    homePath,
+    platform
+  )
 ): readonly string[] =>
   unique([
     ...getPathDirectories(env),
-    ...getCommonCommandDirectories(homePath, platform)
+    ...commonCommandDirectories
   ])
 
 const canExecute = async (filePath: string): Promise<boolean> => {
@@ -165,6 +170,7 @@ const isFileExistsError = (error: unknown): boolean =>
 
 export const ensureMdeCliRegistered = async ({
   app,
+  commonCommandDirectories,
   env = process.env,
   platform = process.platform
 }: EnsureMdeCliRegisteredOptions): Promise<CliRegistrationResult> => {
@@ -184,7 +190,8 @@ export const ensureMdeCliRegistered = async ({
   const commandDirectories = getCandidateCommandDirectories(
     homePath,
     env,
-    platform
+    platform,
+    commonCommandDirectories
   )
   const existingCommandPath = await findExistingMdeCommand(commandDirectories)
 

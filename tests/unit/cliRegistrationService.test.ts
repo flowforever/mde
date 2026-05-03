@@ -43,6 +43,7 @@ describe('cliRegistrationService', () => {
         getPath: (name) => (name === 'exe' ? '/Applications/MDE.app/Contents/MacOS/MDE' : tmpdir()),
         isPackaged: true
       },
+      commonCommandDirectories: [],
       env: { PATH: binPath },
       logger,
       platform: 'darwin'

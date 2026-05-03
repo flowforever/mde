@@ -1643,7 +1643,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     });
   });
 
-  it("renders Mermaid flowchart previews and edits the fenced source", async () => {
+  it("renders Mermaid flowchart previews without duplicating the fenced source editor", async () => {
     const onMarkdownChange = vi.fn();
     const markdown = [
       "## End-to-End Flow",
@@ -1677,20 +1677,8 @@ describe("MarkdownBlockEditor accessibility", () => {
       );
     });
 
-    fireEvent.change(screen.getByLabelText(/mermaid source 1/i), {
-      target: { value: "flowchart LR\n  B --> C" },
-    });
-
-    expect(onMarkdownChange).toHaveBeenLastCalledWith(
-      [
-        "## End-to-End Flow",
-        "",
-        "```mermaid",
-        "flowchart LR",
-        "  B --> C",
-        "```",
-      ].join("\n"),
-    );
+    expect(screen.queryByLabelText(/mermaid source 1/i)).not.toBeInTheDocument();
+    expect(onMarkdownChange).not.toHaveBeenCalled();
   });
 
   it("keeps Mermaid previews below the editor content instead of the editor top", async () => {
@@ -1731,7 +1719,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     ).toBeTruthy();
   });
 
-  it("opens Mermaid previews in a zoomable read-only dialog", async () => {
+  it("opens Mermaid previews in a zoomable draggable read-only dialog", async () => {
     const user = userEvent.setup();
     const markdown = [
       "## End-to-End Flow",
@@ -1768,11 +1756,141 @@ describe("MarkdownBlockEditor accessibility", () => {
     expect(
       screen.getByRole("dialog", { name: /flowchart preview/i }),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: /zoom in/i })).toContainHTML(
+      "<svg",
+    );
+    expect(screen.getByRole("button", { name: /zoom out/i })).toContainHTML(
+      "<svg",
+    );
+
+    const viewport = screen.getByTestId("mermaid-flowchart-dialog-viewport");
+    const preview = screen.getByTestId("mermaid-flowchart-dialog-preview");
+    const dispatchPointerEvent = (
+      target: Element,
+      type: string,
+      properties: Record<string, number>,
+    ): void => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+
+      for (const [key, value] of Object.entries(properties)) {
+        Object.defineProperty(event, key, {
+          configurable: true,
+          value,
+        });
+      }
+
+      fireEvent(target, event);
+    };
+
+    fireEvent.wheel(viewport, { deltaY: 100 });
+    expect(preview).toHaveStyle("--flowchart-preview-scale: 1");
+    expect(preview).toHaveStyle("--flowchart-preview-pan-y: -100px");
+
+    fireEvent.wheel(viewport, { ctrlKey: true, deltaY: -100 });
+    expect(preview).toHaveStyle("--flowchart-preview-scale: 1.25");
+
+    await user.click(screen.getByRole("button", { name: /reset view/i }));
+    expect(preview).toHaveStyle("--flowchart-preview-scale: 1");
+    expect(preview).toHaveStyle("--flowchart-preview-pan-x: 0px");
+    expect(preview).toHaveStyle("--flowchart-preview-pan-y: 0px");
+
+    dispatchPointerEvent(viewport, "pointerdown", {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+    });
+    dispatchPointerEvent(viewport, "pointermove", {
+      clientX: 145,
+      clientY: 130,
+      pointerId: 1,
+    });
+    dispatchPointerEvent(viewport, "pointerup", { pointerId: 1 });
+    await waitFor(() => {
+      expect(preview).toHaveStyle("--flowchart-preview-pan-x: 45px");
+      expect(preview).toHaveStyle("--flowchart-preview-pan-y: 30px");
+    });
 
     await user.click(screen.getByRole("button", { name: /zoom in/i }));
-
-    expect(screen.getByTestId("mermaid-flowchart-dialog-preview")).toHaveStyle(
+    expect(preview).toHaveStyle(
       "--flowchart-preview-scale: 1.25",
     );
+
+    await user.click(screen.getByRole("button", { name: /reset view/i }));
+    expect(preview).toHaveStyle("--flowchart-preview-scale: 1");
+    expect(preview).toHaveStyle("--flowchart-preview-pan-x: 0px");
+    expect(preview).toHaveStyle("--flowchart-preview-pan-y: 0px");
+
+    const flowchartText = within(preview).getByText("Rendered flowchart");
+
+    dispatchPointerEvent(flowchartText, "pointerdown", {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+      pointerId: 2,
+    });
+    dispatchPointerEvent(viewport, "pointermove", {
+      clientX: 180,
+      clientY: 150,
+      pointerId: 2,
+    });
+    dispatchPointerEvent(viewport, "pointerup", { pointerId: 2 });
+    expect(preview).toHaveStyle("--flowchart-preview-pan-x: 0px");
+    expect(preview).toHaveStyle("--flowchart-preview-pan-y: 0px");
+
+    await user.click(
+      screen.getByRole("button", { name: /use full-page preview/i }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: /flowchart preview/i }),
+    ).toHaveAttribute("data-view-mode", "full");
+
+    await user.click(
+      screen.getByRole("button", { name: /use centered preview/i }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: /flowchart preview/i }),
+    ).toHaveAttribute("data-view-mode", "centered");
+  });
+
+  it("keeps Mermaid previews in the editor as static thumbnails", async () => {
+    const markdown = [
+      "## End-to-End Flow",
+      "",
+      "```mermaid",
+      "flowchart TD",
+      "  A --> B",
+      "```",
+    ].join("\n");
+
+    render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={markdown}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={markdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    const preview = await screen.findByTestId("mermaid-flowchart-preview-0");
+    const svgContainer = preview.querySelector(".mermaid-flowchart-svg");
+
+    expect(preview.closest(".mermaid-flowchart-preview-viewport")).toBeNull();
+
+    fireEvent.wheel(preview, { ctrlKey: true, deltaY: -100 });
+    expect(svgContainer).not.toHaveStyle("--flowchart-inline-scale: 1.25");
+
+    fireEvent.click(preview);
+    expect(
+      screen.getByRole("dialog", { name: /flowchart preview/i }),
+    ).toBeVisible();
   });
 });

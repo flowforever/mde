@@ -1,22 +1,29 @@
 import {
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
-
+import { createPortal } from "react-dom";
 import {
-  extractMermaidBlocks,
-  replaceMermaidBlockSource,
-} from "./flowchartMarkdown";
+  Maximize2,
+  Minimize2,
+  RotateCcw,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+
+import { extractMermaidBlocks, type MermaidBlock } from "./flowchartMarkdown";
 import type { AppText } from "../i18n/appLanguage";
 
 interface MermaidFlowchartPanelProps {
   readonly colorScheme: "dark" | "light";
-  readonly isReadOnly?: boolean;
   readonly markdown: string;
-  readonly onMarkdownChange: (contents: string) => void;
   readonly text: AppText;
 }
 
@@ -37,6 +44,44 @@ interface MermaidApi {
   ) => Promise<{ readonly svg: string }> | { readonly svg: string };
 }
 
+interface InlineFlowchartTargets {
+  readonly hasCodeBlocks: boolean;
+  readonly targets: readonly InlineFlowchartTarget[];
+}
+
+interface InlineFlowchartTarget {
+  readonly blockIndex: number;
+  readonly element: HTMLElement;
+}
+
+interface PreviewDragState {
+  readonly originX: number;
+  readonly originY: number;
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+}
+
+interface PreviewPan {
+  readonly x: number;
+  readonly y: number;
+}
+
+type PreviewDialogViewMode = "centered" | "full";
+
+const INLINE_TARGET_SELECTOR =
+  ".markdown-editor-surface .mermaid-flowchart-inline-target";
+const PREVIEW_MIN_SCALE = 0.5;
+const PREVIEW_MAX_SCALE = 2.5;
+const PREVIEW_SCALE_STEP = 0.25;
+
+const clampPreviewScale = (scale: number): number =>
+  Math.min(PREVIEW_MAX_SCALE, Math.max(PREVIEW_MIN_SCALE, scale));
+
+const isSelectableFlowchartText = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  Boolean(target.closest("text, tspan, foreignObject, .nodeLabel"));
+
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
@@ -48,15 +93,46 @@ const loadMermaid = async (): Promise<MermaidApi> => {
   return mermaidModule.default ?? mermaidModule;
 };
 
+const areSameTargets = (
+  first: readonly InlineFlowchartTarget[],
+  second: readonly InlineFlowchartTarget[],
+): boolean =>
+  first.length === second.length &&
+  first.every(
+    (target, index) =>
+      target.blockIndex === second[index].blockIndex &&
+      target.element === second[index].element,
+  );
+
+const findInlineFlowchartTargets = (
+  root: ParentNode,
+  blocks: readonly MermaidBlock[],
+): {
+  readonly targetCount: number;
+  readonly targets: readonly HTMLElement[];
+} => {
+  const previewTargets = Array.from(
+    root.querySelectorAll<HTMLElement>(INLINE_TARGET_SELECTOR),
+  );
+
+  return {
+    targetCount: previewTargets.length,
+    targets: previewTargets.slice(0, blocks.length),
+  };
+};
+
 export const MermaidFlowchartPanel = ({
   colorScheme,
-  isReadOnly = false,
   markdown,
-  onMarkdownChange,
   text,
 }: MermaidFlowchartPanelProps): React.JSX.Element | null => {
   const idPrefix = useId().replaceAll(":", "-");
+  const hostRef = useRef<HTMLSpanElement | null>(null);
+  const dialogViewportRef = useRef<HTMLDivElement | null>(null);
+  const previewDragRef = useRef<PreviewDragState | null>(null);
   const blocks = useMemo(() => extractMermaidBlocks(markdown), [markdown]);
+  const [inlineTargets, setInlineTargets] =
+    useState<InlineFlowchartTargets | null>(null);
   const [renderedFlowcharts, setRenderedFlowcharts] = useState<
     readonly RenderedFlowchart[]
   >([]);
@@ -64,6 +140,10 @@ export const MermaidFlowchartPanel = ({
     null,
   );
   const [previewScale, setPreviewScale] = useState(1);
+  const [previewPan, setPreviewPan] = useState<PreviewPan>({ x: 0, y: 0 });
+  const [previewViewMode, setPreviewViewMode] =
+    useState<PreviewDialogViewMode>("centered");
+  const [isPreviewDragging, setIsPreviewDragging] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -132,129 +212,368 @@ export const MermaidFlowchartPanel = ({
     };
   }, [blocks, colorScheme, idPrefix, text]);
 
+  useEffect(() => {
+    if (blocks.length === 0) {
+      setInlineTargets(null);
+      return undefined;
+    }
+
+    const host = hostRef.current;
+    const root =
+      host?.closest<HTMLElement>(".markdown-editor-root") ??
+      host?.ownerDocument.body ??
+      document.body;
+    let isDisposed = false;
+    let animationFrame: number | null = null;
+    let retryTimeout: number | null = null;
+    const syncInlineTargets = (): void => {
+      if (isDisposed) {
+        return;
+      }
+
+      const { targetCount, targets } = findInlineFlowchartTargets(
+        root,
+        blocks,
+      );
+
+      if (targets.length !== blocks.length) {
+        setInlineTargets({
+          hasCodeBlocks: targetCount > 0,
+          targets: [],
+        });
+        retryTimeout = window.setTimeout(scheduleSyncInlineTargets, 100);
+        return;
+      }
+
+      const nextTargets = targets.map((target, index) => {
+        const block = blocks[index];
+
+        return { blockIndex: block.index, element: target };
+      });
+
+      setInlineTargets((currentTargets) =>
+        currentTargets?.hasCodeBlocks === true &&
+        areSameTargets(currentTargets.targets, nextTargets)
+          ? currentTargets
+          : {
+              hasCodeBlocks: true,
+              targets: nextTargets,
+            },
+      );
+    };
+
+    const scheduleSyncInlineTargets = (): void => {
+      if (animationFrame !== null) {
+        return;
+      }
+
+      if (retryTimeout !== null) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+      }
+
+      animationFrame = requestAnimationFrame(() => {
+        animationFrame = null;
+        syncInlineTargets();
+      });
+    };
+
+    const observer = new MutationObserver(scheduleSyncInlineTargets);
+
+    observer.observe(root, { childList: true, subtree: true });
+    scheduleSyncInlineTargets();
+
+    return () => {
+      isDisposed = true;
+      observer.disconnect();
+
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
+
+      if (retryTimeout !== null) {
+        clearTimeout(retryTimeout);
+      }
+    };
+  }, [blocks]);
+
+  const updatePreviewScale = useCallback((delta: number): void => {
+    setPreviewScale((currentValue) =>
+      clampPreviewScale(currentValue + delta),
+    );
+  }, []);
+
+  const resetPreviewTransform = (): void => {
+    setPreviewScale(1);
+    setPreviewPan({ x: 0, y: 0 });
+  };
+
+  const handleDialogWheel = useCallback((event: WheelEvent): void => {
+    event.preventDefault();
+
+    if (event.ctrlKey) {
+      updatePreviewScale(
+        event.deltaY < 0 ? PREVIEW_SCALE_STEP : -PREVIEW_SCALE_STEP,
+      );
+      return;
+    }
+
+    setPreviewPan((currentPan) => ({
+      x: currentPan.x - event.deltaX,
+      y: currentPan.y - event.deltaY,
+    }));
+  }, [updatePreviewScale]);
+
+  useEffect(() => {
+    if (activePreviewIndex === null) {
+      return undefined;
+    }
+
+    const dialogViewport = dialogViewportRef.current;
+
+    if (!dialogViewport) {
+      return undefined;
+    }
+
+    dialogViewport.addEventListener("wheel", handleDialogWheel, {
+      passive: false,
+    });
+
+    return () => {
+      dialogViewport.removeEventListener("wheel", handleDialogWheel);
+    };
+  }, [activePreviewIndex, handleDialogWheel]);
+
+  const handleDialogPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    if (
+      (typeof event.button === "number" && event.button !== 0) ||
+      isSelectableFlowchartText(event.target)
+    ) {
+      return;
+    }
+
+    previewDragRef.current = {
+      originX: previewPan.x,
+      originY: previewPan.y,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsPreviewDragging(true);
+    event.preventDefault();
+  };
+
+  const handleDialogPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const dragState = previewDragRef.current;
+
+    if (dragState?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    setPreviewPan({
+      x: dragState.originX + event.clientX - dragState.startX,
+      y: dragState.originY + event.clientY - dragState.startY,
+    });
+    event.preventDefault();
+  };
+
+  const endDialogPointerDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const dragState = previewDragRef.current;
+
+    if (dragState?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    previewDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setIsPreviewDragging(false);
+  };
+
   if (blocks.length === 0) {
     return null;
   }
 
+  const renderFlowchartCard = (block: MermaidBlock): React.JSX.Element => {
+    const rendered = renderedFlowcharts[block.index];
+
+    return (
+      <section
+        aria-label={text("flowchart.label")}
+        className="mermaid-flowchart-card"
+        key={block.index}
+      >
+        <div className="mermaid-flowchart-preview-shell">
+          {rendered?.svg ? (
+            <button
+              aria-label={text("flowchart.openPreview", {
+                index: block.index + 1,
+              })}
+              className="mermaid-flowchart-preview"
+              data-testid={`mermaid-flowchart-preview-${block.index}`}
+              onClick={() => {
+                setActivePreviewIndex(block.index);
+                setPreviewViewMode("centered");
+                resetPreviewTransform();
+              }}
+              type="button"
+            >
+              <span
+                dangerouslySetInnerHTML={{ __html: rendered.svg }}
+                className="mermaid-flowchart-svg"
+              />
+            </button>
+          ) : (
+            <div
+              className="mermaid-flowchart-preview"
+              data-testid={`mermaid-flowchart-preview-${block.index}`}
+            >
+              {rendered?.errorMessage ? (
+                <p className="mermaid-flowchart-error" role="alert">
+                  {rendered.errorMessage}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <>
-      <aside
-        aria-label={text("flowchart.label")}
-        className="mermaid-flowchart-panel"
-      >
-        {blocks.map((block) => {
-          const rendered = renderedFlowcharts[block.index];
+      <span
+        aria-hidden="true"
+        className="mermaid-flowchart-host"
+        ref={hostRef}
+      />
+      {inlineTargets?.hasCodeBlocks === true
+        ? inlineTargets.targets.map((target) => {
+            const block = blocks.find(
+              (candidateBlock) => candidateBlock.index === target.blockIndex,
+            );
 
-          return (
-            <section className="mermaid-flowchart-card" key={block.index}>
-              <div className="mermaid-flowchart-preview-shell">
-                {rendered?.svg ? (
-                  <button
-                    aria-label={text("flowchart.openPreview", {
-                      index: block.index + 1,
-                    })}
-                    className="mermaid-flowchart-preview"
-                    data-testid={`mermaid-flowchart-preview-${block.index}`}
-                    onClick={() => {
-                      setActivePreviewIndex(block.index);
-                      setPreviewScale(1);
-                    }}
-                    type="button"
-                  >
-                    <span
-                      dangerouslySetInnerHTML={{ __html: rendered.svg }}
-                      className="mermaid-flowchart-svg"
-                    />
-                  </button>
-                ) : (
+            return block
+              ? createPortal(
                   <div
-                    className="mermaid-flowchart-preview"
-                    data-testid={`mermaid-flowchart-preview-${block.index}`}
+                    className="mermaid-flowchart-inline-card"
+                    contentEditable={false}
                   >
-                    {rendered?.errorMessage ? (
-                      <p className="mermaid-flowchart-error" role="alert">
-                        {rendered.errorMessage}
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              <label className="mermaid-flowchart-source-label">
-                <span>
-                  {text("flowchart.source", { index: block.index + 1 })}
-                </span>
-                <textarea
-                  aria-label={text("flowchart.source", {
-                    index: block.index + 1,
-                  })}
-                  className="mermaid-flowchart-source"
-                  disabled={isReadOnly}
-                  onChange={(event) => {
-                    onMarkdownChange(
-                      replaceMermaidBlockSource(
-                        markdown,
-                        block.index,
-                        event.currentTarget.value,
-                      ),
-                    );
-                  }}
-                  spellCheck={false}
-                  value={block.source}
-                />
-              </label>
-            </section>
-          );
-        })}
-      </aside>
+                    {renderFlowchartCard(block)}
+                  </div>,
+                  target.element,
+                  `mermaid-flowchart-inline-${target.blockIndex}`,
+                )
+              : null;
+          })
+        : null}
+      {inlineTargets?.hasCodeBlocks === false ? (
+        <aside
+          aria-label={text("flowchart.label")}
+          className="mermaid-flowchart-panel"
+        >
+          {blocks.map(renderFlowchartCard)}
+        </aside>
+      ) : null}
       {activePreviewIndex !== null &&
       renderedFlowcharts[activePreviewIndex]?.svg ? (
         <div
           aria-label={text("flowchart.previewDialog")}
           aria-modal="true"
           className="mermaid-flowchart-dialog-backdrop"
+          data-view-mode={previewViewMode}
           role="dialog"
         >
-          <section className="mermaid-flowchart-dialog">
+          <section
+            className="mermaid-flowchart-dialog"
+            data-view-mode={previewViewMode}
+          >
             <div className="mermaid-flowchart-dialog-toolbar">
               <button
+                aria-label={text("flowchart.zoomOut")}
                 onClick={() => {
-                  setPreviewScale((currentValue) =>
-                    Math.max(0.5, currentValue - 0.25),
-                  );
+                  updatePreviewScale(-PREVIEW_SCALE_STEP);
                 }}
+                title={text("flowchart.zoomOut")}
                 type="button"
               >
-                {text("flowchart.zoomOut")}
+                <ZoomOut aria-hidden="true" size={16} />
               </button>
               <button
+                aria-label={text("flowchart.resetView")}
                 onClick={() => {
-                  setPreviewScale(1);
+                  resetPreviewTransform();
                 }}
+                title={text("flowchart.resetView")}
                 type="button"
               >
-                {text("flowchart.resetZoom")}
+                <RotateCcw aria-hidden="true" size={16} />
               </button>
               <button
+                aria-label={text("flowchart.zoomIn")}
                 onClick={() => {
-                  setPreviewScale((currentValue) =>
-                    Math.min(2.5, currentValue + 0.25),
-                  );
+                  updatePreviewScale(PREVIEW_SCALE_STEP);
                 }}
+                title={text("flowchart.zoomIn")}
                 type="button"
               >
-                {text("flowchart.zoomIn")}
+                <ZoomIn aria-hidden="true" size={16} />
+              </button>
+              <button
+                aria-label={
+                  previewViewMode === "centered"
+                    ? text("flowchart.useFullPagePreview")
+                    : text("flowchart.useCenteredPreview")
+                }
+                onClick={() => {
+                  setPreviewViewMode((currentMode) =>
+                    currentMode === "centered" ? "full" : "centered",
+                  );
+                }}
+                title={
+                  previewViewMode === "centered"
+                    ? text("flowchart.useFullPagePreview")
+                    : text("flowchart.useCenteredPreview")
+                }
+                type="button"
+              >
+                {previewViewMode === "centered" ? (
+                  <Maximize2 aria-hidden="true" size={16} />
+                ) : (
+                  <Minimize2 aria-hidden="true" size={16} />
+                )}
               </button>
               <button
                 aria-label={text("flowchart.closePreview")}
                 onClick={() => {
                   setActivePreviewIndex(null);
+                  previewDragRef.current = null;
+                  setIsPreviewDragging(false);
                 }}
+                title={text("flowchart.closePreview")}
                 type="button"
               >
-                {text("common.close")}
+                <X aria-hidden="true" size={16} />
               </button>
             </div>
-            <div className="mermaid-flowchart-dialog-viewport">
+            <div
+              className="mermaid-flowchart-dialog-viewport"
+              data-dragging={isPreviewDragging}
+              data-testid="mermaid-flowchart-dialog-viewport"
+              onPointerCancel={endDialogPointerDrag}
+              onPointerDown={handleDialogPointerDown}
+              onPointerMove={handleDialogPointerMove}
+              onPointerUp={endDialogPointerDrag}
+              ref={dialogViewportRef}
+            >
               <div
                 dangerouslySetInnerHTML={{
                   __html: renderedFlowcharts[activePreviewIndex]?.svg ?? "",
@@ -264,6 +583,8 @@ export const MermaidFlowchartPanel = ({
                 style={
                   {
                     "--flowchart-preview-scale": String(previewScale),
+                    "--flowchart-preview-pan-x": `${previewPan.x}px`,
+                    "--flowchart-preview-pan-y": `${previewPan.y}px`,
                   } as CSSProperties
                 }
               />
