@@ -4242,6 +4242,131 @@ body.is-resizing-explorer-panel {
   line-height: 1.55;
 }
 
+/* BlockNote caches Shiki decorations, so cached light-theme tokens need contrast fallbacks. */
+.app-shell[data-theme-family='dark']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#1f2328'],
+    [style*='#24292e'],
+    [style*='#24292f'],
+    [style*='rgb(31, 35, 40)'],
+    [style*='rgb(36, 41, 46)'],
+    [style*='rgb(36, 41, 47)']
+  ) {
+  color: var(--editor-text) !important;
+}
+
+.app-shell[data-theme-family='dark']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#57606a'],
+    [style*='#6a737d'],
+    [style*='#6e7781'],
+    [style*='rgb(87, 96, 106)'],
+    [style*='rgb(106, 115, 125)'],
+    [style*='rgb(110, 119, 129)']
+  ) {
+  color: var(--editor-muted) !important;
+}
+
+.app-shell[data-theme-family='dark']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#005cc5'],
+    [style*='#0550ae'],
+    [style*='#0969da'],
+    [style*='#6639ba'],
+    [style*='#6f42c1'],
+    [style*='#8250df'],
+    [style*='rgb(0, 92, 197)'],
+    [style*='rgb(5, 80, 174)'],
+    [style*='rgb(9, 105, 218)'],
+    [style*='rgb(102, 57, 186)'],
+    [style*='rgb(111, 66, 193)'],
+    [style*='rgb(130, 80, 223)']
+  ) {
+  color: var(--editor-accent) !important;
+}
+
+.app-shell[data-theme-family='dark']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#032f62'],
+    [style*='#0a3069'],
+    [style*='#116329'],
+    [style*='#1a7f37'],
+    [style*='#22863a'],
+    [style*='rgb(3, 47, 98)'],
+    [style*='rgb(10, 48, 105)'],
+    [style*='rgb(17, 99, 41)'],
+    [style*='rgb(26, 127, 55)'],
+    [style*='rgb(34, 134, 58)']
+  ) {
+  color: var(--focus-ring) !important;
+}
+
+.app-shell[data-theme-family='dark']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#82071e'],
+    [style*='#a40e26'],
+    [style*='#cf222e'],
+    [style*='#d73a49'],
+    [style*='rgb(130, 7, 30)'],
+    [style*='rgb(164, 14, 38)'],
+    [style*='rgb(207, 34, 46)'],
+    [style*='rgb(215, 58, 73)']
+  ) {
+  color: var(--danger) !important;
+}
+
+.app-shell[data-theme-family='dark']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#953800'],
+    [style*='#bc4c00'],
+    [style*='#e36209'],
+    [style*='rgb(149, 56, 0)'],
+    [style*='rgb(188, 76, 0)'],
+    [style*='rgb(227, 98, 9)']
+  ) {
+  color: var(--warning) !important;
+}
+
+.app-shell[data-theme-family='light']
+  .markdown-editor-surface
+  .bn-block-content[data-content-type='codeBlock']
+  .shiki:is(
+    [style*='#116329'],
+    [style*='#1a7f37'],
+    [style*='#22863a'],
+    [style*='#82071e'],
+    [style*='#953800'],
+    [style*='#a40e26'],
+    [style*='#bc4c00'],
+    [style*='#cf222e'],
+    [style*='#d73a49'],
+    [style*='#e36209'],
+    [style*='rgb(17, 99, 41)'],
+    [style*='rgb(26, 127, 55)'],
+    [style*='rgb(34, 134, 58)'],
+    [style*='rgb(130, 7, 30)'],
+    [style*='rgb(149, 56, 0)'],
+    [style*='rgb(164, 14, 38)'],
+    [style*='rgb(188, 76, 0)'],
+    [style*='rgb(207, 34, 46)'],
+    [style*='rgb(215, 58, 73)'],
+    [style*='rgb(227, 98, 9)']
+  ) {
+  color: var(--editor-text) !important;
+}
+
 .markdown-editor-surface .bn-block-content[data-content-type='codeBlock'] > div > select {
   z-index: 2;
   top: 8px;

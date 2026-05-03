@@ -525,12 +525,43 @@ test('keeps calibrated theme tokens visible across every colorway mode', async (
 
           return 0.2126 * red + 0.7152 * green + 0.0722 * blue
         }
+        const parseCssRgbColor = (
+          color: string
+        ): readonly [number, number, number] => {
+          const rgbMatch = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(color)
+
+          if (!rgbMatch) {
+            throw new Error(`Expected rgb color, received ${color}`)
+          }
+
+          return [
+            Number.parseInt(rgbMatch[1], 10) / 255,
+            Number.parseInt(rgbMatch[2], 10) / 255,
+            Number.parseInt(rgbMatch[3], 10) / 255
+          ]
+        }
+        const getRelativeLuminanceFromRgb = (color: string): number => {
+          const [red, green, blue] = parseCssRgbColor(color).map(toLinearChannel)
+
+          return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        }
         const getContrastRatio = (
           firstColor: string,
           secondColor: string
         ): number => {
           const firstLuminance = getRelativeLuminance(firstColor)
           const secondLuminance = getRelativeLuminance(secondColor)
+          const lighter = Math.max(firstLuminance, secondLuminance)
+          const darker = Math.min(firstLuminance, secondLuminance)
+
+          return (lighter + 0.05) / (darker + 0.05)
+        }
+        const getCssContrastRatio = (
+          firstColor: string,
+          secondColor: string
+        ): number => {
+          const firstLuminance = getRelativeLuminanceFromRgb(firstColor)
+          const secondLuminance = getRelativeLuminanceFromRgb(secondColor)
           const lighter = Math.max(firstLuminance, secondLuminance)
           const darker = Math.min(firstLuminance, secondLuminance)
 
@@ -582,15 +613,38 @@ test('keeps calibrated theme tokens visible across every colorway mode', async (
         const mermaidCardStyles = getComputedStyle(mermaidCard)
         const frontmatterRect = frontmatterPanel.getBoundingClientRect()
         const selectedThemeRect = selectedThemeOption.getBoundingClientRect()
+        const codeTokenMetrics = Array.from(
+          codeBlock.querySelectorAll<HTMLElement>('span.shiki')
+        ).map((token) => {
+          const tokenColor = getComputedStyle(token).color
+
+          return {
+            color: tokenColor,
+            contrast: getCssContrastRatio(
+              tokenColor,
+              codeBlockStyles.backgroundColor
+            ),
+            style: token.getAttribute('style') ?? '',
+            text: token.textContent ?? ''
+          }
+        })
+        const minimumCodeTokenMetric = codeTokenMetrics.reduce(
+          (minimumMetric, metric) =>
+            metric.contrast < minimumMetric.contrast ? metric : minimumMetric,
+          codeTokenMetrics[0]
+        )
 
         return {
           accentContrast: getContrastRatio(editorAccent, editorBg),
           codeBackgroundMatchesStrong:
             codeBlockStyles.backgroundColor === strongSurfaceColor,
+          codeTokenMinimumContrast: minimumCodeTokenMetric?.contrast ?? 0,
+          codeTokenMinimumMetric: minimumCodeTokenMetric,
           editorMutedContrast: getContrastRatio(editorMuted, editorBg),
           editorTextContrast: getContrastRatio(editorText, editorBg),
           frontmatterVisible:
             frontmatterRect.width > 100 && frontmatterRect.height > 20,
+          highlightedCodeTokenCount: codeTokenMetrics.length,
           mermaidBackgroundMatchesStrong:
             mermaidCardStyles.backgroundColor === strongSurfaceColor,
           panelMutedContrast: getContrastRatio(panelMuted, panelBg),
@@ -606,6 +660,13 @@ test('keeps calibrated theme tokens visible across every colorway mode', async (
       expect(metrics.panelMutedContrast).toBeGreaterThanOrEqual(4.5)
       expect(metrics.accentContrast).toBeGreaterThanOrEqual(4.5)
       expect(metrics.codeBackgroundMatchesStrong).toBe(true)
+      expect(metrics.highlightedCodeTokenCount).toBeGreaterThan(0)
+      expect(
+        metrics.codeTokenMinimumContrast,
+        `minimum code token after selecting ${themeId}: ${JSON.stringify(
+          metrics.codeTokenMinimumMetric
+        )}`
+      ).toBeGreaterThanOrEqual(4.5)
       expect(metrics.mermaidBackgroundMatchesStrong).toBe(true)
       expect(metrics.frontmatterVisible).toBe(true)
       expect(metrics.selectedThemeVisible).toBe(true)

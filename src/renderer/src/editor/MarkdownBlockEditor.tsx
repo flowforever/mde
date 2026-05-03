@@ -33,10 +33,10 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
+import { createEditorCodeHighlighter } from "./editorCodeHighlighter";
 import {
   normalizeImportedCodeBlockLanguages,
   SUPPORTED_CODE_LANGUAGES,
@@ -154,12 +154,7 @@ const BLUR_SAVE_RETRY_DELAY_MS = 100;
 const BLUR_SAVE_UNCHANGED_RETRY_LIMIT = 20;
 const createEditorCodeBlockSpec = (): ReturnType<typeof createCodeBlockSpec> => {
   const baseCodeBlockSpec = createCodeBlockSpec({
-    createHighlighter: () =>
-      createHighlighter({
-        engine: createJavaScriptRegexEngine(),
-        langs: Object.keys(SUPPORTED_CODE_LANGUAGES),
-        themes: ["github-light", "github-dark"],
-      }),
+    createHighlighter: createEditorCodeHighlighter,
     defaultLanguage: "text",
     supportedLanguages: SUPPORTED_CODE_LANGUAGES,
   });
