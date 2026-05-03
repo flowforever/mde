@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">MDE App Icon - Split Editor</title>
+  <desc id="desc">Dark desktop app icon with a split explorer and editor surface, designed for Dock legibility.</desc>
+  <defs>
+    <linearGradient id="bg" x1="152" y1="84" x2="860" y2="944" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#20262c"/>
+      <stop offset="0.62" stop-color="#111418"/>
+      <stop offset="1" stop-color="#0b0e11"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="312" y1="194" x2="748" y2="838" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf8"/>
+      <stop offset="1" stop-color="#e8dfd0"/>
+    </linearGradient>
+    <filter id="panelShadow" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="30" stdDeviation="32" flood-color="#000000" flood-opacity="0.38"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="8" flood-color="#d19a66" flood-opacity="0.13"/>
+    </filter>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="206" fill="url(#bg)"/>
+  <path d="M187 205c0-32 26-58 58-58h137v730H245c-32 0-58-26-58-58z" fill="#1d242a"/>
+  <path d="M382 148v728" stroke="#333c44" stroke-width="10"/>
+  <g opacity="0.9">
+    <circle cx="255" cy="281" r="18" fill="#8ea2ae"/>
+    <path d="M298 281h50" stroke="#9ca8b3" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="255" cy="374" r="18" fill="#d19a66"/>
+    <path d="M298 374h42" stroke="#d8dee9" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="255" cy="467" r="18" fill="#647783"/>
+    <path d="M298 467h58" stroke="#9ca8b3" stroke-width="22" stroke-linecap="round"/>
+  </g>
+  <g filter="url(#panelShadow)">
+    <path d="M386 194h334l118 118v515H386z" fill="url(#paper)"/>
+    <path d="M720 194v118h118z" fill="#d2c4b2"/>
+    <path d="M474 334h92" stroke="#d19a66" stroke-width="30" stroke-linecap="round"/>
+    <path d="M474 420h246" stroke="#c4b49f" stroke-width="24" stroke-linecap="round"/>
+    <path d="M474 485h190" stroke="#c4b49f" stroke-width="24" stroke-linecap="round"/>
+    <path d="M474 550h232" stroke="#c4b49f" stroke-width="24" stroke-linecap="round"/>
+    <path d="M498 736V618l74 96 74-96v118" fill="none" stroke="#211f1c" stroke-width="45" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M742 624l54 52-54 52" fill="none" stroke="#d19a66" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <rect x="64" y="64" width="896" height="896" rx="206" fill="none" stroke="#414d57" stroke-width="18" opacity="0.65"/>
+</svg>

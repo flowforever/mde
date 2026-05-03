@@ -136,6 +136,44 @@ describe('Electron window config', () => {
 })
 
 describe('Release automation config', () => {
+  const readPngDimensions = (contents: Buffer): {
+    readonly height: number
+    readonly width: number
+  } => {
+    expect(contents.subarray(0, 8)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    )
+
+    return {
+      height: contents.readUInt32BE(20),
+      width: contents.readUInt32BE(16)
+    }
+  }
+
+  const readIcoImageSizes = (contents: Buffer): readonly number[] => {
+    expect(contents.readUInt16LE(0)).toBe(0)
+    expect(contents.readUInt16LE(2)).toBe(1)
+
+    const imageCount = contents.readUInt16LE(4)
+    let directoryOffset = 6
+    let sizes: readonly number[] = []
+
+    for (let imageIndex = 0; imageIndex < imageCount; imageIndex += 1) {
+      const width = contents[directoryOffset] === 0 ? 256 : contents[directoryOffset]
+      const height =
+        contents[directoryOffset + 1] === 0 ? 256 : contents[directoryOffset + 1]
+      const imageByteLength = contents.readUInt32LE(directoryOffset + 8)
+      const imageOffset = contents.readUInt32LE(directoryOffset + 12)
+
+      expect(width).toBe(height)
+      expect(imageOffset + imageByteLength).toBeLessThanOrEqual(contents.byteLength)
+      sizes = [...sizes, width]
+      directoryOffset += 16
+    }
+
+    return sizes
+  }
+
   it('publishes electron-builder artifacts to the GitHub releases feed', async () => {
     const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
       build?: {
@@ -192,6 +230,39 @@ describe('Release automation config', () => {
     )
     expect(packageJson.build?.mac?.notarize).toBeUndefined()
     expect(packageJson.build?.linux).toBeUndefined()
+  })
+
+  it('uses committed MDE app icon assets for packaged releases', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      build?: {
+        icon?: string
+        mac?: {
+          icon?: string
+        }
+        win?: {
+          icon?: string
+        }
+      }
+      scripts?: Record<string, string>
+    }
+    const svg = await readFile('build/icon.svg', 'utf8')
+    const png = await readFile('build/icon.png')
+    const icns = await readFile('build/icon.icns')
+    const ico = await readFile('build/icon.ico')
+
+    expect(packageJson.scripts?.['icons:generate']).toBe(
+      'node scripts/generate-app-icons.mjs'
+    )
+    expect(packageJson.build?.icon).toBe('build/icon')
+    expect(packageJson.build?.mac?.icon).toBe('build/icon.icns')
+    expect(packageJson.build?.win?.icon).toBe('build/icon.ico')
+    expect(svg).toContain('MDE App Icon - Split Editor')
+    expect(readPngDimensions(png)).toEqual({ height: 1024, width: 1024 })
+    expect(icns.subarray(0, 4).toString('ascii')).toBe('icns')
+    expect(icns.readUInt32BE(4)).toBe(icns.byteLength)
+    expect(readIcoImageSizes(ico)).toEqual(
+      expect.arrayContaining([16, 24, 32, 48, 64, 128, 256])
+    )
   })
 
   it('builds and publishes release artifacts when a version tag is pushed', async () => {
