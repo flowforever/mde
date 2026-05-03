@@ -17,6 +17,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
+import { getAppThemeRows, type AppThemeId } from '../../src/renderer/src/theme/appThemes'
 
 const E2E_TEST_TIMEOUT_MS = 120_000
 const E2E_BUILD_TIMEOUT_MS = 600_000
@@ -50,6 +51,12 @@ const AUTO_SUPERPOWER_FLOWCHART = [
   '    S12 --> S13',
   '    SF --> S13'
 ]
+const THEME_VISIBILITY_THEME_IDS: readonly AppThemeId[] = getAppThemeRows()
+  .flatMap((row) => [
+    row.darkTheme.id,
+    row.lightPanelTheme.id,
+    row.darkPanelTheme.id
+  ])
 
 test.setTimeout(E2E_TEST_TIMEOUT_MS)
 
@@ -409,6 +416,205 @@ test('selects and persists a manual theme from settings', async () => {
     ).not.toBeChecked()
     await expect(window.getByRole('button', { name: /open settings/i }))
       .toBeEnabled()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('keeps calibrated theme tokens visible across every colorway mode', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const themeFixturePath = join(workspacePath, 'theme-visibility.md')
+  const searchShortcut = process.platform === 'darwin' ? 'Meta+F' : 'Control+F'
+
+  await writeFile(
+    themeFixturePath,
+    [
+      '---',
+      'owner: design',
+      'status: theme review',
+      '---',
+      '# Theme Visibility Fixture',
+      '',
+      'Theme review text with `inline code`, workspace metadata, and search target theme.',
+      '',
+      '> Theme quote rail should remain visible without becoming a large card.',
+      '',
+      '```ts',
+      'const themeToken = "theme";',
+      '```',
+      '',
+      '```mermaid',
+      'flowchart TD',
+      '  Theme[Theme] --> Editor[Editor paper]',
+      '  Theme --> Panel[Panel rail]',
+      '```'
+    ].join('\n')
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await window.setViewportSize({ width: 1440, height: 900 })
+    await openNewWorkspace(window)
+    await window
+      .getByRole('button', { name: /theme-visibility\.md Markdown file/i })
+      .click()
+
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Theme Visibility Fixture'
+    )
+    await expect(window.locator('.frontmatter-panel')).toBeVisible()
+    await expect(
+      window.locator(
+        ".markdown-editor-surface .bn-block-content[data-content-type='codeBlock']"
+      ).first()
+    ).toBeVisible()
+    await expect(window.locator('.mermaid-flowchart-card')).toBeVisible({
+      timeout: 15_000
+    })
+
+    await window.keyboard.press(searchShortcut)
+    const searchBox = window.getByRole('searchbox', {
+      name: /search current markdown/i
+    })
+
+    await searchBox.fill('theme')
+    await window.keyboard.press('Enter')
+    await expect(window.locator('.editor-search-count')).toContainText(/\d+\/\d+/)
+
+    await window.getByRole('button', { name: /change theme/i }).click()
+    await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
+    await window
+      .getByRole('switch', { name: /follow system appearance/i })
+      .click()
+    await expect(
+      window.getByRole('switch', { name: /follow system appearance/i })
+    ).not.toBeChecked()
+
+    const appShell = window.locator('.app-shell')
+
+    for (const themeId of THEME_VISIBILITY_THEME_IDS) {
+      const previousErrorCount = startupDiagnostics.errors.length
+
+      await window.locator(`[data-theme-id="${themeId}"]`).click()
+      await expect(appShell).toHaveAttribute('data-theme', themeId)
+
+      const metrics = await window.evaluate(() => {
+        const parseHexColor = (hexColor: string): readonly [number, number, number] => {
+          const normalizedHexColor = hexColor.trim().replace('#', '')
+
+          if (!/^[0-9a-fA-F]{6}$/.test(normalizedHexColor)) {
+            throw new Error(`Expected hex color, received ${hexColor}`)
+          }
+
+          return [
+            Number.parseInt(normalizedHexColor.slice(0, 2), 16) / 255,
+            Number.parseInt(normalizedHexColor.slice(2, 4), 16) / 255,
+            Number.parseInt(normalizedHexColor.slice(4, 6), 16) / 255
+          ]
+        }
+        const toLinearChannel = (channel: number): number =>
+          channel <= 0.03928
+            ? channel / 12.92
+            : ((channel + 0.055) / 1.055) ** 2.4
+        const getRelativeLuminance = (hexColor: string): number => {
+          const [red, green, blue] = parseHexColor(hexColor).map(toLinearChannel)
+
+          return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        }
+        const getContrastRatio = (
+          firstColor: string,
+          secondColor: string
+        ): number => {
+          const firstLuminance = getRelativeLuminance(firstColor)
+          const secondLuminance = getRelativeLuminance(secondColor)
+          const lighter = Math.max(firstLuminance, secondLuminance)
+          const darker = Math.min(firstLuminance, secondLuminance)
+
+          return (lighter + 0.05) / (darker + 0.05)
+        }
+        const toRenderedColor = (color: string): string => {
+          const probe = document.createElement('span')
+
+          probe.style.color = color
+          document.body.append(probe)
+          const renderedColor = getComputedStyle(probe).color
+          probe.remove()
+
+          return renderedColor
+        }
+        const requireElement = <ElementType extends Element>(
+          selector: string
+        ): ElementType => {
+          const element = document.querySelector<ElementType>(selector)
+
+          if (!element) {
+            throw new Error(`Missing themed element ${selector}`)
+          }
+
+          return element
+        }
+        const shell = requireElement<HTMLElement>('.app-shell')
+        const shellStyles = getComputedStyle(shell)
+        const editorBg = shellStyles.getPropertyValue('--editor-bg').trim()
+        const editorText = shellStyles.getPropertyValue('--editor-text').trim()
+        const editorMuted = shellStyles.getPropertyValue('--editor-muted').trim()
+        const editorAccent = shellStyles.getPropertyValue('--editor-accent').trim()
+        const panelBg = shellStyles.getPropertyValue('--panel-bg').trim()
+        const panelText = shellStyles.getPropertyValue('--panel-text').trim()
+        const panelMuted = shellStyles.getPropertyValue('--panel-muted').trim()
+        const strongSurface = shellStyles
+          .getPropertyValue('--editor-surface-strong')
+          .trim()
+        const strongSurfaceColor = toRenderedColor(strongSurface)
+        const codeBlock = requireElement<HTMLElement>(
+          ".markdown-editor-surface .bn-block-content[data-content-type='codeBlock']"
+        )
+        const mermaidCard = requireElement<HTMLElement>('.mermaid-flowchart-card')
+        const frontmatterPanel = requireElement<HTMLElement>('.frontmatter-panel')
+        const selectedThemeOption = requireElement<HTMLElement>(
+          '.theme-option-button.is-selected'
+        )
+        const codeBlockStyles = getComputedStyle(codeBlock)
+        const mermaidCardStyles = getComputedStyle(mermaidCard)
+        const frontmatterRect = frontmatterPanel.getBoundingClientRect()
+        const selectedThemeRect = selectedThemeOption.getBoundingClientRect()
+
+        return {
+          accentContrast: getContrastRatio(editorAccent, editorBg),
+          codeBackgroundMatchesStrong:
+            codeBlockStyles.backgroundColor === strongSurfaceColor,
+          editorMutedContrast: getContrastRatio(editorMuted, editorBg),
+          editorTextContrast: getContrastRatio(editorText, editorBg),
+          frontmatterVisible:
+            frontmatterRect.width > 100 && frontmatterRect.height > 20,
+          mermaidBackgroundMatchesStrong:
+            mermaidCardStyles.backgroundColor === strongSurfaceColor,
+          panelMutedContrast: getContrastRatio(panelMuted, panelBg),
+          panelTextContrast: getContrastRatio(panelText, panelBg),
+          selectedThemeVisible:
+            selectedThemeRect.width > 100 && selectedThemeRect.height > 40
+        }
+      })
+
+      expect(metrics.editorTextContrast).toBeGreaterThanOrEqual(7)
+      expect(metrics.editorMutedContrast).toBeGreaterThanOrEqual(4.5)
+      expect(metrics.panelTextContrast).toBeGreaterThanOrEqual(7)
+      expect(metrics.panelMutedContrast).toBeGreaterThanOrEqual(4.5)
+      expect(metrics.accentContrast).toBeGreaterThanOrEqual(4.5)
+      expect(metrics.codeBackgroundMatchesStrong).toBe(true)
+      expect(metrics.mermaidBackgroundMatchesStrong).toBe(true)
+      expect(metrics.frontmatterVisible).toBe(true)
+      expect(metrics.selectedThemeVisible).toBe(true)
+      expect(
+        startupDiagnostics.errors.slice(previousErrorCount),
+        `renderer errors after selecting ${themeId}`
+      ).toEqual([])
+    }
+
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

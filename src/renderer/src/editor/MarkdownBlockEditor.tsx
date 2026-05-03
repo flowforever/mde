@@ -61,6 +61,10 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
 } from "./markdownTransforms";
+import {
+  createSearchRanges,
+  isEditorSearchMutationRelevant,
+} from "./editorSearchRanges";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import {
   composeMarkdownWithFrontmatter,
@@ -233,41 +237,6 @@ const createInitialLinkDialogState = (
     selectedSuggestionIndex: 0,
     visibleWorkspaceTree,
   };
-};
-
-const createSearchRanges = (
-  container: HTMLElement,
-  query: string,
-): readonly Range[] => {
-  const normalizedQuery = query.trim();
-
-  if (normalizedQuery.length === 0) {
-    return [];
-  }
-
-  const lowerQuery = normalizedQuery.toLocaleLowerCase();
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  const ranges: Range[] = [];
-  let node = walker.nextNode();
-
-  while (node) {
-    const text = node.textContent ?? "";
-    const lowerText = text.toLocaleLowerCase();
-    let index = lowerText.indexOf(lowerQuery);
-
-    while (index !== -1) {
-      const range = document.createRange();
-
-      range.setStart(node, index);
-      range.setEnd(node, index + normalizedQuery.length);
-      ranges.push(range);
-      index = lowerText.indexOf(lowerQuery, index + normalizedQuery.length);
-    }
-
-    node = walker.nextNode();
-  }
-
-  return ranges;
 };
 
 const clearSearchHighlights = (): void => {
@@ -807,7 +776,11 @@ export const MarkdownBlockEditor = forwardRef<
       return;
     }
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
+      if (!isEditorSearchMutationRelevant(mutations)) {
+        return;
+      }
+
       setSearchRevision((currentRevision) => currentRevision + 1);
     });
 

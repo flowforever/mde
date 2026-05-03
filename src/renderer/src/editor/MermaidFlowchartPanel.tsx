@@ -19,6 +19,11 @@ import {
 } from "lucide-react";
 
 import { extractMermaidBlocks, type MermaidBlock } from "./flowchartMarkdown";
+import {
+  areSameInlineFlowchartTargets,
+  getNextMissingInlineFlowchartTargets,
+  type InlineFlowchartTargets,
+} from "./flowchartInlineTargets";
 import type { AppText } from "../i18n/appLanguage";
 
 interface MermaidFlowchartPanelProps {
@@ -42,16 +47,6 @@ interface MermaidApi {
     id: string,
     source: string,
   ) => Promise<{ readonly svg: string }> | { readonly svg: string };
-}
-
-interface InlineFlowchartTargets {
-  readonly hasCodeBlocks: boolean;
-  readonly targets: readonly InlineFlowchartTarget[];
-}
-
-interface InlineFlowchartTarget {
-  readonly blockIndex: number;
-  readonly element: HTMLElement;
 }
 
 interface PreviewDragState {
@@ -92,17 +87,6 @@ const loadMermaid = async (): Promise<MermaidApi> => {
 
   return mermaidModule.default ?? mermaidModule;
 };
-
-const areSameTargets = (
-  first: readonly InlineFlowchartTarget[],
-  second: readonly InlineFlowchartTarget[],
-): boolean =>
-  first.length === second.length &&
-  first.every(
-    (target, index) =>
-      target.blockIndex === second[index].blockIndex &&
-      target.element === second[index].element,
-  );
 
 const findInlineFlowchartTargets = (
   root: ParentNode,
@@ -237,10 +221,11 @@ export const MermaidFlowchartPanel = ({
       );
 
       if (targets.length !== blocks.length) {
-        setInlineTargets({
-          hasCodeBlocks: targetCount > 0,
-          targets: [],
-        });
+        const hasCodeBlocks = targetCount > 0;
+
+        setInlineTargets((currentTargets) =>
+          getNextMissingInlineFlowchartTargets(currentTargets, hasCodeBlocks),
+        );
         retryTimeout = window.setTimeout(scheduleSyncInlineTargets, 100);
         return;
       }
@@ -253,7 +238,7 @@ export const MermaidFlowchartPanel = ({
 
       setInlineTargets((currentTargets) =>
         currentTargets?.hasCodeBlocks === true &&
-        areSameTargets(currentTargets.targets, nextTargets)
+        areSameInlineFlowchartTargets(currentTargets.targets, nextTargets)
           ? currentTargets
           : {
               hasCodeBlocks: true,

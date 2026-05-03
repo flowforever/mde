@@ -44,6 +44,7 @@ describe("editor render regressions", () => {
 
     expect(codeBlock).toContain("flex-direction: column");
     expect(codeBlock).toContain("align-items: stretch");
+    expect(codeBlock).toContain("background: var(--editor-surface-strong)");
     expect(selectBlock).toContain("opacity: 1");
     expect(selectBlock).toContain("color: var(--editor-text)");
     expect(selectBlock).toContain("background: var(--editor-bg)");
@@ -121,6 +122,9 @@ describe("editor render regressions", () => {
     expect(targetBlock).toContain("padding: 0 12px 12px");
     expect(cardBlock).toContain("display: block");
     expect(cardBlock).toContain("user-select: none");
+    expect(getCssBlock(css, ".mermaid-flowchart-card")).toContain(
+      "background: var(--editor-surface-strong)",
+    );
     expect(previewShellBlock).toContain("height: clamp");
     expect(previewShellBlock).toContain("overflow: hidden");
     expect(previewSvgBlock).toContain("place-items: center");

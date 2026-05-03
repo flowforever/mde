@@ -13,6 +13,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
 import {
+  createSearchRanges,
+  isEditorSearchMutationRelevant,
+} from "../../src/renderer/src/editor/editorSearchRanges";
+import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
   type AppText,
@@ -971,6 +975,84 @@ describe("MarkdownBlockEditor accessibility", () => {
         matchCount: 0,
       });
     });
+  });
+
+  it("excludes derived Mermaid preview content from editor search tracking", () => {
+    const surface = document.createElement("div");
+
+    surface.className = "markdown-editor-surface";
+    surface.innerHTML = [
+      "<p>theme source text</p>",
+      '<div class="mermaid-flowchart-inline-target">',
+      '  <div class="mermaid-flowchart-inline-card">',
+      '    <section class="mermaid-flowchart-card">',
+      '      <span class="mermaid-flowchart-svg"><svg><text>theme preview text</text></svg></span>',
+      "    </section>",
+      "  </div>",
+      "</div>",
+    ].join("");
+    document.body.append(surface);
+
+    const ranges = createSearchRanges(surface, "theme");
+    const previewText = surface.querySelector("text");
+    const previewSvgContainer = surface.querySelector(".mermaid-flowchart-svg");
+    const sourceText = surface.querySelector("p")?.firstChild;
+    const inlineTarget = surface.querySelector(".mermaid-flowchart-inline-target");
+    const previewCard = surface.querySelector(".mermaid-flowchart-inline-card");
+    const detachedRenderedSvg = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "svg",
+    );
+
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0].startContainer).toBe(sourceText);
+    expect(previewText).not.toBeNull();
+    expect(previewSvgContainer).not.toBeNull();
+    expect(sourceText).not.toBeNull();
+    expect(inlineTarget).not.toBeNull();
+    expect(previewCard).not.toBeNull();
+    expect(
+      isEditorSearchMutationRelevant([
+        {
+          addedNodes: previewCard ? ([previewCard] as unknown as NodeList) : [],
+          removedNodes: [] as unknown as NodeList,
+          target: inlineTarget ?? surface,
+          type: "childList",
+        } as unknown as MutationRecord,
+      ]),
+    ).toBe(false);
+    expect(
+      isEditorSearchMutationRelevant([
+        {
+          addedNodes: [] as unknown as NodeList,
+          removedNodes: [detachedRenderedSvg] as unknown as NodeList,
+          target: previewSvgContainer ?? surface,
+          type: "childList",
+        } as unknown as MutationRecord,
+      ]),
+    ).toBe(false);
+    expect(
+      isEditorSearchMutationRelevant([
+        {
+          addedNodes: [] as unknown as NodeList,
+          removedNodes: [] as unknown as NodeList,
+          target: previewText ?? surface,
+          type: "characterData",
+        } as unknown as MutationRecord,
+      ]),
+    ).toBe(false);
+    expect(
+      isEditorSearchMutationRelevant([
+        {
+          addedNodes: [] as unknown as NodeList,
+          removedNodes: [] as unknown as NodeList,
+          target: sourceText ?? surface,
+          type: "characterData",
+        } as unknown as MutationRecord,
+      ]),
+    ).toBe(true);
+
+    surface.remove();
   });
 
   it("keeps imported markdown replacement out of the undo history", async () => {
