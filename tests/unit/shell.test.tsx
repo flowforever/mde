@@ -385,6 +385,55 @@ describe("App shell", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a non-blocking notice after repairing image assets on file open", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# README\n\n![Moved](.mde/assets/moved.png)",
+        path: "README.md",
+        repairedImageAssetCount: 1,
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /open new workspace/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /README\.md Markdown file/i }),
+    );
+
+    expect(
+      await screen.findByText("Restored 1 missing image asset."),
+    ).toBeVisible();
+    expect(await screen.findByLabelText("Mock editor")).toBeVisible();
+  });
+
   it("switches to a remembered workspace from the workspace menu", async () => {
     const user = userEvent.setup();
     const editorApi = {

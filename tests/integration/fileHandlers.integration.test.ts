@@ -79,6 +79,38 @@ describe('fileHandlers integration', () => {
     })
   })
 
+  it('repairs moved image assets while reading Markdown through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(workspacePath, 'docs'))
+    await mkdir(join(workspacePath, 'old', '.mde', 'assets'), {
+      recursive: true
+    })
+    await writeFile(
+      join(workspacePath, 'docs', 'README.md'),
+      '# Workspace\n\n![Moved](.mde/assets/moved.png)'
+    )
+    await writeFile(
+      join(workspacePath, 'old', '.mde', 'assets', 'moved.png'),
+      imageBytes
+    )
+
+    const { handlers } = registerHandlers(workspacePath)
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    const result = (await handlers
+      .get(FILE_CHANNELS.readMarkdownFile)
+      ?.({}, 'docs/README.md', workspace.rootPath)) as FileContents
+
+    expect(result.repairedImageAssetCount).toBe(1)
+    await expect(
+      readFile(join(workspacePath, 'docs', '.mde', 'assets', 'moved.png'))
+    ).resolves.toEqual(imageBytes)
+  })
+
   it('rejects non-Markdown files', async () => {
     const { handlers } = registerHandlers()
 

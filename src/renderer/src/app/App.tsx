@@ -2216,6 +2216,16 @@ export const App = (): React.JSX.Element => {
     state.draftMarkdown ??
     state.loadedFile?.contents ??
     "";
+  const repairedImageAssetCount =
+    !historyPreview && state.loadedFile?.repairedImageAssetCount
+      ? state.loadedFile.repairedImageAssetCount
+      : 0;
+  const imageAssetRepairNotice =
+    repairedImageAssetCount > 1
+      ? text("editor.imageAssetRepairMany", { count: repairedImageAssetCount })
+      : repairedImageAssetCount === 1
+        ? text("editor.imageAssetRepairOne")
+        : null;
   const historyPreviewDisplay = historyPreview
     ? {
         createdAtLabel: formatHistoryTimestamp(historyPreview.version.createdAt),
@@ -2629,6 +2639,11 @@ export const App = (): React.JSX.Element => {
         {currentAiErrorMessage ? (
           <p className="ai-result-error" role="alert">
             {currentAiErrorMessage}
+          </p>
+        ) : null}
+        {imageAssetRepairNotice ? (
+          <p className="editor-notice" role="status">
+            {imageAssetRepairNotice}
           </p>
         ) : null}
         {currentAiResult && !historyPreview ? (

@@ -66,6 +66,9 @@ const EN_MESSAGES = {
     "Frontmatter parse failed; raw YAML will be preserved.",
   "editor.frontmatterRawYaml": "Raw frontmatter YAML",
   "editor.frontmatterSource": "Source",
+  "editor.imageAssetRepairMany":
+    "Restored {count} missing image assets.",
+  "editor.imageAssetRepairOne": "Restored 1 missing image asset.",
   "editor.label": "Editor",
   "editor.linkCreateAndInsert": "Create and insert",
   "editor.linkDialogClose": "Close link picker",
@@ -421,6 +424,8 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "editor.frontmatterParseFailed": "Frontmatter 解析失败，将按原文保留。",
   "editor.frontmatterRawYaml": "原始 Frontmatter YAML",
   "editor.frontmatterSource": "源码",
+  "editor.imageAssetRepairMany": "已恢复 {count} 个缺失的图片资源。",
+  "editor.imageAssetRepairOne": "已恢复 1 个缺失的图片资源。",
   "editor.label": "编辑器",
   "editor.linkCreateAndInsert": "创建并插入",
   "editor.linkDialogClose": "关闭链接选择器",

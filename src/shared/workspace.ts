@@ -25,6 +25,7 @@ export type WorkspaceLaunchResource = string | WorkspaceFileLaunchResource
 export interface FileContents {
   readonly path: string
   readonly contents: string
+  readonly repairedImageAssetCount?: number
 }
 
 export interface RenamedEntry {

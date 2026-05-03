@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { constants as fsConstants } from 'node:fs'
 import {
+  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -79,6 +81,9 @@ interface MarkdownFileServiceOptions {
 
 const MAX_SEARCH_FILE_RESULTS = 50
 const MAX_SEARCH_MATCHES_PER_FILE = 3
+const LOCAL_IMAGE_ASSET_PATTERN =
+  /!\[[^\]]*\]\((\.mde\/assets\/[^)\s]+)(?:[^)]*)\)/g
+const LOCAL_IMAGE_ASSET_PREFIX = '.mde/assets/'
 
 const isMarkdownPath = (filePath: string): boolean =>
   extname(filePath).toLowerCase() === '.md'
@@ -199,6 +204,198 @@ const joinWorkspacePath = (...segments: readonly string[]): string =>
 
 const isSupportedImageAssetPath = (entryPath: string): boolean =>
   supportedImageExtensions.has(extname(entryPath).toLowerCase())
+
+const normalizeAssetStoragePath = (relativeAssetPath: string): string | null => {
+  if (!relativeAssetPath.startsWith(LOCAL_IMAGE_ASSET_PREFIX)) {
+    return null
+  }
+
+  const assetStoragePath = relativeAssetPath
+    .slice(LOCAL_IMAGE_ASSET_PREFIX.length)
+    .replaceAll('\\', '/')
+  const pathSegments = assetStoragePath
+    .split('/')
+    .filter((segment) => segment.length > 0)
+
+  if (
+    pathSegments.length === 0 ||
+    pathSegments.length !== assetStoragePath.split('/').length ||
+    pathSegments.some((segment) => segment === '.' || segment === '..') ||
+    !isSupportedImageAssetPath(assetStoragePath)
+  ) {
+    return null
+  }
+
+  return pathSegments.join('/')
+}
+
+const collectLocalImageAssetStoragePaths = (
+  contents: string
+): readonly string[] => {
+  const assetStoragePaths = new Set<string>()
+
+  for (const match of contents.matchAll(LOCAL_IMAGE_ASSET_PATTERN)) {
+    const assetStoragePath = normalizeAssetStoragePath(match[1])
+
+    if (assetStoragePath) {
+      assetStoragePaths.add(assetStoragePath)
+    }
+  }
+
+  return Array.from(assetStoragePaths)
+}
+
+const pathExists = async (targetPath: string): Promise<boolean> => {
+  try {
+    await lstat(targetPath)
+    return true
+  } catch (error) {
+    if (isErrorWithCode(error, 'ENOENT')) {
+      return false
+    }
+
+    return true
+  }
+}
+
+const collectAssetCandidates = async (
+  workspacePath: string,
+  assetStoragePaths: readonly string[]
+): Promise<ReadonlyMap<string, readonly string[]>> => {
+  const candidatesByAssetPath = new Map(
+    assetStoragePaths.map((assetStoragePath) => [assetStoragePath, [] as string[]])
+  )
+
+  const collectFromMdeDirectory = async (mdeDirectoryPath: string): Promise<void> => {
+    const mdeStats = await lstat(mdeDirectoryPath).catch(() => null)
+
+    if (!mdeStats || mdeStats.isSymbolicLink() || !mdeStats.isDirectory()) {
+      return
+    }
+
+    await Promise.all(
+      assetStoragePaths.map(async (assetStoragePath) => {
+        const candidatePath = join(
+          mdeDirectoryPath,
+          'assets',
+          ...assetStoragePath.split('/')
+        )
+        const candidateStats = await lstat(candidatePath).catch(() => null)
+
+        if (
+          candidateStats?.isFile() &&
+          !candidateStats.isSymbolicLink() &&
+          isSupportedImageAssetPath(candidatePath)
+        ) {
+          candidatesByAssetPath.get(assetStoragePath)?.push(candidatePath)
+        }
+      })
+    )
+  }
+
+  const visitDirectory = async (directoryPath: string): Promise<void> => {
+    const entries = await readdir(directoryPath, { withFileTypes: true }).catch(
+      () => []
+    )
+
+    await Promise.all(
+      entries.map(async (entry) => {
+        const entryPath = join(directoryPath, entry.name)
+
+        if (entry.name === '.mde') {
+          await collectFromMdeDirectory(entryPath)
+          return
+        }
+
+        if (ignoredEntryNames.has(entry.name) || !entry.isDirectory()) {
+          return
+        }
+
+        if (entry.isSymbolicLink()) {
+          return
+        }
+
+        await visitDirectory(entryPath)
+      })
+    )
+  }
+
+  await visitDirectory(workspacePath)
+
+  return candidatesByAssetPath
+}
+
+const repairMissingImageAssets = async (
+  workspacePath: string,
+  filePath: string,
+  contents: string
+): Promise<number> => {
+  const assetStoragePaths = collectLocalImageAssetStoragePaths(contents)
+
+  if (assetStoragePaths.length === 0) {
+    return 0
+  }
+
+  const markdownDirectoryPath = getParentWorkspacePath(filePath)
+  const missingAssetTargets: {
+    readonly assetStoragePath: string
+    readonly workspaceAssetPath: string
+  }[] = []
+
+  for (const assetStoragePath of assetStoragePaths) {
+    const workspaceAssetPath = joinWorkspacePath(
+      markdownDirectoryPath,
+      LOCAL_IMAGE_ASSET_PREFIX,
+      assetStoragePath
+    )
+    const absoluteAssetPath = resolveWorkspacePath(workspacePath, workspaceAssetPath)
+
+    if (!(await pathExists(absoluteAssetPath))) {
+      missingAssetTargets.push({
+        assetStoragePath,
+        workspaceAssetPath
+      })
+    }
+  }
+
+  if (missingAssetTargets.length === 0) {
+    return 0
+  }
+
+  const candidatesByAssetPath = await collectAssetCandidates(
+    workspacePath,
+    Array.from(
+      new Set(
+        missingAssetTargets.map(({ assetStoragePath }) => assetStoragePath)
+      )
+    )
+  )
+  let repairedCount = 0
+
+  for (const { assetStoragePath, workspaceAssetPath } of missingAssetTargets) {
+    const candidates = candidatesByAssetPath.get(assetStoragePath) ?? []
+
+    if (candidates.length !== 1) {
+      continue
+    }
+
+    try {
+      const absoluteTargetPath = await prepareMutableNewPath(
+        workspacePath,
+        workspaceAssetPath
+      )
+
+      await copyFile(candidates[0], absoluteTargetPath, fsConstants.COPYFILE_EXCL)
+      repairedCount += 1
+    } catch (error) {
+      if (!isErrorWithCode(error, 'EEXIST')) {
+        continue
+      }
+    }
+  }
+
+  return repairedCount
+}
 
 const createSearchPreview = (
   contents: string,
@@ -455,10 +652,17 @@ export const createMarkdownFileService = ({
 }: MarkdownFileServiceOptions = {}): MarkdownFileService => ({
   async readMarkdownFile(workspacePath, filePath) {
     const realFilePath = await resolveExistingMarkdownFile(workspacePath, filePath)
+    const contents = await readFile(realFilePath, 'utf8')
+    const repairedImageAssetCount = await repairMissingImageAssets(
+      workspacePath,
+      filePath,
+      contents
+    )
 
     return Object.freeze({
-      contents: await readFile(realFilePath, 'utf8'),
-      path: filePath
+      contents,
+      path: filePath,
+      ...(repairedImageAssetCount > 0 ? { repairedImageAssetCount } : {})
     })
   },
   async searchMarkdownFiles(workspacePath, query) {

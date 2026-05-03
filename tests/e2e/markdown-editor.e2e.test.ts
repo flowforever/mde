@@ -1878,6 +1878,57 @@ test('saves pasted images beside the Markdown file', async () => {
   }
 })
 
+test('repairs moved .mde image assets when opening Markdown', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const movedPath = join(workspacePath, 'docs', 'moved-image.md')
+  const pngBytes = Buffer.from([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+    1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68,
+    65, 84, 120, 156, 99, 248, 255, 255, 63, 0, 5, 254, 2, 254, 167, 53,
+    129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ])
+
+  await mkdir(join(workspacePath, 'archive', '.mde', 'assets'), {
+    recursive: true
+  })
+  await writeFile(
+    movedPath,
+    ['# Moved image', '', '![Moved asset](.mde/assets/moved.png)'].join('\n')
+  )
+  await writeFile(
+    join(workspacePath, 'archive', '.mde', 'assets', 'moved.png'),
+    pngBytes
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await setAppLanguagePreference(window, 'en')
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /expand docs/i }).click()
+    await window
+      .getByRole('button', { name: /moved-image\.md Markdown file/i })
+      .click()
+
+    await expect(window.locator('.editor-notice')).toContainText(
+      'Restored 1 missing image asset.'
+    )
+    await expect
+      .poll(
+        async () =>
+          readFile(join(workspacePath, 'docs', '.mde', 'assets', 'moved.png')),
+        { timeout: 10_000 }
+      )
+      .toEqual(pngBytes)
+    await expect(window.locator('.markdown-editor-surface img').first()).toBeVisible()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('preserves consecutive blank lines after saving and reopening markdown', async () => {
   const workspacePath = await createFixtureWorkspace()
   const blankLinesPath = join(workspacePath, 'docs', 'blank-lines.md')

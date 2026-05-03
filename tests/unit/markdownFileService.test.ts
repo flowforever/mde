@@ -33,6 +33,66 @@ describe('markdownFileService', () => {
     })
   })
 
+  it('repairs missing moved image assets when a unique source asset exists', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(rootPath, 'docs'))
+    await mkdir(join(rootPath, 'archive', '.mde', 'assets'), { recursive: true })
+    await writeFile(
+      join(rootPath, 'docs', 'intro.md'),
+      '# Intro\n\n![Moved image](.mde/assets/moved.png)'
+    )
+    await writeFile(
+      join(rootPath, 'archive', '.mde', 'assets', 'moved.png'),
+      imageBytes
+    )
+
+    const result = await createMarkdownFileService().readMarkdownFile(
+      rootPath,
+      'docs/intro.md'
+    )
+
+    expect(result).toEqual({
+      contents: '# Intro\n\n![Moved image](.mde/assets/moved.png)',
+      path: 'docs/intro.md',
+      repairedImageAssetCount: 1
+    })
+    await expect(
+      readFile(join(rootPath, 'docs', '.mde', 'assets', 'moved.png'))
+    ).resolves.toEqual(imageBytes)
+  })
+
+  it('does not repair missing image assets when multiple source assets match', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+
+    await mkdir(join(rootPath, 'docs'))
+    await mkdir(join(rootPath, 'left', '.mde', 'assets'), { recursive: true })
+    await mkdir(join(rootPath, 'right', '.mde', 'assets'), { recursive: true })
+    await writeFile(
+      join(rootPath, 'docs', 'intro.md'),
+      '# Intro\n\n![Moved image](.mde/assets/moved.png)'
+    )
+    await writeFile(join(rootPath, 'left', '.mde', 'assets', 'moved.png'), 'left')
+    await writeFile(
+      join(rootPath, 'right', '.mde', 'assets', 'moved.png'),
+      'right'
+    )
+
+    const result = await createMarkdownFileService().readMarkdownFile(
+      rootPath,
+      'docs/intro.md'
+    )
+
+    expect(result).toEqual({
+      contents: '# Intro\n\n![Moved image](.mde/assets/moved.png)',
+      path: 'docs/intro.md'
+    })
+    await expect(
+      stat(join(rootPath, 'docs', '.mde', 'assets', 'moved.png'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('rejects non-Markdown files', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     await writeFile(join(rootPath, 'notes.txt'), 'plain text')

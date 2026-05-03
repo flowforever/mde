@@ -3303,6 +3303,14 @@ body.is-resizing-explorer-panel {
   font-size: 14px;
 }
 
+.editor-notice {
+  width: min(920px, 100%);
+  margin: 0 auto 12px;
+  color: var(--editor-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .editor-empty-state {
   width: min(520px, 100%);
   margin: min(18vh, 120px) auto 0;
