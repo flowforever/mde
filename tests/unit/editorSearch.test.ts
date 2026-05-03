@@ -6,6 +6,7 @@ import {
 } from '../../src/renderer/src/search/editorSearch'
 import {
   filterSearchHistory,
+  GLOBAL_SEARCH_HISTORY_LIMIT,
   rememberSearchHistoryItem,
   togglePinnedSearchQuery
 } from '../../src/renderer/src/search/searchHistory'
@@ -38,6 +39,21 @@ describe('editorSearch', () => {
       'alphabet'
     ])
     expect(filterSearchHistory(['alpha'], '')).toEqual(['alpha'])
+  })
+
+  it('supports a sixteen-item cap for workspace recent search history', () => {
+    const history = Array.from(
+      { length: GLOBAL_SEARCH_HISTORY_LIMIT + 4 },
+      (_, index) => `item-${index}`
+    )
+
+    expect(GLOBAL_SEARCH_HISTORY_LIMIT).toBe(16)
+    expect(
+      rememberSearchHistoryItem(history, 'latest', GLOBAL_SEARCH_HISTORY_LIMIT)
+    ).toEqual([
+      'latest',
+      ...history.slice(0, GLOBAL_SEARCH_HISTORY_LIMIT - 1)
+    ])
   })
 
   it('toggles pinned search queries without mutating existing state', () => {

@@ -1,6 +1,7 @@
 export const EDITOR_SEARCH_HISTORY_STORAGE_KEY = "mde.editorSearchHistory";
 export const GLOBAL_SEARCH_HISTORY_STORAGE_KEY = "mde.globalSearchHistory";
 export const SEARCH_HISTORY_LIMIT = 12;
+export const GLOBAL_SEARCH_HISTORY_LIMIT = 16;
 export const PINNED_SEARCH_QUERY_LIMIT = 6;
 
 export type SearchShortcutScope = "editor" | "workspace";
@@ -80,6 +81,7 @@ export const isSearchQueryPinned = (
 export const readSearchHistory = (
   storageKey: string,
   storage: Pick<Storage, "getItem"> = globalThis.localStorage,
+  limit = SEARCH_HISTORY_LIMIT,
 ): readonly string[] => {
   try {
     const rawValue = storage.getItem(storageKey);
@@ -98,7 +100,7 @@ export const readSearchHistory = (
       .filter((value): value is string => typeof value === "string")
       .map(normalizeSearchTerm)
       .filter((value) => value.length > 0)
-      .slice(0, SEARCH_HISTORY_LIMIT);
+      .slice(0, limit);
   } catch {
     return [];
   }
@@ -108,11 +110,9 @@ export const writeSearchHistory = (
   storageKey: string,
   history: readonly string[],
   storage: Pick<Storage, "setItem"> = globalThis.localStorage,
+  limit = SEARCH_HISTORY_LIMIT,
 ): void => {
-  storage.setItem(
-    storageKey,
-    JSON.stringify(history.slice(0, SEARCH_HISTORY_LIMIT)),
-  );
+  storage.setItem(storageKey, JSON.stringify(history.slice(0, limit)));
 };
 
 export const getSearchShortcutLabel = (

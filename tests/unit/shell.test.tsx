@@ -2074,6 +2074,8 @@ describe("App shell", () => {
       name: /search current markdown/i,
     });
 
+    expect(editorSearchBox).toHaveAttribute("type", "text");
+
     await user.type(editorSearchBox, "Original{Enter}");
 
     expect(screen.getByTestId("mock-editor-search-query")).toHaveTextContent(
@@ -2197,16 +2199,24 @@ describe("App shell", () => {
         screen.getByRole("searchbox", { name: /search workspace contents/i }),
       ).toHaveFocus();
     });
-    await user.type(
-      screen.getByRole("searchbox", { name: /search workspace contents/i }),
-      "alpha",
-    );
+    const workspaceSearchBox = screen.getByRole("searchbox", {
+      name: /search workspace contents/i,
+    });
+
+    expect(workspaceSearchBox).toHaveAttribute("type", "text");
+
+    await user.type(workspaceSearchBox, "alpha");
     await waitFor(() => {
       expect(editorApi.searchWorkspaceMarkdown).toHaveBeenCalledWith(
         "alpha",
         "/workspace",
       );
     });
+    expect(
+      await screen.findByText("Alpha", {
+        selector: ".global-search-result-match",
+      }),
+    ).toBeVisible();
 
     await user.click(
       await screen.findByRole("button", {
@@ -2233,12 +2243,22 @@ describe("App shell", () => {
         screen.getByRole("searchbox", { name: /search workspace contents/i }),
       ).toHaveFocus();
     });
+    expect(
+      await screen.findByRole("listbox", { name: /workspace search history/i }),
+    ).toHaveClass("global-search-history-tags");
 
-    await user.click(
-      await screen.findByRole("button", {
-        name: /use workspace search history item alpha/i,
-      }),
-    );
+    const historyTag = await screen.findByRole("button", {
+      name: /use workspace search history item alpha/i,
+    });
+
+    await user.click(historyTag);
+
+    expect(
+      screen.getByRole("searchbox", { name: /search workspace contents/i }),
+    ).toHaveValue("alpha");
+    expect(
+      screen.getByRole("searchbox", { name: /search workspace contents/i }),
+    ).toHaveFocus();
 
     await waitFor(() => {
       expect(editorApi.searchWorkspaceMarkdown).toHaveBeenLastCalledWith(
@@ -2246,6 +2266,107 @@ describe("App shell", () => {
         "/workspace",
       );
     });
+  });
+
+  it("renders global workspace search history as filtered tags capped at sixteen", async () => {
+    const user = userEvent.setup();
+    const storedHistory = [
+      "alpha",
+      "alphabet",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "eta",
+      "theta",
+      "iota",
+      "kappa",
+      "lambda",
+      "mu",
+      "nu",
+      "xi",
+      "omicron",
+      "pi",
+      "rho",
+    ];
+
+    localStorage.setItem("mde.globalSearchHistory", JSON.stringify(storedHistory));
+
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      searchWorkspaceMarkdown: vi.fn().mockResolvedValue({
+        limited: false,
+        query: "alpha",
+        results: [],
+      }),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: /search workspace contents/i });
+    fireEvent.keyDown(window, { key: "f", metaKey: true, shiftKey: true });
+
+    const searchBox = await screen.findByRole("searchbox", {
+      name: /search workspace contents/i,
+    });
+    const historyRegion = await screen.findByRole("listbox", {
+      name: /workspace search history/i,
+    });
+
+    expect(historyRegion).toHaveClass("global-search-history-tags");
+    expect(within(historyRegion).getByText(/up to 16/i)).toBeVisible();
+    expect(within(historyRegion).getAllByRole("button")).toHaveLength(16);
+
+    await user.type(searchBox, "alp");
+
+    expect(within(historyRegion).getAllByRole("button")).toHaveLength(2);
+    expect(
+      within(historyRegion).getByRole("button", {
+        name: "Use workspace search history item alpha",
+      }),
+    ).toBeVisible();
+    expect(
+      within(historyRegion).getByRole("button", {
+        name: "Use workspace search history item alphabet",
+      }),
+    ).toBeVisible();
+
+    await user.clear(searchBox);
+    await user.type(searchBox, "zzz");
+
+    expect(
+      screen.queryByRole("listbox", { name: /workspace search history/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("persists the selected AI CLI and sends it with AI actions", async () => {

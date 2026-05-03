@@ -1791,6 +1791,7 @@ test('searches within the current Markdown editor', async () => {
     })
 
     await expect(searchBox).toBeFocused()
+    await expect(searchBox).toHaveAttribute('type', 'text')
     await searchBox.fill('markdown')
     await window.keyboard.press('Enter')
 
@@ -1884,7 +1885,12 @@ test('searches the workspace and opens a matched file with editor highlights', a
     })
 
     await expect(searchBox).toBeFocused()
+    await expect(searchBox).toHaveAttribute('type', 'text')
     await searchBox.fill('nested')
+    await expect(
+      window.locator('.global-search-result-match').filter({ hasText: /Nested/i })
+        .first()
+    ).toBeVisible()
     await window
       .getByRole('button', { name: /open search result docs\/intro\.md line 3/i })
       .click()
@@ -1903,9 +1909,41 @@ test('searches the workspace and opens a matched file with editor highlights', a
     })
 
     await expect(reopenedWorkspaceSearch).toBeFocused()
+    await expect(
+      window.getByRole('listbox', { name: /workspace search history/i })
+    ).toHaveClass(/global-search-history-tags/)
+    await window.setViewportSize({ width: 390, height: 820 })
+    const historyOverflow = await window
+      .getByRole('listbox', { name: /workspace search history/i })
+      .evaluate((historyElement) => {
+        const historyBounds = historyElement.getBoundingClientRect()
+        const overflowingTag = Array.from(
+          historyElement.querySelectorAll('.global-search-history-tag')
+        ).some((tagElement) => {
+          const tagBounds = tagElement.getBoundingClientRect()
+
+          return (
+            tagBounds.left < historyBounds.left ||
+            tagBounds.right > historyBounds.right
+          )
+        })
+
+        return {
+          historyWidth: historyElement.scrollWidth,
+          visibleWidth: historyElement.clientWidth,
+          overflowingTag
+        }
+      })
+
+    expect(historyOverflow.overflowingTag).toBe(false)
+    expect(historyOverflow.historyWidth).toBeLessThanOrEqual(
+      historyOverflow.visibleWidth + 1
+    )
     await window
       .getByRole('button', { name: /use workspace search history item nested/i })
       .click()
+    await expect(reopenedWorkspaceSearch).toHaveValue('nested')
+    await expect(reopenedWorkspaceSearch).toBeFocused()
     await expect(
       window.getByRole('button', {
         name: /open search result docs\/intro\.md line 3/i

@@ -10,6 +10,7 @@ import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
+  ReactNode,
 } from "react";
 import {
   Bot,
@@ -79,6 +80,7 @@ import {
 import {
   filterSearchHistory,
   getSearchShortcutLabel,
+  GLOBAL_SEARCH_HISTORY_LIMIT,
   GLOBAL_SEARCH_HISTORY_STORAGE_KEY,
   readSearchHistory,
   rememberSearchHistoryItem,
@@ -197,6 +199,55 @@ const getEntryName = (entryPath: string): string => {
   return separatorIndex === -1
     ? entryPath
     : entryPath.slice(separatorIndex + 1);
+};
+
+const renderHighlightedSearchText = (
+  contents: string,
+  query: string,
+): ReactNode => {
+  const normalizedQuery = query.trim();
+
+  if (normalizedQuery.length === 0) {
+    return contents;
+  }
+
+  const lowerContents = contents.toLocaleLowerCase();
+  const lowerQuery = normalizedQuery.toLocaleLowerCase();
+  let cursor = 0;
+  let segmentIndex = 0;
+  let matchIndex = lowerContents.indexOf(lowerQuery);
+  let segments: readonly ReactNode[] = [];
+
+  while (matchIndex !== -1) {
+    const beforeMatch = contents.slice(cursor, matchIndex);
+    const matchedText = contents.slice(
+      matchIndex,
+      matchIndex + normalizedQuery.length,
+    );
+
+    segments = [
+      ...segments,
+      ...(beforeMatch.length > 0 ? [beforeMatch] : []),
+      <mark
+        className="global-search-result-match"
+        key={`${matchIndex}:${segmentIndex}`}
+      >
+        {matchedText}
+      </mark>,
+    ];
+    cursor = matchIndex + normalizedQuery.length;
+    segmentIndex += 1;
+    matchIndex = lowerContents.indexOf(lowerQuery, cursor);
+  }
+
+  if (segments.length === 0) {
+    return contents;
+  }
+
+  return [
+    ...segments,
+    ...(cursor < contents.length ? [contents.slice(cursor)] : []),
+  ];
 };
 
 const getParentPath = (entryPath: string): string => {
@@ -576,7 +627,11 @@ export const ExplorerPane = ({
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [globalSearchHistory, setGlobalSearchHistory] = useState(() =>
-    readSearchHistory(GLOBAL_SEARCH_HISTORY_STORAGE_KEY, globalThis.localStorage),
+    readSearchHistory(
+      GLOBAL_SEARCH_HISTORY_STORAGE_KEY,
+      globalThis.localStorage,
+      GLOBAL_SEARCH_HISTORY_LIMIT,
+    ),
   );
   const [isGlobalSearchHistoryOpen, setIsGlobalSearchHistoryOpen] =
     useState(false);
@@ -612,6 +667,10 @@ export const ExplorerPane = ({
     () => filterSearchHistory(globalSearchHistory, globalSearchQuery),
     [globalSearchHistory, globalSearchQuery],
   );
+  const globalSearchHistoryHeading =
+    globalSearchQuery.trim().length > 0
+      ? text("globalSearch.matchingHistory")
+      : text("globalSearch.history");
 
   const openGlobalSearch = useCallback((): void => {
     setIsGlobalSearchOpen(true);
@@ -628,12 +687,17 @@ export const ExplorerPane = ({
 
   const rememberGlobalSearchQuery = useCallback((query: string): void => {
     setGlobalSearchHistory((currentHistory) => {
-      const nextHistory = rememberSearchHistoryItem(currentHistory, query);
+      const nextHistory = rememberSearchHistoryItem(
+        currentHistory,
+        query,
+        GLOBAL_SEARCH_HISTORY_LIMIT,
+      );
 
       writeSearchHistory(
         GLOBAL_SEARCH_HISTORY_STORAGE_KEY,
         nextHistory,
         globalThis.localStorage,
+        GLOBAL_SEARCH_HISTORY_LIMIT,
       );
 
       return nextHistory;
@@ -2702,7 +2766,8 @@ export const ExplorerPane = ({
                   }}
                   placeholder={text("globalSearch.placeholder")}
                   ref={globalSearchInputRef}
-                  type="search"
+                  role="searchbox"
+                  type="text"
                   value={globalSearchQuery}
                 />
                 <button
@@ -2717,22 +2782,31 @@ export const ExplorerPane = ({
               visibleGlobalSearchHistory.length > 0 ? (
                 <div
                   aria-label={text("globalSearch.history")}
-                  className="search-history-popover global-search-history"
+                  className="global-search-history global-search-history-tags"
                   role="listbox"
                 >
-                  {visibleGlobalSearchHistory.map((historyItem) => (
-                    <div className="search-history-row" key={historyItem}>
+                  <div className="global-search-history-kicker">
+                    <strong>{globalSearchHistoryHeading}</strong>
+                    <span>
+                      {text("globalSearch.historyLimit", {
+                        count: String(GLOBAL_SEARCH_HISTORY_LIMIT),
+                      })}
+                    </span>
+                  </div>
+                  <div className="global-search-history-tag-row">
+                    {visibleGlobalSearchHistory.map((historyItem) => (
                       <button
                         aria-label={text("globalSearch.useHistoryItem", {
                           query: historyItem,
                         })}
-                        className="search-history-query-button"
+                        className="global-search-history-tag"
+                        key={historyItem}
                         onClick={() => {
                           setGlobalSearchQuery(historyItem);
                           setGlobalSearchResult(null);
                           setGlobalSearchErrorMessage(null);
                           setIsGlobalSearchLoading(true);
-                          setIsGlobalSearchHistoryOpen(false);
+                          setIsGlobalSearchHistoryOpen(true);
                           globalSearchInputRef.current?.focus();
                         }}
                         onMouseDown={(event) => {
@@ -2740,10 +2814,15 @@ export const ExplorerPane = ({
                         }}
                         type="button"
                       >
-                        {historyItem}
+                        <Search
+                          aria-hidden="true"
+                          focusable="false"
+                          size={13}
+                        />
+                        <span>{historyItem}</span>
                       </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -2788,7 +2867,12 @@ export const ExplorerPane = ({
                           ? ` · ${text("globalSearch.metadataMatch")}`
                           : ""}
                       </span>
-                      <span>{match.preview}</span>
+                      <span>
+                        {renderHighlightedSearchText(
+                          match.preview,
+                          globalSearchResult.query,
+                        )}
+                      </span>
                     </button>
                   )),
                 )

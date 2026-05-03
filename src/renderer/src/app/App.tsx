@@ -2713,7 +2713,8 @@ export const App = (): React.JSX.Element => {
                     }}
                     placeholder={text("editor.searchPlaceholder")}
                     ref={editorSearchInputRef}
-                    type="search"
+                    role="searchbox"
+                    type="text"
                     value={editorSearchQuery}
                   />
                   <span aria-live="polite" className="editor-search-count">

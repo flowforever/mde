@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  GLOBAL_SEARCH_HISTORY_LIMIT,
   readSearchHistory,
   rememberSearchHistoryItem,
   writeSearchHistory
@@ -44,5 +45,28 @@ describe('search history persistence', () => {
     storage.setItem('mde.testSearchHistory', '{not json')
 
     expect(readSearchHistory('mde.testSearchHistory', storage)).toEqual([])
+  })
+
+  it('persists at most sixteen recent search entries', () => {
+    const storage = createStorage()
+    const history = Array.from(
+      { length: GLOBAL_SEARCH_HISTORY_LIMIT + 3 },
+      (_, index) => `query-${index}`
+    )
+
+    writeSearchHistory(
+      'mde.testSearchHistory',
+      history,
+      storage,
+      GLOBAL_SEARCH_HISTORY_LIMIT
+    )
+
+    expect(
+      readSearchHistory(
+        'mde.testSearchHistory',
+        storage,
+        GLOBAL_SEARCH_HISTORY_LIMIT
+      )
+    ).toEqual(history.slice(0, GLOBAL_SEARCH_HISTORY_LIMIT))
   })
 })
