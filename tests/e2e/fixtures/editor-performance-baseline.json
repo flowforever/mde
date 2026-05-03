@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "modes": {
+    "smoke": {
+      "relativeThresholdPercent": 35,
+      "absoluteLimits": {
+        "openEditorVisible": 4000,
+        "openFirstBlockAttached": 4500,
+        "readyToType": 5000,
+        "singleInputVisible": 1500,
+        "bulkInputVisible": 3000,
+        "scrollBottomVisible": 2500,
+        "autosaveFileUpdated": 7000
+      },
+      "stages": {
+        "openEditorVisible": 2200,
+        "openFirstBlockAttached": 3200,
+        "readyToType": 650,
+        "singleInputVisible": 900,
+        "bulkInputVisible": 1100,
+        "scrollBottomVisible": 650,
+        "autosaveFileUpdated": 5000
+      }
+    },
+    "benchmark": {
+      "relativeThresholdPercent": 20,
+      "absoluteLimits": {
+        "openEditorVisible": 9000,
+        "openFirstBlockAttached": 10000,
+        "readyToType": 9000,
+        "singleInputVisible": 3000,
+        "bulkInputVisible": 6000,
+        "scrollBottomVisible": 5000,
+        "autosaveFileUpdated": 10000
+      },
+      "stages": {
+        "openEditorVisible": 6900,
+        "openFirstBlockAttached": 8100,
+        "readyToType": 800,
+        "singleInputVisible": 2100,
+        "bulkInputVisible": 2600,
+        "scrollBottomVisible": 950,
+        "autosaveFileUpdated": 4000
+      }
+    }
+  }
+}
