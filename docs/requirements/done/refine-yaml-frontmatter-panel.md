@@ -1,8 +1,11 @@
-# YAML Frontmatter 面板轻量化优化 - READY
+# YAML Frontmatter 面板轻量化优化
 
 ## Status
 
 - 2026-05-03: Development started. Scope is to make the existing frontmatter panel lighter in collapsed, fields, source, and invalid YAML states while preserving raw YAML round trips.
+- 2026-05-03: Completed and released in `v1.4.4`.
+- Completion summary: The YAML frontmatter panel now uses a lightweight collapsed metadata row, aligns with the editor body, offers a structured Fields view plus raw Source editing, defaults invalid YAML to source/warning mode, and preserves raw frontmatter round trips.
+- Verification notes: Local `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`, `npm run docs:build`, `npm run build`, and `npm audit --audit-level=high` passed. Release workflow `25270773056` passed. User Manual deploy workflow `25270773078` passed. GitHub Release `v1.4.4` published with 12 artifacts.
 
 ## 背景
 
