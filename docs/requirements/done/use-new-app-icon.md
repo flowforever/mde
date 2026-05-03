@@ -1,16 +1,18 @@
-# 使用新 App 图标 - READY
+# 使用新 App 图标
 
 ## 状态
 
 * 设计方向已确认：采用 `02 Split Editor`。
 
-* 本文档只定义后续实现任务的需求范围，不在当前任务中接入生产图标。
+* 需求创建时本文档只定义后续实现任务的需求范围，不在当时接入生产图标。
 
-* 当前 Electron Builder 配置还没有显式指定 app icon。
+* 生产接入已完成，Electron Builder 现在显式指定 app icon。
 
 * 2026-05-04: Auto-pick started. Autonomy gate passed: the selected SVG master, expected production assets, Electron Builder icon paths, and verification requirements are all present in this document and existing repository configuration.
 
 * 2026-05-04: Implementation completed locally. Added reproducible icon generation, committed `build/icon.svg`, `build/icon.png`, `build/icon.icns`, and `build/icon.ico`, configured Electron Builder to use them for macOS and Windows, and added integration coverage for config and asset drift. Local package smoke verified `release/mac/MDE.app/Contents/Resources/icon.icns` matches `build/icon.icns`.
+
+* 2026-05-04: Released in `v1.4.16`. GitHub Release workflow `25285682659` completed successfully for macOS and Windows artifacts, and Deploy User Manual workflow `25285682647` completed successfully. Release notes document that the user manual was not changed because the app icon update affects packaged app identity rather than in-app workflows.
 
 ## 背景
 
