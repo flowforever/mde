@@ -50,6 +50,16 @@ describe("editor render regressions", () => {
     expect(preBlock).toContain("padding-top: 42px");
   });
 
+  it("keeps collapsed frontmatter summary aligned with editor body text", async () => {
+    const css = await readThemeCss();
+    const summaryButtonBlock = getCssBlock(css, ".frontmatter-summary-button");
+    const summaryTextBlock = getCssBlock(css, ".frontmatter-summary-text");
+
+    expect(summaryButtonBlock).toContain("width: calc(100% + 25px)");
+    expect(summaryButtonBlock).toContain("margin-left: -25px");
+    expect(summaryTextBlock).toContain("grid-column: 2 / -1");
+  });
+
   it("keeps inline Mermaid previews inside the matching code block flow", async () => {
     const css = await readThemeCss();
     const targetBlock = getCssBlock(css, ".mermaid-flowchart-inline-target");

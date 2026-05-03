@@ -1,5 +1,7 @@
 import {
   type CSSProperties,
+  Fragment,
+  type JSX,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -13,6 +15,8 @@ import {
 import {
   AlignHorizontalSpaceAround,
   AlignVerticalSpaceAround,
+  ChevronLeft,
+  ChevronRight,
   History,
   Search,
   StretchHorizontal,
@@ -93,7 +97,11 @@ import {
   writeWorkspaceFileHistory,
 } from "../workspaces/workspaceFileHistory";
 import type { TreeNode } from "../../../shared/fileTree";
-import { AiActionMenu, type AiActionBusyState } from "../ai/AiActionMenu";
+import {
+  AiSummaryActionButton,
+  AiTranslateActionMenu,
+  type AiActionBusyState,
+} from "../ai/AiActionMenu";
 import { AiResultPanel } from "../ai/AiResultPanel";
 import {
   forgetCustomAiTranslationLanguage,
@@ -138,6 +146,14 @@ const getHistoryEventLabel = (
 
 const formatHistoryTimestamp = (timestamp: string): string =>
   new Date(timestamp).toLocaleString();
+
+const EDITOR_ACTION_VISIBLE_LIMIT = 5;
+const EDITOR_ACTION_COLLAPSED_ITEM_COUNT = EDITOR_ACTION_VISIBLE_LIMIT - 1;
+
+interface EditorActionItem {
+  readonly element: JSX.Element;
+  readonly id: string;
+}
 
 const HISTORY_FILTER_LABEL_KEYS = Object.fromEntries(
   DOCUMENT_HISTORY_FILTERS.map((filter) => [filter.id, filter.labelKey]),
@@ -405,6 +421,8 @@ export const App = (): React.JSX.Element => {
     readEditorLineSpacing,
   );
   const [isEditorLineSpacingMenuOpen, setIsEditorLineSpacingMenuOpen] =
+    useState(false);
+  const [isEditorActionsExpanded, setIsEditorActionsExpanded] =
     useState(false);
   const [themePreference, setThemePreference] = useState(readThemePreference);
   const [customAppLanguagePacks, setCustomAppLanguagePacks] = useState(
@@ -2205,6 +2223,247 @@ export const App = (): React.JSX.Element => {
         sourcePath: historyPreview.deletedDocument?.path ?? historyPreview.version.path,
       }
     : null;
+  const canShowEditorDocumentActions = Boolean(state.loadedFile ?? historyPreview);
+  const expandEditorActions = (): void => {
+    setIsEditorActionsExpanded(true);
+  };
+  const collapseEditorActions = (): void => {
+    setIsEditorActionsExpanded(false);
+    setIsEditorLineSpacingMenuOpen(false);
+  };
+  const editorActionItems = [
+    canShowEditorDocumentActions
+      ? {
+          element: (
+            <div
+              className="editor-line-spacing-menu-shell"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setIsEditorLineSpacingMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                aria-expanded={isEditorLineSpacingMenuOpen}
+                aria-haspopup="menu"
+                aria-label={editorLineSpacingLabel}
+                className="editor-action-button"
+                onClick={() => {
+                  setIsEditorLineSpacingMenuOpen(
+                    (currentValue) => !currentValue,
+                  );
+                }}
+                title={editorLineSpacingLabel}
+                type="button"
+              >
+                <AlignVerticalSpaceAround
+                  aria-hidden="true"
+                  size={17}
+                  strokeWidth={2}
+                />
+              </button>
+              {isEditorLineSpacingMenuOpen ? (
+                <div
+                  aria-label={text("editor.lineSpacingMenu")}
+                  className="editor-line-spacing-menu"
+                  role="menu"
+                >
+                  {EDITOR_LINE_SPACING_OPTIONS.map((option) => (
+                    <button
+                      aria-checked={editorLineSpacing === option.id}
+                      className={
+                        editorLineSpacing === option.id
+                          ? "is-active"
+                          : undefined
+                      }
+                      key={option.id}
+                      onClick={() => {
+                        setEditorLineSpacing(option.id);
+                        writeEditorLineSpacing(
+                          globalThis.localStorage,
+                          option.id,
+                        );
+                        setIsEditorLineSpacingMenuOpen(false);
+                      }}
+                      role="menuitemradio"
+                      type="button"
+                    >
+                      {text(option.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ),
+          id: "line-spacing",
+        }
+      : null,
+    {
+      element: (
+        <button
+          aria-label={editorViewToggleLabel}
+          className="editor-action-button"
+          onClick={() => {
+            setEditorViewMode((currentMode) => {
+              const nextMode =
+                currentMode === "full-width" ? "centered" : "full-width";
+
+              writeEditorViewMode(globalThis.localStorage, nextMode);
+
+              return nextMode;
+            });
+          }}
+          title={editorViewToggleLabel}
+          type="button"
+        >
+          {isEditorFullWidth ? (
+            <AlignHorizontalSpaceAround
+              aria-hidden="true"
+              size={17}
+              strokeWidth={2}
+            />
+          ) : (
+            <StretchHorizontal aria-hidden="true" size={17} strokeWidth={2} />
+          )}
+        </button>
+      ),
+      id: "view-toggle",
+    },
+    canShowEditorDocumentActions
+      ? {
+          element: (
+            <button
+              aria-label={text("history.versionHistory")}
+              aria-pressed={Boolean(state.isDocumentHistoryPanelVisible)}
+              className="editor-action-button"
+              onClick={() => {
+                void toggleVersionHistory();
+              }}
+              title={text("history.versionHistory")}
+              type="button"
+            >
+              <History aria-hidden="true" size={17} strokeWidth={2} />
+            </button>
+          ),
+          id: "history",
+        }
+      : null,
+    shouldShowAiActions
+      ? {
+          element: (
+            <AiSummaryActionButton
+              busyState={currentAiBusyState}
+              onSummarize={() => {
+                void summarizeMarkdown();
+              }}
+              text={text}
+            />
+          ),
+          id: "ai-summary",
+        }
+      : null,
+    shouldShowAiActions
+      ? {
+          element: (
+            <AiTranslateActionMenu
+              busyState={currentAiBusyState}
+              customLanguageInput={customAiTranslationLanguageInput}
+              customLanguages={customAiTranslationLanguages}
+              isTranslateMenuOpen={isTranslateMenuOpen}
+              onAddCustomLanguage={rememberCustomTranslationLanguage}
+              onCustomLanguageInputChange={setCustomAiTranslationLanguageInput}
+              onForgetCustomLanguage={forgetCustomTranslationLanguage}
+              onToggleTranslateMenu={() => {
+                setIsTranslateMenuOpen((currentValue) => !currentValue);
+              }}
+              onTranslate={(language) => {
+                void translateMarkdown(language);
+              }}
+              text={text}
+            />
+          ),
+          id: "ai-translate",
+        }
+      : null,
+    state.loadedFile
+      ? {
+          element: (
+            <div className="editor-search-shell">
+              {isEditorSearchOpen ? (
+                <form
+                  aria-label={text("editor.markdownSearch")}
+                  className="editor-search-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    cycleEditorSearchMatch();
+                  }}
+                >
+                  <Search aria-hidden="true" size={15} />
+                  <input
+                    aria-label={text("editor.markdownSearch")}
+                    onChange={(event) => {
+                      const nextQuery = event.target.value;
+
+                      setEditorSearchQuery(nextQuery);
+                      setEditorSearchState({
+                        activeMatchIndex: nextQuery.trim().length > 0 ? 0 : -1,
+                        matchCount: 0,
+                      });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        closeEditorSearch();
+                      }
+                    }}
+                    placeholder={text("editor.searchPlaceholder")}
+                    ref={editorSearchInputRef}
+                    type="search"
+                    value={editorSearchQuery}
+                  />
+                  <span aria-live="polite" className="editor-search-count">
+                    {editorSearchQuery.trim().length > 0
+                      ? `${Math.max(editorSearchState.activeMatchIndex + 1, 0)}/${editorSearchState.matchCount}`
+                      : "0/0"}
+                  </span>
+                  <button
+                    aria-label={text("editor.closeMarkdownSearch")}
+                    className="editor-search-close-button"
+                    onClick={closeEditorSearch}
+                    type="button"
+                  >
+                    <X aria-hidden="true" size={14} />
+                  </button>
+                </form>
+              ) : null}
+              <button
+                aria-label={text("editor.markdownSearch")}
+                aria-pressed={isEditorSearchOpen}
+                className="editor-action-button"
+                onClick={() => {
+                  openEditorSearch();
+                }}
+                title={text("editor.markdownSearch")}
+                type="button"
+              >
+                <Search aria-hidden="true" size={17} strokeWidth={2} />
+              </button>
+            </div>
+          ),
+          id: "search",
+        }
+      : null,
+  ].filter((item): item is EditorActionItem => item !== null);
+  const shouldShowEditorActionOverflowToggle =
+    editorActionItems.length > EDITOR_ACTION_VISIBLE_LIMIT;
+  const visibleEditorActionItems =
+    shouldShowEditorActionOverflowToggle && !isEditorActionsExpanded
+      ? editorActionItems.slice(-EDITOR_ACTION_COLLAPSED_ITEM_COUNT)
+      : editorActionItems;
+  const editorActionOverflowLabel = isEditorActionsExpanded
+    ? text("editor.collapseActions")
+    : text("editor.expandActions");
   const historyFilterId = state.documentHistoryFilterId ?? "all";
   const historyVersions = state.documentHistoryVersions ?? [];
   const visibleHistoryVersions = filterHistoryVersions(
@@ -2339,194 +2598,33 @@ export const App = (): React.JSX.Element => {
           .join(" ")}
         aria-label={text("editor.label")}
       >
-        <div className="editor-action-bar" aria-label={text("editor.actions")}>
-          {state.loadedFile ? (
-            <div className="editor-search-shell">
-              {isEditorSearchOpen ? (
-                <form
-                  aria-label={text("editor.markdownSearch")}
-                  className="editor-search-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    cycleEditorSearchMatch();
-                  }}
-                >
-                  <Search aria-hidden="true" size={15} />
-                  <input
-                    aria-label={text("editor.markdownSearch")}
-                    onChange={(event) => {
-                      const nextQuery = event.target.value;
-
-                      setEditorSearchQuery(nextQuery);
-                      setEditorSearchState({
-                        activeMatchIndex: nextQuery.trim().length > 0 ? 0 : -1,
-                        matchCount: 0,
-                      });
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        closeEditorSearch();
-                      }
-                    }}
-                    placeholder={text("editor.searchPlaceholder")}
-                    ref={editorSearchInputRef}
-                    type="search"
-                    value={editorSearchQuery}
-                  />
-                  <span aria-live="polite" className="editor-search-count">
-                    {editorSearchQuery.trim().length > 0
-                      ? `${Math.max(editorSearchState.activeMatchIndex + 1, 0)}/${editorSearchState.matchCount}`
-                      : "0/0"}
-                  </span>
-                  <button
-                    aria-label={text("editor.closeMarkdownSearch")}
-                    className="editor-search-close-button"
-                    onClick={closeEditorSearch}
-                    type="button"
-                  >
-                    <X aria-hidden="true" size={14} />
-                  </button>
-                </form>
-              ) : null}
-              <button
-                aria-label={text("editor.markdownSearch")}
-                aria-pressed={isEditorSearchOpen}
-                className="editor-action-button"
-                onClick={() => {
-                  openEditorSearch();
-                }}
-                title={text("editor.markdownSearch")}
-                type="button"
-              >
-                <Search aria-hidden="true" size={17} strokeWidth={2} />
-              </button>
-            </div>
-          ) : null}
-          {shouldShowAiActions ? (
-            <AiActionMenu
-              busyState={currentAiBusyState}
-              customLanguageInput={customAiTranslationLanguageInput}
-              customLanguages={customAiTranslationLanguages}
-              isTranslateMenuOpen={isTranslateMenuOpen}
-              onAddCustomLanguage={rememberCustomTranslationLanguage}
-              onCustomLanguageInputChange={setCustomAiTranslationLanguageInput}
-              onForgetCustomLanguage={forgetCustomTranslationLanguage}
-              onSummarize={() => {
-                void summarizeMarkdown();
-              }}
-              onToggleTranslateMenu={() => {
-                setIsTranslateMenuOpen((currentValue) => !currentValue);
-              }}
-              onTranslate={(language) => {
-                void translateMarkdown(language);
-              }}
-              text={text}
-            />
-          ) : null}
-          {state.loadedFile || historyPreview ? (
+        <div
+          aria-label={text("editor.actions")}
+          className="editor-action-bar"
+          role="toolbar"
+        >
+          {shouldShowEditorActionOverflowToggle ? (
             <button
-              aria-label={text("history.versionHistory")}
-              aria-pressed={Boolean(state.isDocumentHistoryPanelVisible)}
+              aria-label={editorActionOverflowLabel}
               className="editor-action-button"
-              onClick={() => {
-                void toggleVersionHistory();
-              }}
-              title={text("history.versionHistory")}
+              onClick={
+                isEditorActionsExpanded
+                  ? collapseEditorActions
+                  : expandEditorActions
+              }
+              title={editorActionOverflowLabel}
               type="button"
             >
-              <History aria-hidden="true" size={17} strokeWidth={2} />
+              {isEditorActionsExpanded ? (
+                <ChevronRight aria-hidden="true" size={17} strokeWidth={2} />
+              ) : (
+                <ChevronLeft aria-hidden="true" size={17} strokeWidth={2} />
+              )}
             </button>
           ) : null}
-          {state.loadedFile || historyPreview ? (
-            <div
-              className="editor-line-spacing-menu-shell"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setIsEditorLineSpacingMenuOpen(false);
-                }
-              }}
-            >
-              <button
-                aria-expanded={isEditorLineSpacingMenuOpen}
-                aria-haspopup="menu"
-                aria-label={editorLineSpacingLabel}
-                className="editor-action-button"
-                onClick={() => {
-                  setIsEditorLineSpacingMenuOpen(
-                    (currentValue) => !currentValue,
-                  );
-                }}
-                title={editorLineSpacingLabel}
-                type="button"
-              >
-                <AlignVerticalSpaceAround
-                  aria-hidden="true"
-                  size={17}
-                  strokeWidth={2}
-                />
-              </button>
-              {isEditorLineSpacingMenuOpen ? (
-                <div
-                  aria-label={text("editor.lineSpacingMenu")}
-                  className="editor-line-spacing-menu"
-                  role="menu"
-                >
-                  {EDITOR_LINE_SPACING_OPTIONS.map((option) => (
-                    <button
-                      aria-checked={editorLineSpacing === option.id}
-                      className={
-                        editorLineSpacing === option.id
-                          ? "is-active"
-                          : undefined
-                      }
-                      key={option.id}
-                      onClick={() => {
-                        setEditorLineSpacing(option.id);
-                        writeEditorLineSpacing(
-                          globalThis.localStorage,
-                          option.id,
-                        );
-                        setIsEditorLineSpacingMenuOpen(false);
-                      }}
-                      role="menuitemradio"
-                      type="button"
-                    >
-                      {text(option.labelKey)}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <button
-            aria-label={editorViewToggleLabel}
-            aria-pressed={isEditorFullWidth}
-            className="editor-action-button"
-            onClick={() => {
-              setEditorViewMode((currentMode) => {
-                const nextMode =
-                  currentMode === "full-width" ? "centered" : "full-width";
-
-                writeEditorViewMode(globalThis.localStorage, nextMode);
-
-                return nextMode;
-              });
-            }}
-            title={editorViewToggleLabel}
-            type="button"
-          >
-            {isEditorFullWidth ? (
-              <AlignHorizontalSpaceAround
-                aria-hidden="true"
-                size={17}
-                strokeWidth={2}
-              />
-            ) : (
-              <StretchHorizontal aria-hidden="true" size={17} strokeWidth={2} />
-            )}
-          </button>
+          {visibleEditorActionItems.map((item) => (
+            <Fragment key={item.id}>{item.element}</Fragment>
+          ))}
         </div>
         {currentAiErrorMessage ? (
           <p className="ai-result-error" role="alert">

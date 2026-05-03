@@ -1423,6 +1423,112 @@ describe("App shell", () => {
     expect(localStorage.getItem("mde.editorViewMode")).toBe("centered");
   });
 
+  it("collapses overflowing editor actions with prioritized visible buttons", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: /translate markdown/i });
+    const actionBar = document.querySelector<HTMLElement>(".editor-action-bar");
+    expect(actionBar).not.toBeNull();
+
+    const readActionButtonLabels = (): string[] =>
+      within(actionBar!)
+        .getAllByRole("button")
+        .map(
+          (button) =>
+            button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "",
+        );
+
+    await waitFor(() => {
+      expect(readActionButtonLabels()).toEqual([
+        "Show all editor actions",
+        "Version history",
+        "Summarize Markdown",
+        "Translate Markdown",
+        "Search current Markdown",
+      ]);
+    });
+    expect(
+      screen.queryByRole("button", { name: /use full-width editor view/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /editor line spacing/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /show all editor actions/i }),
+    );
+
+    expect(readActionButtonLabels()).toEqual([
+      "Collapse editor actions",
+      "Editor line spacing",
+      "Use full-width editor view",
+      "Version history",
+      "Summarize Markdown",
+      "Translate Markdown",
+      "Search current Markdown",
+    ]);
+    expect(
+      screen.getByRole("button", { name: /use full-width editor view/i }),
+    ).not.toHaveAttribute("aria-pressed");
+
+    await user.click(
+      screen.getByRole("button", { name: /collapse editor actions/i }),
+    );
+
+    expect(readActionButtonLabels()).toEqual([
+      "Show all editor actions",
+      "Version history",
+      "Summarize Markdown",
+      "Translate Markdown",
+      "Search current Markdown",
+    ]);
+  });
+
   it("restores the remembered full-width editor view on launch", async () => {
     const editorApi = {
       consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
@@ -1904,7 +2010,7 @@ describe("App shell", () => {
     });
 
     expect(
-      searchButton.compareDocumentPosition(summaryButton) &
+      summaryButton.compareDocumentPosition(searchButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 

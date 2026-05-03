@@ -163,6 +163,16 @@ const openMarkdownFile = async (window: Page): Promise<void> => {
   await window.getByRole('button', { name: /open markdown file/i }).click()
 }
 
+const revealEditorOverflowActions = async (window: Page): Promise<void> => {
+  const expandButton = window.getByRole('button', {
+    name: /show all editor actions/i
+  })
+
+  if (await expandButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await expandButton.click()
+  }
+}
+
 const resetThemePreference = async (window: Page): Promise<void> => {
   await window.evaluate(() => {
     globalThis.localStorage.removeItem('mde.themePreference')
@@ -1047,6 +1057,24 @@ test('renders and preserves YAML frontmatter outside the editor body', async () 
         })
       )
       .toBeLessThanOrEqual(1)
+    await expect
+      .poll(async () =>
+        editor.evaluate((element) => {
+          const summaryTextRect = element
+            .querySelector('.frontmatter-summary-text')
+            ?.getBoundingClientRect()
+          const firstBodyBlockRect = element
+            .querySelector('.markdown-editor-surface .bn-block-content')
+            ?.getBoundingClientRect()
+
+          if (!summaryTextRect || !firstBodyBlockRect) {
+            return Number.NaN
+          }
+
+          return Math.abs(summaryTextRect.left - firstBodyBlockRect.left)
+        })
+      )
+      .toBeLessThanOrEqual(1)
 
     await window.getByRole('button', { name: /name: auto-pick-tasks/i }).click()
     await expect(window.locator('.frontmatter-field-list')).toContainText('name')
@@ -1298,6 +1326,7 @@ test('renders Markdown body with compact document typography', async () => {
     expect(codeLanguageSelector.width).toBeGreaterThan(54)
     expect(codeLanguageSelector.height).toBeGreaterThan(22)
 
+    await revealEditorOverflowActions(window)
     await window.getByRole('button', { name: /editor line spacing/i }).click()
     await window.getByRole('menuitemradio', { name: /relaxed/i }).click()
 
@@ -1407,6 +1436,7 @@ test('toggles the editor between centered and full-width layouts', async () => {
 
     expect(actionBarWidth).toBeLessThan(220)
     expect(actionBarWidth).toBeLessThan(centeredWidth)
+    await revealEditorOverflowActions(window)
     await fullWidthButton.click()
     await expect(
       window.getByRole('button', { name: /use centered editor view/i })
@@ -1938,6 +1968,51 @@ test('summarizes and translates the current Markdown file with an installed AI C
     await openNewWorkspace(window)
     await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
     await expect(window.getByTestId('markdown-block-editor')).toBeVisible()
+
+    const actionBar = window.locator('.editor-action-bar')
+    const readEditorActionLabels = async (): Promise<string[]> =>
+      actionBar.getByRole('button').evaluateAll((buttons) =>
+        buttons.map(
+          (button) =>
+            button.getAttribute('aria-label') ?? button.textContent?.trim() ?? ''
+        )
+      )
+
+    await expect(
+      window.getByRole('button', { name: /show all editor actions/i })
+    ).toBeVisible()
+    expect(await readEditorActionLabels()).toEqual([
+      'Show all editor actions',
+      'Version history',
+      'Summarize Markdown',
+      'Translate Markdown',
+      'Search current Markdown'
+    ])
+    await expect(
+      window.getByRole('button', { name: /use full-width editor view/i })
+    ).toHaveCount(0)
+    await expect(
+      window.getByRole('button', { name: /editor line spacing/i })
+    ).toHaveCount(0)
+
+    await window.getByRole('button', { name: /show all editor actions/i }).click()
+
+    expect(await readEditorActionLabels()).toEqual([
+      'Collapse editor actions',
+      'Editor line spacing',
+      'Use full-width editor view',
+      'Version history',
+      'Summarize Markdown',
+      'Translate Markdown',
+      'Search current Markdown'
+    ])
+    expect(
+      await window
+        .getByRole('button', { name: /use full-width editor view/i })
+        .getAttribute('aria-pressed')
+    ).toBeNull()
+
+    await window.getByRole('button', { name: /collapse editor actions/i }).click()
 
     await window.getByRole('button', { name: /summarize markdown/i }).click()
 
