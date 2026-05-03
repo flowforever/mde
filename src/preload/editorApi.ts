@@ -158,6 +158,35 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       folderPath,
       workspaceRoot
     ) as Promise<void>,
+  copyWorkspaceEntry: (sourcePath, targetDirectoryPath, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.copyWorkspaceEntry,
+      sourcePath,
+      targetDirectoryPath,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['copyWorkspaceEntry']>>,
+  pasteClipboardEntries: (targetDirectoryPath, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.pasteClipboardEntries,
+      targetDirectoryPath,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['pasteClipboardEntries']>>,
+  pasteExternalEntries: (sourcePaths, targetDirectoryPath, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.pasteExternalEntries,
+      sourcePaths,
+      targetDirectoryPath,
+      workspaceRoot
+    ) as ReturnType<NonNullable<EditorApi['pasteExternalEntries']>>,
+  readClipboardText: () =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.readClipboardText
+    ) as ReturnType<NonNullable<EditorApi['readClipboardText']>>,
+  writeClipboardText: (contents) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.writeClipboardText,
+      contents
+    ) as ReturnType<NonNullable<EditorApi['writeClipboardText']>>,
   renameEntry: (oldPath, newPath, workspaceRoot) =>
     ipcRenderer.invoke(
       FILE_CHANNELS.renameEntry,

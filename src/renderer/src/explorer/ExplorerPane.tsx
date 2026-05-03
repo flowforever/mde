@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  ClipboardPaste,
+  Copy,
   Eye,
   EyeOff,
   ExternalLink,
@@ -94,6 +96,11 @@ interface ExplorerPaneProps {
   readonly onCheckForUpdates?: () => Promise<UpdateCheckResult>;
   readonly onCreateFile: (filePath: string) => void;
   readonly onCreateFolder: (folderPath: string) => void;
+  readonly onCopyEntry?: (entryPath: string) => Promise<void> | void;
+  readonly onCopyEntryPath?: (
+    entryPath: string,
+    pathKind: "absolute" | "relative",
+  ) => Promise<void> | void;
   readonly onDeleteEntry: () => void;
   readonly onForgetWorkspace?: (workspace: RecentWorkspace) => void;
   readonly onOpenFile?: () => void;
@@ -104,6 +111,9 @@ interface ExplorerPaneProps {
     filePath: string,
     query: string,
   ) => void;
+  readonly onPasteEntry?: (
+    targetDirectoryPath: string,
+  ) => Promise<void> | void;
   readonly onRefreshTree?: (
     directoryPaths: readonly string[],
   ) => Promise<void> | void;
@@ -187,6 +197,57 @@ const getEntryName = (entryPath: string): string => {
   return separatorIndex === -1
     ? entryPath
     : entryPath.slice(separatorIndex + 1);
+};
+
+const getParentPath = (entryPath: string): string => {
+  const separatorIndex = entryPath.lastIndexOf("/");
+
+  return separatorIndex === -1 ? "" : entryPath.slice(0, separatorIndex);
+};
+
+const findNodeByPath = (
+  nodes: readonly TreeNode[],
+  targetPath: string,
+): TreeNode | null => {
+  for (const node of nodes) {
+    if (node.path === targetPath) {
+      return node;
+    }
+
+    if (node.type === "directory") {
+      const childNode = findNodeByPath(node.children, targetPath);
+
+      if (childNode) {
+        return childNode;
+      }
+    }
+  }
+
+  return null;
+};
+
+const getPasteTargetDirectoryPath = (
+  nodes: readonly TreeNode[],
+  entryPath: string | null,
+): string => {
+  if (!entryPath) {
+    return "";
+  }
+
+  return findNodeByPath(nodes, entryPath)?.type === "directory"
+    ? entryPath
+    : getParentPath(entryPath);
+};
+
+const isEditableShortcutTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.isContentEditable ||
+    ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)
+  );
 };
 
 const clampRecentFilesPanelHeight = (height: number): number =>
@@ -415,6 +476,8 @@ export const ExplorerPane = ({
   onCheckForUpdates,
   onCreateFile,
   onCreateFolder,
+  onCopyEntry = () => undefined,
+  onCopyEntryPath = () => undefined,
   onDeleteEntry,
   onForgetWorkspace = () => undefined,
   onOpenFile = () => undefined,
@@ -422,6 +485,7 @@ export const ExplorerPane = ({
   onOpenWorkspace,
   onOpenWorkspaceInNewWindow = () => undefined,
   onOpenWorkspaceSearchResult = () => undefined,
+  onPasteEntry = () => undefined,
   onRefreshTree = () => undefined,
   onRenameEntry,
   onSearchWorkspace,
@@ -867,6 +931,107 @@ export const ExplorerPane = ({
   }, [contextMenu]);
 
   useEffect(() => {
+    const handleExplorerClipboardShortcut = (event: KeyboardEvent): void => {
+      if (
+        isEditableShortcutTarget(event.target) ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const shortcutKey = event.key.toLowerCase();
+
+      if (shortcutKey === "c" && state.selectedEntryPath) {
+        if (!event.metaKey) {
+          event.preventDefault();
+        }
+        void Promise.resolve(onCopyEntry(state.selectedEntryPath)).catch(
+          () => undefined,
+        );
+        return;
+      }
+
+      if (shortcutKey === "v" && state.workspace) {
+        if (!event.metaKey) {
+          event.preventDefault();
+        }
+        void Promise.resolve(
+          onPasteEntry(
+            getPasteTargetDirectoryPath(
+              state.workspace.tree,
+              state.selectedEntryPath,
+            ),
+          ),
+        ).catch(() => undefined);
+      }
+    };
+
+    window.addEventListener("keydown", handleExplorerClipboardShortcut);
+
+    return () => {
+      window.removeEventListener("keydown", handleExplorerClipboardShortcut);
+    };
+  }, [
+    onCopyEntry,
+    onPasteEntry,
+    state.selectedEntryPath,
+    state.workspace,
+  ]);
+
+  useEffect(() => {
+    const handleExplorerCopy = (event: ClipboardEvent): void => {
+      const selectedEntryPath = state.selectedEntryPath;
+
+      if (isEditableShortcutTarget(event.target) || !selectedEntryPath) {
+        return;
+      }
+
+      event.preventDefault();
+      if (workspaceRoot) {
+        event.clipboardData?.setData(
+          "text/plain",
+          workspaceRoot.endsWith("/")
+            ? `${workspaceRoot}${selectedEntryPath}`
+            : `${workspaceRoot}/${selectedEntryPath}`,
+        );
+      }
+      void Promise.resolve(onCopyEntry(selectedEntryPath)).catch(
+        () => undefined,
+      );
+    };
+    const handleExplorerPaste = (event: ClipboardEvent): void => {
+      if (isEditableShortcutTarget(event.target) || !state.workspace) {
+        return;
+      }
+
+      event.preventDefault();
+      void Promise.resolve(
+        onPasteEntry(
+          getPasteTargetDirectoryPath(
+            state.workspace.tree,
+            state.selectedEntryPath,
+          ),
+        ),
+      ).catch(() => undefined);
+    };
+
+    window.addEventListener("copy", handleExplorerCopy);
+    window.addEventListener("paste", handleExplorerPaste);
+
+    return () => {
+      window.removeEventListener("copy", handleExplorerCopy);
+      window.removeEventListener("paste", handleExplorerPaste);
+    };
+  }, [
+    onCopyEntry,
+    onPasteEntry,
+    state.selectedEntryPath,
+    state.workspace,
+    workspaceRoot,
+  ]);
+
+  useEffect(() => {
     if (!deleteConfirmation) {
       return;
     }
@@ -944,6 +1109,43 @@ export const ExplorerPane = ({
       clampDeleteConfirmationPosition(contextMenu.x, contextMenu.y),
     );
     clearPendingAction();
+    closeContextMenu();
+  };
+
+  const copyContextEntry = (): void => {
+    if (!contextMenu) {
+      return;
+    }
+
+    void Promise.resolve(onCopyEntry(contextMenu.entry.path)).catch(
+      () => undefined,
+    );
+    closeContextMenu();
+  };
+
+  const pasteIntoContextEntry = (): void => {
+    if (!contextMenu) {
+      return;
+    }
+
+    void Promise.resolve(
+      onPasteEntry(
+        contextMenu.entry.type === "directory"
+          ? contextMenu.entry.path
+          : getParentPath(contextMenu.entry.path),
+      ),
+    ).catch(() => undefined);
+    closeContextMenu();
+  };
+
+  const copyContextEntryPath = (pathKind: "absolute" | "relative"): void => {
+    if (!contextMenu) {
+      return;
+    }
+
+    void Promise.resolve(
+      onCopyEntryPath(contextMenu.entry.path, pathKind),
+    ).catch(() => undefined);
     closeContextMenu();
   };
 
@@ -2213,6 +2415,46 @@ export const ExplorerPane = ({
                       </button>
                     </>
                   ) : null}
+                  <button
+                    onClick={copyContextEntry}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <Copy aria-hidden="true" focusable="false" size={14} />
+                    <span>{text("explorer.copyEntry")}</span>
+                  </button>
+                  <button
+                    onClick={pasteIntoContextEntry}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <ClipboardPaste
+                      aria-hidden="true"
+                      focusable="false"
+                      size={14}
+                    />
+                    <span>{text("explorer.pasteEntry")}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      copyContextEntryPath("relative");
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <Copy aria-hidden="true" focusable="false" size={14} />
+                    <span>{text("explorer.copyRelativePath")}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      copyContextEntryPath("absolute");
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <Copy aria-hidden="true" focusable="false" size={14} />
+                    <span>{text("explorer.copyAbsolutePath")}</span>
+                  </button>
                   <button
                     onClick={beginContextRename}
                     role="menuitem"

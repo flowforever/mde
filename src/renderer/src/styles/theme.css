@@ -1712,7 +1712,7 @@ input:focus-visible,
   top: var(--context-menu-y);
   left: var(--context-menu-x);
   display: flex;
-  min-width: 132px;
+  min-width: 184px;
   flex-direction: column;
   gap: 3px;
   padding: 5px;
@@ -1736,6 +1736,12 @@ input:focus-visible,
   border: 0;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.explorer-context-menu button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .explorer-context-menu button:hover,
@@ -1956,6 +1962,7 @@ body.is-resizing-explorer-panel .explorer-panel-resize-handle::after {
 
 .explorer-footer-settings-button {
   width: 38px;
+  height: 38px;
   min-height: 38px;
 }
 

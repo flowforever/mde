@@ -189,11 +189,12 @@ const createMainWindow = async (
 }
 
 const bootstrap = async (): Promise<void> => {
-  const { app, BrowserWindow, dialog, ipcMain, shell } = (await import(
+  const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = (await import(
     'electron'
   )) as {
     app: App
     BrowserWindow: BrowserWindowConstructor
+    clipboard: Electron.Clipboard
     dialog: Electron.Dialog
     ipcMain: Electron.IpcMain
     shell: Electron.Shell
@@ -287,6 +288,7 @@ const bootstrap = async (): Promise<void> => {
     workspaceService: createWorkspaceService()
   })
   registerFileHandlers({
+    clipboard,
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain,
     markdownFileService: createMarkdownFileService({

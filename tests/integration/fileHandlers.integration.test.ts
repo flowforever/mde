@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
 
@@ -29,6 +30,8 @@ interface RegisteredHandlers {
 }
 
 interface RegisterHandlerOptions {
+  readonly clipboardFormats?: Readonly<Record<string, string>>
+  readonly clipboardText?: string
   readonly moveEntryToTrash?: (entryPath: string) => Promise<void>
 }
 
@@ -52,6 +55,15 @@ describe('fileHandlers integration', () => {
     })
 
     registerFileHandlers({
+      clipboard: {
+        availableFormats: vi.fn(() => Object.keys(options.clipboardFormats ?? {})),
+        read: vi.fn((format: string) => options.clipboardFormats?.[format] ?? ''),
+        readBuffer: vi.fn((format: string) =>
+          Buffer.from(options.clipboardFormats?.[format] ?? '')
+        ),
+        readText: vi.fn(() => options.clipboardText ?? ''),
+        writeText: vi.fn()
+      },
       getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
       ipcMain,
       markdownFileService: createMarkdownFileService({
@@ -779,5 +791,103 @@ describe('fileHandlers integration', () => {
         reason: 'deleted-in-mde'
       })
     ])
+  })
+
+  it('copies Markdown entries and pasted clipboard paths through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const externalPath = await mkdtemp(join(tmpdir(), 'mde-external-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(workspacePath, 'docs', '.mde', 'assets'), {
+      recursive: true
+    })
+    await mkdir(join(workspacePath, 'archive'))
+    await writeFile(
+      join(workspacePath, 'docs', 'intro.md'),
+      '# Intro\n\n![Hero](.mde/assets/hero.png)'
+    )
+    await writeFile(join(workspacePath, 'docs', '.mde', 'assets', 'hero.png'), imageBytes)
+    await mkdir(join(externalPath, 'images'))
+    await writeFile(
+      join(externalPath, 'outside.md'),
+      '# Outside\n\n![Photo](images/photo.png)'
+    )
+    await writeFile(join(externalPath, 'images', 'photo.png'), imageBytes)
+
+    const { handlers } = registerHandlers(workspacePath, {
+      clipboardText: join(externalPath, 'outside.md')
+    })
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.copyWorkspaceEntry)
+        ?.({}, 'docs/intro.md', 'archive', workspace.rootPath)
+    ).resolves.toEqual({
+      path: 'archive/intro.md',
+      type: 'file'
+    })
+    await expect(
+      readFile(join(workspacePath, 'archive', '.mde', 'assets', 'hero.png'))
+    ).resolves.toEqual(imageBytes)
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.pasteClipboardEntries)
+        ?.({}, 'docs', workspace.rootPath)
+    ).resolves.toEqual([
+      {
+        path: 'docs/outside.md',
+        type: 'file'
+      }
+    ])
+    await expect(readFile(join(workspacePath, 'docs', 'outside.md'), 'utf8')).resolves.toBe(
+      '# Outside\n\n![Photo](.mde/assets/photo.png)'
+    )
+    await expect(
+      readFile(join(workspacePath, 'docs', '.mde', 'assets', 'photo.png'))
+    ).resolves.toEqual(imageBytes)
+  })
+
+  it('pastes Finder file-url clipboard entries through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const externalPath = await mkdtemp(join(tmpdir(), 'mde-external-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(workspacePath, 'docs'))
+    await mkdir(join(externalPath, 'assets'))
+    await writeFile(
+      join(externalPath, 'finder.md'),
+      '# Finder\n\n![Photo](assets/photo.png)'
+    )
+    await writeFile(join(externalPath, 'assets', 'photo.png'), imageBytes)
+
+    const { handlers } = registerHandlers(workspacePath, {
+      clipboardFormats: {
+        'public.file-url': pathToFileURL(join(externalPath, 'finder.md')).href
+      }
+    })
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.pasteClipboardEntries)
+        ?.({}, 'docs', workspace.rootPath)
+    ).resolves.toEqual([
+      {
+        path: 'docs/finder.md',
+        type: 'file'
+      }
+    ])
+    await expect(readFile(join(workspacePath, 'docs', 'finder.md'), 'utf8')).resolves.toBe(
+      '# Finder\n\n![Photo](.mde/assets/photo.png)'
+    )
+    await expect(
+      readFile(join(workspacePath, 'docs', '.mde', 'assets', 'photo.png'))
+    ).resolves.toEqual(imageBytes)
   })
 })

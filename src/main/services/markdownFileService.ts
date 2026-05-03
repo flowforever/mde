@@ -12,10 +12,20 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises'
-import { dirname, extname, join, posix, relative, sep } from 'node:path'
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep
+} from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import type {
+  CopiedEntry,
   FileContents,
   ImageAsset,
   ImageAssetInput,
@@ -66,6 +76,16 @@ export interface MarkdownFileService {
     contents?: string
   ) => Promise<FileContents>
   readonly createFolder: (workspacePath: string, folderPath: string) => Promise<void>
+  readonly copyWorkspaceEntry: (
+    workspacePath: string,
+    sourcePath: string,
+    targetDirectoryPath: string
+  ) => Promise<CopiedEntry>
+  readonly pasteExternalEntries: (
+    workspacePath: string,
+    sourcePaths: readonly string[],
+    targetDirectoryPath: string
+  ) => Promise<readonly CopiedEntry[]>
   readonly renameEntry: (
     workspacePath: string,
     oldPath: string,
@@ -84,6 +104,7 @@ const MAX_SEARCH_MATCHES_PER_FILE = 3
 const LOCAL_IMAGE_ASSET_PATTERN =
   /!\[[^\]]*\]\((\.mde\/assets\/[^)\s]+)(?:[^)]*)\)/g
 const LOCAL_IMAGE_ASSET_PREFIX = '.mde/assets/'
+const MARKDOWN_IMAGE_TARGET_PATTERN = /!\[[^\]]*]\(([^)]*)\)/g
 
 const isMarkdownPath = (filePath: string): boolean =>
   extname(filePath).toLowerCase() === '.md'
@@ -204,6 +225,91 @@ const joinWorkspacePath = (...segments: readonly string[]): string =>
 
 const isSupportedImageAssetPath = (entryPath: string): boolean =>
   supportedImageExtensions.has(extname(entryPath).toLowerCase())
+
+interface ParsedMarkdownLinkTarget {
+  readonly path: string
+  readonly replaceEnd: number
+  readonly replaceStart: number
+}
+
+const parseMarkdownLinkTarget = (
+  rawTarget: string
+): ParsedMarkdownLinkTarget | null => {
+  const leadingWhitespaceLength = rawTarget.length - rawTarget.trimStart().length
+
+  if (leadingWhitespaceLength >= rawTarget.length) {
+    return null
+  }
+
+  if (rawTarget[leadingWhitespaceLength] === '<') {
+    const closingIndex = rawTarget.indexOf('>', leadingWhitespaceLength + 1)
+
+    if (closingIndex === -1) {
+      return null
+    }
+
+    const path = rawTarget.slice(leadingWhitespaceLength + 1, closingIndex)
+
+    return path.length > 0
+      ? {
+          path,
+          replaceEnd: closingIndex,
+          replaceStart: leadingWhitespaceLength + 1
+        }
+      : null
+  }
+
+  const pathStart = leadingWhitespaceLength
+  const nextWhitespaceOffset = rawTarget.slice(pathStart).search(/\s/)
+  const pathEnd =
+    nextWhitespaceOffset === -1
+      ? rawTarget.length
+      : pathStart + nextWhitespaceOffset
+  const path = rawTarget.slice(pathStart, pathEnd)
+
+  return path.length > 0
+    ? {
+        path,
+        replaceEnd: pathEnd,
+        replaceStart: pathStart
+      }
+    : null
+}
+
+const replaceMarkdownLinkTargetPath = (
+  rawTarget: string,
+  parsedTarget: ParsedMarkdownLinkTarget,
+  nextPath: string
+): string =>
+  `${rawTarget.slice(0, parsedTarget.replaceStart)}${nextPath}${rawTarget.slice(
+    parsedTarget.replaceEnd
+  )}`
+
+const safeDecodePath = (entryPath: string): string => {
+  try {
+    return decodeURIComponent(entryPath)
+  } catch {
+    return entryPath
+  }
+}
+
+const isRelativeMarkdownAssetReference = (entryPath: string): boolean =>
+  !entryPath.startsWith('/') &&
+  !entryPath.startsWith('#') &&
+  !/^[a-z][a-z0-9+.-]*:/i.test(entryPath)
+
+const sanitizeAssetFileName = (fileName: string): string => {
+  const fileExtension = extname(fileName).toLowerCase()
+  const fallbackBaseName = `asset-${randomUUID().slice(0, 8)}`
+  const rawBaseName =
+    fileExtension.length > 0 ? fileName.slice(0, -fileExtension.length) : fileName
+  const sanitizedBaseName = rawBaseName
+    .replaceAll(/[^A-Za-z0-9._-]/g, '-')
+    .replaceAll(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+
+  return `${sanitizedBaseName || fallbackBaseName}${fileExtension}`
+}
 
 const normalizeAssetStoragePath = (relativeAssetPath: string): string | null => {
   if (!relativeAssetPath.startsWith(LOCAL_IMAGE_ASSET_PREFIX)) {
@@ -641,6 +747,457 @@ const prepareMutableNewPath = async (
   return absoluteTargetPath
 }
 
+const resolveMutableDirectory = async (
+  workspacePath: string,
+  directoryPath: string
+): Promise<string> => {
+  const normalizedDirectoryPath = directoryPath.replaceAll('\\', '/')
+  const absoluteDirectoryPath =
+    normalizedDirectoryPath.length === 0
+      ? await realpath(workspacePath)
+      : await assertNoSymlinkPathComponents(workspacePath, normalizedDirectoryPath, {
+          allowMissing: false
+        })
+  const directoryStats = await lstat(absoluteDirectoryPath)
+
+  if (directoryStats.isSymbolicLink() || !directoryStats.isDirectory()) {
+    throw new Error('Target path must be a directory')
+  }
+
+  return absoluteDirectoryPath
+}
+
+const getWorkspacePathName = (entryPath: string): string =>
+  basename(entryPath.replaceAll('\\', '/'))
+
+const createUniqueEntryName = (
+  entryName: string,
+  copyIndex: number,
+  type: 'directory' | 'file'
+): string => {
+  if (copyIndex === 0) {
+    return entryName
+  }
+
+  const suffix = copyIndex === 1 ? ' copy' : ` copy ${copyIndex}`
+
+  if (type === 'directory') {
+    return `${entryName}${suffix}`
+  }
+
+  const fileExtension = extname(entryName)
+  const baseName =
+    fileExtension.length > 0 ? entryName.slice(0, -fileExtension.length) : entryName
+
+  return `${baseName}${suffix}${fileExtension}`
+}
+
+const createUniqueWorkspaceEntryPath = async (
+  workspacePath: string,
+  targetDirectoryPath: string,
+  entryName: string,
+  type: 'directory' | 'file'
+): Promise<string> => {
+  for (let copyIndex = 0; copyIndex < 1000; copyIndex += 1) {
+    const candidateName = createUniqueEntryName(entryName, copyIndex, type)
+    const candidatePath = joinWorkspacePath(targetDirectoryPath, candidateName)
+    const absoluteCandidatePath = resolveWorkspacePath(workspacePath, candidatePath)
+
+    if (!(await pathExists(absoluteCandidatePath))) {
+      return candidatePath
+    }
+  }
+
+  throw new Error('Unable to find an available destination path')
+}
+
+const createUniqueAssetStoragePath = async (
+  workspacePath: string,
+  targetMarkdownFilePath: string,
+  preferredStoragePath: string
+): Promise<string> => {
+  const targetMarkdownDirectoryPath = getParentWorkspacePath(targetMarkdownFilePath)
+  const preferredSegments = preferredStoragePath
+    .replaceAll('\\', '/')
+    .split('/')
+    .filter((segment) => segment.length > 0)
+  const preferredFileName = sanitizeAssetFileName(
+    preferredSegments.at(-1) ?? `asset${extname(preferredStoragePath)}`
+  )
+  const preferredDirectoryPath = preferredSegments.slice(0, -1).join('/')
+  const fileExtension = extname(preferredFileName)
+  const baseName =
+    fileExtension.length > 0
+      ? preferredFileName.slice(0, -fileExtension.length)
+      : preferredFileName
+
+  for (let copyIndex = 0; copyIndex < 1000; copyIndex += 1) {
+    const candidateFileName =
+      copyIndex === 0
+        ? preferredFileName
+        : `${baseName}-${copyIndex + 1}${fileExtension}`
+    const candidateStoragePath = joinWorkspacePath(
+      preferredDirectoryPath,
+      candidateFileName
+    )
+    const candidateWorkspacePath = joinWorkspacePath(
+      targetMarkdownDirectoryPath,
+      LOCAL_IMAGE_ASSET_PREFIX,
+      candidateStoragePath
+    )
+
+    if (!(await pathExists(resolveWorkspacePath(workspacePath, candidateWorkspacePath)))) {
+      return candidateStoragePath
+    }
+  }
+
+  throw new Error('Unable to find an available asset path')
+}
+
+const assertReadableImageAsset = async (absoluteAssetPath: string): Promise<void> => {
+  const assetStats = await lstat(absoluteAssetPath)
+
+  if (assetStats.isSymbolicLink() || !assetStats.isFile()) {
+    throw new Error('Unsupported image asset')
+  }
+
+  if (!isSupportedImageAssetPath(absoluteAssetPath)) {
+    throw new Error('Unsupported image type')
+  }
+}
+
+const copyImageAssetForMarkdown = async ({
+  preferredStoragePath,
+  sourceAssetPath,
+  targetMarkdownFilePath,
+  workspacePath
+}: {
+  readonly preferredStoragePath: string
+  readonly sourceAssetPath: string
+  readonly targetMarkdownFilePath: string
+  readonly workspacePath: string
+}): Promise<string> => {
+  await assertReadableImageAsset(sourceAssetPath)
+
+  const targetMarkdownDirectoryPath = getParentWorkspacePath(targetMarkdownFilePath)
+  const normalizedPreferredStoragePath =
+    normalizeAssetStoragePath(`${LOCAL_IMAGE_ASSET_PREFIX}${preferredStoragePath}`) ??
+    sanitizeAssetFileName(preferredStoragePath)
+  const firstChoiceWorkspacePath = joinWorkspacePath(
+    targetMarkdownDirectoryPath,
+    LOCAL_IMAGE_ASSET_PREFIX,
+    normalizedPreferredStoragePath
+  )
+  const firstChoiceAbsolutePath = resolveWorkspacePath(
+    workspacePath,
+    firstChoiceWorkspacePath
+  )
+  let assetStoragePath = normalizedPreferredStoragePath
+
+  if (await pathExists(firstChoiceAbsolutePath)) {
+    const [sourceContents, targetContents] = await Promise.all([
+      readFile(sourceAssetPath),
+      readFile(firstChoiceAbsolutePath)
+    ]).catch(() => [null, null] as const)
+
+    assetStoragePath =
+      sourceContents && targetContents && sourceContents.equals(targetContents)
+        ? normalizedPreferredStoragePath
+        : await createUniqueAssetStoragePath(
+            workspacePath,
+            targetMarkdownFilePath,
+            normalizedPreferredStoragePath
+          )
+  }
+  const targetWorkspacePath = joinWorkspacePath(
+    targetMarkdownDirectoryPath,
+    LOCAL_IMAGE_ASSET_PREFIX,
+    assetStoragePath
+  )
+  if (assetStoragePath === normalizedPreferredStoragePath) {
+    const absoluteExistingPath = resolveWorkspacePath(
+      workspacePath,
+      targetWorkspacePath
+    )
+
+    if (await pathExists(absoluteExistingPath)) {
+      return `${LOCAL_IMAGE_ASSET_PREFIX}${assetStoragePath}`
+    }
+  }
+  const absoluteTargetPath = await prepareMutableNewPath(
+    workspacePath,
+    targetWorkspacePath
+  )
+
+  await copyFile(sourceAssetPath, absoluteTargetPath, fsConstants.COPYFILE_EXCL)
+
+  return `${LOCAL_IMAGE_ASSET_PREFIX}${assetStoragePath}`
+}
+
+const migrateMarkdownImageAssets = async ({
+  contents,
+  sourceDirectoryPath,
+  targetMarkdownFilePath,
+  workspacePath
+}: {
+  readonly contents: string
+  readonly sourceDirectoryPath: string
+  readonly targetMarkdownFilePath: string
+  readonly workspacePath: string
+}): Promise<string> => {
+  let migratedContents = ''
+  let lastIndex = 0
+
+  for (const match of contents.matchAll(MARKDOWN_IMAGE_TARGET_PATTERN)) {
+    const rawTarget = match[1]
+    const parsedTarget = parseMarkdownLinkTarget(rawTarget)
+    let nextTarget = rawTarget
+
+    if (parsedTarget && isRelativeMarkdownAssetReference(parsedTarget.path)) {
+      const decodedPath = safeDecodePath(parsedTarget.path).replaceAll('\\', '/')
+      const localAssetStoragePath = normalizeAssetStoragePath(decodedPath)
+      const preferredStoragePath =
+        localAssetStoragePath ?? sanitizeAssetFileName(basename(decodedPath))
+      const sourceAssetPath = localAssetStoragePath
+        ? join(sourceDirectoryPath, ...LOCAL_IMAGE_ASSET_PREFIX.split('/'), ...localAssetStoragePath.split('/'))
+        : resolve(sourceDirectoryPath, decodedPath)
+
+      if (isSupportedImageAssetPath(sourceAssetPath)) {
+        try {
+          const markdownAssetPath = await copyImageAssetForMarkdown({
+            preferredStoragePath,
+            sourceAssetPath,
+            targetMarkdownFilePath,
+            workspacePath
+          })
+
+          nextTarget = replaceMarkdownLinkTargetPath(
+            rawTarget,
+            parsedTarget,
+            markdownAssetPath
+          )
+        } catch (error) {
+          if (!isErrorWithCode(error, 'EEXIST')) {
+            nextTarget = rawTarget
+          }
+        }
+      }
+    }
+
+    migratedContents += `${contents.slice(lastIndex, match.index)}![${match[0].slice(
+      2,
+      match[0].indexOf(']')
+    )}](${nextTarget})`
+    lastIndex = (match.index ?? 0) + match[0].length
+  }
+
+  return `${migratedContents}${contents.slice(lastIndex)}`
+}
+
+const assertManageableExternalDirectoryContents = async (
+  directoryPath: string
+): Promise<void> => {
+  const entries = await readdir(directoryPath, { withFileTypes: true })
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      assertSupportedEntryName(entry.name)
+
+      const entryPath = join(directoryPath, entry.name)
+      const entryStats = await lstat(entryPath)
+
+      if (entryStats.isSymbolicLink()) {
+        throw new Error('Symlink paths are unsupported for file changes')
+      }
+
+      if (entryStats.isDirectory()) {
+        await assertManageableExternalDirectoryContents(entryPath)
+        return
+      }
+
+      if (
+        entryStats.isFile() &&
+        (isMarkdownPath(entry.name) || isSupportedImageAssetPath(entry.name))
+      ) {
+        if (isMarkdownPath(entry.name)) {
+          assertSupportedMarkdownFileStats(await stat(entryPath))
+        }
+        return
+      }
+
+      throw new Error('Unsupported workspace entry')
+    })
+  )
+}
+
+interface CopySourceEntry {
+  readonly absolutePath: string
+  readonly name: string
+  readonly type: 'directory' | 'file'
+}
+
+const resolveExternalEntry = async (sourcePath: string): Promise<CopySourceEntry> => {
+  if (!sourcePath || !resolve(sourcePath)) {
+    throw new Error('Source path is required')
+  }
+
+  const absoluteSourcePath = resolve(sourcePath)
+  const sourceStats = await lstat(absoluteSourcePath)
+
+  if (sourceStats.isSymbolicLink()) {
+    throw new Error('Symlink paths are unsupported for file changes')
+  }
+
+  const sourceName = basename(absoluteSourcePath)
+
+  assertSupportedEntryName(sourceName)
+
+  if (sourceStats.isFile()) {
+    assertMarkdownPath(sourceName)
+    assertSupportedMarkdownFileStats(await stat(absoluteSourcePath))
+
+    return {
+      absolutePath: absoluteSourcePath,
+      name: sourceName,
+      type: 'file'
+    }
+  }
+
+  if (sourceStats.isDirectory()) {
+    await assertManageableExternalDirectoryContents(absoluteSourcePath)
+
+    return {
+      absolutePath: absoluteSourcePath,
+      name: sourceName,
+      type: 'directory'
+    }
+  }
+
+  throw new Error('Unsupported workspace entry')
+}
+
+const copyMarkdownFileToWorkspace = async ({
+  sourceAbsolutePath,
+  targetWorkspacePath,
+  workspacePath
+}: {
+  readonly sourceAbsolutePath: string
+  readonly targetWorkspacePath: string
+  readonly workspacePath: string
+}): Promise<void> => {
+  const sourceContents = await readFile(sourceAbsolutePath, 'utf8')
+  const migratedContents = await migrateMarkdownImageAssets({
+    contents: sourceContents,
+    sourceDirectoryPath: dirname(sourceAbsolutePath),
+    targetMarkdownFilePath: targetWorkspacePath,
+    workspacePath
+  })
+  const targetAbsolutePath = await prepareMutableNewPath(
+    workspacePath,
+    targetWorkspacePath
+  )
+
+  await writeFile(targetAbsolutePath, migratedContents, {
+    encoding: 'utf8',
+    flag: 'wx'
+  })
+}
+
+const copyDirectoryToWorkspace = async ({
+  sourceAbsolutePath,
+  targetWorkspacePath,
+  workspacePath
+}: {
+  readonly sourceAbsolutePath: string
+  readonly targetWorkspacePath: string
+  readonly workspacePath: string
+}): Promise<void> => {
+  const targetAbsolutePath = await prepareMutableNewPath(
+    workspacePath,
+    targetWorkspacePath
+  )
+
+  await mkdir(targetAbsolutePath, { recursive: true })
+
+  const entries = await readdir(sourceAbsolutePath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    const sourceChildPath = join(sourceAbsolutePath, entry.name)
+    const targetChildPath = joinWorkspacePath(targetWorkspacePath, entry.name)
+
+    if (entry.isDirectory()) {
+      await copyDirectoryToWorkspace({
+        sourceAbsolutePath: sourceChildPath,
+        targetWorkspacePath: targetChildPath,
+        workspacePath
+      })
+      continue
+    }
+
+    if (entry.isFile() && isMarkdownPath(entry.name)) {
+      await copyMarkdownFileToWorkspace({
+        sourceAbsolutePath: sourceChildPath,
+        targetWorkspacePath: targetChildPath,
+        workspacePath
+      })
+      continue
+    }
+
+    if (entry.isFile() && isSupportedImageAssetPath(entry.name)) {
+      const targetChildAbsolutePath = await prepareMutableNewPath(
+        workspacePath,
+        targetChildPath
+      )
+
+      await copyFile(
+        sourceChildPath,
+        targetChildAbsolutePath,
+        fsConstants.COPYFILE_EXCL
+      ).catch((error: unknown) => {
+        if (!isErrorWithCode(error, 'EEXIST')) {
+          throw error
+        }
+      })
+    }
+  }
+}
+
+const copySourceEntryToWorkspace = async ({
+  source,
+  targetDirectoryPath,
+  workspacePath
+}: {
+  readonly source: CopySourceEntry
+  readonly targetDirectoryPath: string
+  readonly workspacePath: string
+}): Promise<CopiedEntry> => {
+  const targetWorkspacePath = await createUniqueWorkspaceEntryPath(
+    workspacePath,
+    targetDirectoryPath,
+    source.name,
+    source.type
+  )
+
+  if (source.type === 'file') {
+    await copyMarkdownFileToWorkspace({
+      sourceAbsolutePath: source.absolutePath,
+      targetWorkspacePath,
+      workspacePath
+    })
+  } else {
+    await copyDirectoryToWorkspace({
+      sourceAbsolutePath: source.absolutePath,
+      targetWorkspacePath,
+      workspacePath
+    })
+  }
+
+  return Object.freeze({
+    path: targetWorkspacePath,
+    type: source.type
+  })
+}
+
 export const createMarkdownFileService = ({
   documentHistoryService = createDocumentHistoryService(),
   moveEntryToTrash = async (entryPath) => {
@@ -817,6 +1374,47 @@ export const createMarkdownFileService = ({
     await assertNoSymlinkPathComponents(workspacePath, folderPath, {
       allowMissing: false
     })
+  },
+  async copyWorkspaceEntry(workspacePath, sourcePath, targetDirectoryPath) {
+    const sourceEntry = await resolveMutableEntry(workspacePath, sourcePath)
+
+    await resolveMutableDirectory(workspacePath, targetDirectoryPath)
+
+    if (
+      sourceEntry.type === 'directory' &&
+      isPathAtOrInside(sourcePath, targetDirectoryPath)
+    ) {
+      throw new Error('Cannot copy a directory into itself')
+    }
+
+    return copySourceEntryToWorkspace({
+      source: {
+        absolutePath: sourceEntry.absolutePath,
+        name: getWorkspacePathName(sourcePath),
+        type: sourceEntry.type
+      },
+      targetDirectoryPath,
+      workspacePath
+    })
+  },
+  async pasteExternalEntries(workspacePath, sourcePaths, targetDirectoryPath) {
+    await resolveMutableDirectory(workspacePath, targetDirectoryPath)
+
+    const copiedEntries: CopiedEntry[] = []
+
+    for (const sourcePath of sourcePaths) {
+      const source = await resolveExternalEntry(sourcePath)
+
+      copiedEntries.push(
+        await copySourceEntryToWorkspace({
+          source,
+          targetDirectoryPath,
+          workspacePath
+        })
+      )
+    }
+
+    return Object.freeze(copiedEntries)
   },
   async renameEntry(workspacePath, oldPath, newPath) {
     assertNonEmptyWorkspacePath(oldPath)

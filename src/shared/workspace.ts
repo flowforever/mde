@@ -32,6 +32,11 @@ export interface RenamedEntry {
   readonly path: string
 }
 
+export interface CopiedEntry {
+  readonly path: string
+  readonly type: 'directory' | 'file'
+}
+
 export interface ImageAssetInput {
   readonly contents: ArrayBuffer | Uint8Array
   readonly fileName: string
@@ -125,6 +130,22 @@ export interface EditorApi {
     workspaceRoot: string
   ) => Promise<FileContents>
   readonly createFolder: (folderPath: string, workspaceRoot: string) => Promise<void>
+  readonly copyWorkspaceEntry?: (
+    sourcePath: string,
+    targetDirectoryPath: string,
+    workspaceRoot: string
+  ) => Promise<CopiedEntry>
+  readonly pasteClipboardEntries?: (
+    targetDirectoryPath: string,
+    workspaceRoot: string
+  ) => Promise<readonly CopiedEntry[]>
+  readonly pasteExternalEntries?: (
+    sourcePaths: readonly string[],
+    targetDirectoryPath: string,
+    workspaceRoot: string
+  ) => Promise<readonly CopiedEntry[]>
+  readonly readClipboardText?: () => Promise<string>
+  readonly writeClipboardText?: (contents: string) => Promise<void>
   readonly renameEntry: (
     oldPath: string,
     newPath: string,

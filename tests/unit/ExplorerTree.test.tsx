@@ -164,6 +164,30 @@ describe("ExplorerTree", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("collapses an expanded directory without selecting it when it was not selected", async () => {
+    const user = userEvent.setup();
+    const onSelectEntry = vi.fn();
+    const onDirectoryExpandedChange = vi.fn();
+
+    render(
+      <ExplorerTree
+        expandedDirectoryPaths={new Set(["docs"])}
+        nodes={tree}
+        onDirectoryExpandedChange={onDirectoryExpandedChange}
+        onSelectEntry={onSelectEntry}
+        onSelectFile={vi.fn()}
+        selectedEntryPath={null}
+        text={text}
+        selectedFilePath={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /docs folder/i }));
+
+    expect(onSelectEntry).not.toHaveBeenCalled();
+    expect(onDirectoryExpandedChange).toHaveBeenCalledWith("docs", false);
+  });
+
   it("calls onSelectFile when a Markdown file is selected", async () => {
     const user = userEvent.setup();
     const onSelectFile = vi.fn();
@@ -900,6 +924,89 @@ describe("ExplorerTree", () => {
     await user.click(screen.getByRole("button", { name: /confirm delete/i }));
 
     expect(onDeleteEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("copies and pastes entries from the row context menu", async () => {
+    const user = userEvent.setup();
+    const onCopyEntry = vi.fn();
+    const onCopyEntryPath = vi.fn();
+    const onPasteEntry = vi.fn();
+    const state: AppState = {
+      draftMarkdown: "# Fixture Workspace",
+      errorMessage: null,
+      fileErrorMessage: null,
+      isDirty: false,
+      isLoadingFile: false,
+      isOpeningWorkspace: false,
+      isSavingFile: false,
+      loadedFile: {
+        contents: "# Fixture Workspace",
+        path: "README.md",
+      },
+      loadingWorkspaceRoot: null,
+      selectedEntryPath: "README.md",
+      selectedFilePath: "README.md",
+      workspace: {
+        name: "workspace",
+        rootPath: "/workspace",
+        tree,
+      },
+    };
+
+    render(
+      <ExplorerPane
+        onCopyEntry={onCopyEntry}
+        onCopyEntryPath={onCopyEntryPath}
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDeleteEntry={vi.fn()}
+        onOpenWorkspace={vi.fn()}
+        onPasteEntry={onPasteEntry}
+        onRenameEntry={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        text={text}
+        state={state}
+      />,
+    );
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /README\.md Markdown file/i }),
+      { clientX: 72, clientY: 96 },
+    );
+    await user.click(screen.getByRole("menuitem", { name: /^copy$/i }));
+    expect(onCopyEntry).toHaveBeenCalledWith("README.md");
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /README\.md Markdown file/i }),
+      { clientX: 72, clientY: 96 },
+    );
+    await user.click(screen.getByRole("menuitem", { name: /^paste$/i }));
+    expect(onPasteEntry).toHaveBeenCalledWith("");
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /README\.md Markdown file/i }),
+      { clientX: 72, clientY: 96 },
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: /copy relative path/i }),
+    );
+    expect(onCopyEntryPath).toHaveBeenCalledWith("README.md", "relative");
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /README\.md Markdown file/i }),
+      { clientX: 72, clientY: 96 },
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: /copy absolute path/i }),
+    );
+    expect(onCopyEntryPath).toHaveBeenCalledWith("README.md", "absolute");
+
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    expect(onCopyEntry).toHaveBeenLastCalledWith("README.md");
+
+    fireEvent.keyDown(window, { key: "v", metaKey: true });
+    expect(onPasteEntry).toHaveBeenLastCalledWith("");
   });
 
   it("keeps delete confirmation inside the viewport and closes it on scroll", async () => {

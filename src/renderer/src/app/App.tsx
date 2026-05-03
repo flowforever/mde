@@ -283,6 +283,23 @@ const joinWorkspacePath = (parentPath: string, entryName: string): string =>
 const ensureMarkdownExtension = (filePath: string): string =>
   filePath.toLowerCase().endsWith(".md") ? filePath : `${filePath}.md`;
 
+const createAbsoluteWorkspaceEntryPath = (
+  workspaceRoot: string,
+  entryPath: string,
+): string =>
+  workspaceRoot.endsWith("/")
+    ? `${workspaceRoot}${entryPath}`
+    : `${workspaceRoot}/${entryPath}`;
+
+const clipboardTextContainsPath = (
+  clipboardText: string,
+  expectedPath: string,
+): boolean =>
+  clipboardText
+    .split(/\0|\r?\n/)
+    .map((entryPath) => entryPath.trim())
+    .includes(expectedPath);
+
 const EXPLORER_WIDTH_DEFAULT = 288;
 const EXPLORER_WIDTH_MIN = 220;
 const EXPLORER_WIDTH_MAX = 440;
@@ -308,6 +325,12 @@ interface ScopedAiErrorMessage {
 interface EditorSearchState {
   readonly activeMatchIndex: number;
   readonly matchCount: number;
+}
+
+interface ExplorerCopiedEntry {
+  readonly absolutePath: string;
+  readonly sourcePath: string;
+  readonly workspaceRoot: string;
 }
 
 const clampExplorerWidth = (width: number): number =>
@@ -455,6 +478,8 @@ export const App = (): React.JSX.Element => {
   const [workspaceFileHistory, setWorkspaceFileHistory] = useState(
     readWorkspaceFileHistory,
   );
+  const [copiedExplorerEntry, setCopiedExplorerEntry] =
+    useState<ExplorerCopiedEntry | null>(null);
   const [aiTools, setAiTools] = useState<readonly AiTool[]>([]);
   const [aiSettings, setAiSettings] = useState(() =>
     readAiCliSettings(globalThis.localStorage),
@@ -501,6 +526,7 @@ export const App = (): React.JSX.Element => {
     null,
   );
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
+  const copiedExplorerEntryRef = useRef<ExplorerCopiedEntry | null>(null);
   const appShellRef = useRef<HTMLElement | null>(null);
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null);
   const editorSearchShellRef = useRef<HTMLDivElement | null>(null);
@@ -2004,6 +2030,167 @@ export const App = (): React.JSX.Element => {
     }
   };
 
+  const copyExplorerEntry = useCallback(
+    async (entryPath: string): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      const absolutePath = createAbsoluteWorkspaceEntryPath(
+        workspaceRoot,
+        entryPath,
+      );
+      const nextCopiedEntry = {
+        absolutePath,
+        sourcePath: entryPath,
+        workspaceRoot,
+      };
+
+      copiedExplorerEntryRef.current = nextCopiedEntry;
+      setCopiedExplorerEntry(nextCopiedEntry);
+
+      try {
+        if (!window.editorApi?.writeClipboardText) {
+          return;
+        }
+
+        await window.editorApi.writeClipboardText(absolutePath);
+      } catch (error) {
+        dispatch({
+          message: getErrorMessage(error, text("errors.copyEntryFailed")),
+          type: "workspace/operation-failed",
+          workspaceRoot,
+        });
+      }
+    },
+    [state.workspace?.rootPath, text],
+  );
+
+  const copyExplorerEntryPath = useCallback(
+    async (
+      entryPath: string,
+      pathKind: "absolute" | "relative",
+    ): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      const clipboardText =
+        pathKind === "absolute"
+          ? createAbsoluteWorkspaceEntryPath(workspaceRoot, entryPath)
+          : entryPath;
+
+      try {
+        if (!window.editorApi?.writeClipboardText) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
+
+        await window.editorApi.writeClipboardText(clipboardText);
+      } catch (error) {
+        dispatch({
+          message: getErrorMessage(error, text("errors.copyPathFailed")),
+          type: "workspace/operation-failed",
+          workspaceRoot,
+        });
+      }
+    },
+    [state.workspace?.rootPath, text],
+  );
+
+  const shouldUseCopiedExplorerEntry = useCallback(
+    async (entry: ExplorerCopiedEntry): Promise<boolean> => {
+      if (!window.editorApi?.readClipboardText) {
+        return true;
+      }
+
+      try {
+        const clipboardText = await window.editorApi.readClipboardText();
+
+        return clipboardTextContainsPath(clipboardText, entry.absolutePath);
+      } catch {
+        return true;
+      }
+    },
+    [],
+  );
+
+  const pasteExplorerEntry = useCallback(
+    async (targetDirectoryPath: string): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      try {
+        if (!window.editorApi) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
+
+        const candidateCopiedEntry =
+          copiedExplorerEntryRef.current ?? copiedExplorerEntry;
+        const internalEntry =
+          candidateCopiedEntry?.workspaceRoot === workspaceRoot &&
+          (await shouldUseCopiedExplorerEntry(candidateCopiedEntry))
+            ? candidateCopiedEntry
+            : null;
+        if (internalEntry && !window.editorApi.copyWorkspaceEntry) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
+        if (!internalEntry && !window.editorApi.pasteClipboardEntries) {
+          throw new Error(text("errors.editorApiUnavailable"));
+        }
+
+        const copiedEntries = internalEntry
+          ? [
+              await window.editorApi.copyWorkspaceEntry!(
+                internalEntry.sourcePath,
+                targetDirectoryPath,
+                workspaceRoot,
+              ),
+            ]
+          : await window.editorApi.pasteClipboardEntries!(
+              targetDirectoryPath,
+              workspaceRoot,
+            );
+        const [firstCopiedEntry] = copiedEntries;
+
+        await refreshWorkspaceTree(workspaceRoot);
+
+        if (!firstCopiedEntry) {
+          return;
+        }
+
+        dispatch({
+          entryPath: firstCopiedEntry.path,
+          type: "explorer/entry-selected",
+        });
+
+        if (firstCopiedEntry.type === "file") {
+          await loadFile(firstCopiedEntry.path, workspaceRoot);
+        }
+      } catch (error) {
+        dispatch({
+          message: getErrorMessage(error, text("errors.pasteEntryFailed")),
+          type: "workspace/operation-failed",
+          workspaceRoot,
+        });
+      }
+    },
+    [
+      copiedExplorerEntry,
+      loadFile,
+      refreshWorkspaceTree,
+      shouldUseCopiedExplorerEntry,
+      state.workspace?.rootPath,
+      text,
+    ],
+  );
+
   const renameSelectedEntry = async (promptedName: string): Promise<void> => {
     const selectedEntryPath = state.selectedEntryPath;
     const workspaceRoot = state.workspace?.rootPath;
@@ -2722,6 +2909,12 @@ export const App = (): React.JSX.Element => {
         onCreateFolder={(folderPath) => {
           void createFolder(folderPath);
         }}
+        onCopyEntry={(entryPath) => {
+          void copyExplorerEntry(entryPath);
+        }}
+        onCopyEntryPath={(entryPath, pathKind) => {
+          void copyExplorerEntryPath(entryPath, pathKind);
+        }}
         onDeleteEntry={() => {
           void deleteSelectedEntry();
         }}
@@ -2740,6 +2933,9 @@ export const App = (): React.JSX.Element => {
           void openWorkspaceInNewWindow(workspace);
         }}
         onOpenWorkspaceSearchResult={openWorkspaceSearchResult}
+        onPasteEntry={(targetDirectoryPath) => {
+          void pasteExplorerEntry(targetDirectoryPath);
+        }}
         onRefreshTree={(directoryPaths) =>
           refreshWorkspaceTree(state.workspace?.rootPath, directoryPaths)
         }

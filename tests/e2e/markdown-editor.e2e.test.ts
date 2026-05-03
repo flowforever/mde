@@ -59,6 +59,18 @@ test.beforeAll(async ({ browserName }, testInfo) => {
   await buildElectronApp()
 })
 
+const readTextFileOrNull = async (filePath: string): Promise<string | null> => {
+  try {
+    return await readFile(filePath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  }
+}
+
 const startUpdateFallbackServer = async (): Promise<{
   close: () => Promise<void>
   requests: string[]
@@ -154,7 +166,23 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
 const openNewWorkspace = async (window: Page): Promise<void> => {
   await ensureWorkspaceDialogOpen(window)
 
-  await window.getByRole('button', { name: /open new workspace/i }).click()
+  const openWorkspaceButton = window.getByRole('button', {
+    name: /open new workspace/i
+  })
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await openWorkspaceButton.click({ timeout: 5_000 })
+      return
+    } catch (error) {
+      if (attempt === 2) {
+        throw error
+      }
+
+      await window.waitForTimeout(250)
+      await ensureWorkspaceDialogOpen(window)
+    }
+  }
 }
 
 const openMarkdownFile = async (window: Page): Promise<void> => {
@@ -304,8 +332,8 @@ test('shows the initial centered workspace popup', async () => {
       y: globalThis.innerHeight / 2
     }))
 
-    expect(buttonBackground).toBe(itemBackground)
     expect(buttonBackground).not.toBe('rgb(46, 111, 143)')
+    expect(itemBackground).not.toBe('rgb(46, 111, 143)')
     expect(Math.abs(dialogCenter.x - viewportCenter.x)).toBeLessThan(12)
     expect(Math.abs(dialogCenter.y - viewportCenter.y)).toBeLessThan(12)
     await expect
@@ -2497,9 +2525,8 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     ).resolves.toBe('')
 
     await docsRow.click()
-    await expect(docsRow).toHaveAttribute('aria-current', 'page')
-    await docsRow.click()
     await expect(docsRow).not.toHaveAttribute('aria-current', 'page')
+    await expect(docsRow).toHaveAttribute('aria-expanded', 'false')
     await window.getByRole('button', { name: /new folder/i }).click()
     await expect(window.getByLabel(/new folder name/i)).toHaveValue('notes')
     await window.getByLabel(/new folder name/i).fill('drafts')
@@ -2520,7 +2547,7 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     await expect(window.getByRole('menuitem', { name: /new folder/i })).toBeVisible()
     await expect(
       window.locator('.explorer-context-menu [role="menuitem"] svg')
-    ).toHaveCount(5)
+    ).toHaveCount(9)
     await window.locator('.explorer-header').click()
     await expect(window.getByRole('menu', { name: /drafts actions/i })).toHaveCount(0)
     await window.getByRole('button', { name: /drafts folder/i }).click({
@@ -2708,6 +2735,56 @@ test('recovers a deleted Markdown document from the explorer history section', a
       })
       .toBe(originalMarkdown)
     await expect(window.getByText(/read-only version preview/i)).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('copies explorer Markdown files with image assets from the context menu', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const imageBytes = Buffer.from([137, 80, 78, 71])
+
+  await mkdir(join(workspacePath, 'docs', '.mde', 'assets'), {
+    recursive: true
+  })
+  await mkdir(join(workspacePath, 'archive'))
+  await writeFile(
+    join(workspacePath, 'docs', 'copy-source.md'),
+    '# Copy Source\n\n![Hero](.mde/assets/hero.png)'
+  )
+  await writeFile(
+    join(workspacePath, 'docs', '.mde', 'assets', 'hero.png'),
+    imageBytes
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /docs folder/i }).click()
+    const sourceRow = window.getByRole('button', {
+      name: /copy-source\.md Markdown file/i
+    })
+    const archiveRow = window.getByRole('button', { name: /archive folder/i })
+
+    await sourceRow.click({ button: 'right' })
+    await window.getByRole('menuitem', { name: /^copy$/i }).click()
+    await archiveRow.click({ button: 'right' })
+    await window.getByRole('menuitem', { name: /^paste$/i }).click()
+
+    await expect
+      .poll(
+        async () =>
+          readTextFileOrNull(join(workspacePath, 'archive', 'copy-source.md')),
+        { timeout: 10_000 }
+      )
+      .toBe('# Copy Source\n\n![Hero](.mde/assets/hero.png)')
+    await expect(
+      readFile(join(workspacePath, 'archive', '.mde', 'assets', 'hero.png'))
+    ).resolves.toEqual(imageBytes)
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

@@ -15,11 +15,15 @@ export const WORKSPACE_CHANNELS = Object.freeze({
 });
 
 export const FILE_CHANNELS = Object.freeze({
+  copyWorkspaceEntry: "file:copy-workspace-entry",
   createFolder: "file:create-folder",
   createMarkdownFile: "file:create-markdown",
   deleteEntry: "file:delete-entry",
   listDeletedDocumentHistory: "file:list-deleted-document-history",
   listDocumentHistory: "file:list-document-history",
+  pasteClipboardEntries: "file:paste-clipboard-entries",
+  pasteExternalEntries: "file:paste-external-entries",
+  readClipboardText: "file:read-clipboard-text",
   readDocumentHistoryVersion: "file:read-document-history-version",
   readMarkdownFile: "file:read-markdown",
   renameEntry: "file:rename-entry",
@@ -28,6 +32,7 @@ export const FILE_CHANNELS = Object.freeze({
   restoreDocumentHistoryVersion: "file:restore-document-history-version",
   saveImageAsset: "file:save-image-asset",
   searchWorkspaceMarkdown: "file:search-workspace-markdown",
+  writeClipboardText: "file:write-clipboard-text",
   writeMarkdownFile: "file:write-markdown",
 });
 

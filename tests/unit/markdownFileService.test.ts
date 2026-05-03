@@ -335,6 +335,99 @@ describe('markdownFileService', () => {
     expect(createdFolderStats.isDirectory()).toBe(true)
   })
 
+  it('copies a Markdown file with its local .mde image assets into another folder', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(rootPath, 'docs', '.mde', 'assets'), { recursive: true })
+    await mkdir(join(rootPath, 'archive'))
+    await writeFile(
+      join(rootPath, 'docs', 'intro.md'),
+      '# Intro\n\n![Hero](.mde/assets/hero.png)'
+    )
+    await writeFile(join(rootPath, 'docs', '.mde', 'assets', 'hero.png'), imageBytes)
+
+    const result = await createMarkdownFileService().copyWorkspaceEntry(
+      rootPath,
+      'docs/intro.md',
+      'archive'
+    )
+
+    expect(result).toEqual({
+      path: 'archive/intro.md',
+      type: 'file'
+    })
+    await expect(
+      readFile(join(rootPath, 'archive', 'intro.md'), 'utf8')
+    ).resolves.toBe('# Intro\n\n![Hero](.mde/assets/hero.png)')
+    await expect(
+      readFile(join(rootPath, 'archive', '.mde', 'assets', 'hero.png'))
+    ).resolves.toEqual(imageBytes)
+  })
+
+  it('imports external Markdown files and rewrites relative image paths to .mde assets', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const externalPath = await mkdtemp(join(tmpdir(), 'mde-external-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(rootPath, 'docs'))
+    await mkdir(join(externalPath, 'images'))
+    await writeFile(
+      join(externalPath, 'external.md'),
+      '# External\n\n![Photo](images/photo.png)'
+    )
+    await writeFile(join(externalPath, 'images', 'photo.png'), imageBytes)
+
+    const result = await createMarkdownFileService().pasteExternalEntries(
+      rootPath,
+      [join(externalPath, 'external.md')],
+      'docs'
+    )
+
+    expect(result).toEqual([
+      {
+        path: 'docs/external.md',
+        type: 'file'
+      }
+    ])
+    await expect(
+      readFile(join(rootPath, 'docs', 'external.md'), 'utf8')
+    ).resolves.toBe('# External\n\n![Photo](.mde/assets/photo.png)')
+    await expect(
+      readFile(join(rootPath, 'docs', '.mde', 'assets', 'photo.png'))
+    ).resolves.toEqual(imageBytes)
+  })
+
+  it('copies Markdown directories with nested .mde assets', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(rootPath, 'docs', '.mde', 'assets'), { recursive: true })
+    await mkdir(join(rootPath, 'archive'))
+    await writeFile(
+      join(rootPath, 'docs', 'intro.md'),
+      '# Intro\n\n![Hero](.mde/assets/hero.png)'
+    )
+    await writeFile(join(rootPath, 'docs', '.mde', 'assets', 'hero.png'), imageBytes)
+
+    const result = await createMarkdownFileService().copyWorkspaceEntry(
+      rootPath,
+      'docs',
+      'archive'
+    )
+
+    expect(result).toEqual({
+      path: 'archive/docs',
+      type: 'directory'
+    })
+    await expect(
+      readFile(join(rootPath, 'archive', 'docs', 'intro.md'), 'utf8')
+    ).resolves.toBe('# Intro\n\n![Hero](.mde/assets/hero.png)')
+    await expect(
+      readFile(join(rootPath, 'archive', 'docs', '.mde', 'assets', 'hero.png'))
+    ).resolves.toEqual(imageBytes)
+  })
+
   it('rejects ignored folder creation targets', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
