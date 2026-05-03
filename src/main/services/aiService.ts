@@ -574,6 +574,13 @@ const createDefaultRunPrompt = (
       child.on("error", (error) => {
         fail(error);
       });
+      child.stdin.on("error", (error) => {
+        if (isErrorWithCode(error, "EPIPE")) {
+          return;
+        }
+
+        fail(error);
+      });
       child.on("close", (code) => {
         if (code !== 0) {
           fail(

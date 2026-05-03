@@ -24,6 +24,9 @@ const locateCommands =
   (tool) =>
     Promise.resolve(paths[tool.id] ?? null);
 
+const shellQuote = (value: string): string =>
+  `'${value.replace(/'/gu, "'\\''")}'`;
+
 describe("aiService", () => {
   it("detects installed AI CLIs in supported order", async () => {
     const service = createAiService({
@@ -271,8 +274,6 @@ describe("aiService", () => {
       const fakeInterpreterPath = join(shellPath, "mde-test-node");
       const fakeCodexPath = join(binPath, "codex");
       const previousPath = process.env.PATH;
-      const shellQuote = (value: string): string =>
-        `'${value.replace(/'/gu, "'\\''")}'`;
 
       await writeFile(
         fakeInterpreterPath,
@@ -315,6 +316,46 @@ describe("aiService", () => {
       } finally {
         process.env.PATH = previousPath;
       }
+    },
+    AI_CLI_SPAWN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "uses output from AI CLIs that close stdin before the prompt finishes writing",
+    async () => {
+      const workspacePath = await mkdtemp(join(tmpdir(), "mde-ai-service-"));
+      const binPath = await mkdtemp(join(tmpdir(), "mde-ai-closed-stdin-"));
+      const fakeCodexPath = join(binPath, "codex");
+
+      await writeFile(
+        fakeCodexPath,
+        [
+          "#!/bin/sh",
+          `exec ${shellQuote(process.execPath)} -e ${shellQuote(
+            [
+              "process.stdin.destroy()",
+              "process.stdout.write('## Summary\\n\\n- Closed stdin output.', () => {",
+              "  setTimeout(() => process.exit(0), 50)",
+              "})",
+            ].join(";"),
+          )}`,
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await chmod(fakeCodexPath, 0o755);
+      await writeFile(join(workspacePath, "README.md"), "# Readme");
+
+      const service = createAiService({
+        locateCommand: locateCommands({ codex: fakeCodexPath }),
+      });
+
+      await expect(
+        service.summarizeMarkdown(workspacePath, "README.md", "# Readme"),
+      ).resolves.toMatchObject({
+        contents: "## Summary\n\n- Closed stdin output.",
+        tool: { id: "codex", name: "Codex" },
+      });
     },
     AI_CLI_SPAWN_TEST_TIMEOUT_MS,
   );
