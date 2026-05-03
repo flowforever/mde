@@ -4146,8 +4146,7 @@ body.is-resizing-explorer-panel {
   transition: opacity 120ms ease;
 }
 
-.markdown-editor-content[data-read-only='false']:hover .bn-side-menu,
-.markdown-editor-content[data-read-only='false']:focus-within .bn-side-menu {
+.markdown-editor-content[data-read-only='false']:hover .bn-side-menu {
   opacity: 0.62;
   pointer-events: auto;
 }

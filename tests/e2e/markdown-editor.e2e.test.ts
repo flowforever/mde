@@ -995,6 +995,82 @@ test('loads README markdown into the block editor surface', async () => {
   }
 })
 
+test('hides editor block hover controls when the pointer moves over the explorer', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await window.setViewportSize({ width: 1440, height: 900 })
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Root markdown file.'
+    )
+
+    await focusTextEndInEditor(window, 'Root markdown file.')
+
+    await window.evaluate(() => {
+      const content = document.querySelector<HTMLElement>('.markdown-editor-content')
+
+      if (!content) {
+        throw new Error('Missing editor content for hover regression test')
+      }
+
+      const probe = document.createElement('div')
+      probe.className = 'bn-side-menu'
+      probe.dataset.testid = 'editor-side-menu-hover-probe'
+      content.append(probe)
+    })
+
+    const editorContentBox = await window
+      .locator('.markdown-editor-content')
+      .boundingBox()
+
+    if (!editorContentBox) {
+      throw new Error('Missing editor content bounds for hover regression test')
+    }
+
+    const probeOpacity = async (): Promise<number> =>
+      window.evaluate(() => {
+        const probe = document.querySelector<HTMLElement>(
+          '[data-testid="editor-side-menu-hover-probe"]'
+        )
+
+        if (!probe) {
+          throw new Error('Missing editor side menu hover probe')
+        }
+
+        return Number.parseFloat(getComputedStyle(probe).opacity)
+      })
+
+    await window.mouse.move(
+      editorContentBox.x + Math.min(editorContentBox.width / 2, 120),
+      editorContentBox.y + Math.min(editorContentBox.height / 2, 120)
+    )
+    await window.waitForTimeout(100)
+    expect(await probeOpacity()).toBeGreaterThan(0.5)
+
+    const explorerBox = await window.locator('.explorer-pane').boundingBox()
+
+    if (!explorerBox) {
+      throw new Error('Missing explorer bounds for hover regression test')
+    }
+
+    await window.mouse.move(
+      explorerBox.x + explorerBox.width / 2,
+      explorerBox.y + explorerBox.height * 0.58
+    )
+    await window.waitForTimeout(150)
+
+    expect(await probeOpacity()).toBeLessThanOrEqual(0.05)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('selects only editor content when select all is pressed inside the editor', async () => {
   const workspacePath = await createFixtureWorkspace()
   const { app, startupDiagnostics, window } = await launchElectronApp({

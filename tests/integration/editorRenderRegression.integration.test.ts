@@ -60,6 +60,21 @@ describe("editor render regressions", () => {
     expect(summaryTextBlock).toContain("grid-column: 2 / -1");
   });
 
+  it("shows editor block side menu only while editable content is hovered", async () => {
+    const css = await readThemeCss();
+    const hiddenBlock = getCssBlock(css, ".markdown-editor-content .bn-side-menu");
+    const hoverBlock = getCssBlock(
+      css,
+      ".markdown-editor-content[data-read-only='false']:hover .bn-side-menu",
+    );
+
+    expect(hiddenBlock).toContain("opacity: 0");
+    expect(hiddenBlock).toContain("pointer-events: none");
+    expect(hoverBlock).toContain("opacity: 0.62");
+    expect(hoverBlock).toContain("pointer-events: auto");
+    expect(css).not.toContain(":focus-within .bn-side-menu");
+  });
+
   it("keeps inline Mermaid previews inside the matching code block flow", async () => {
     const css = await readThemeCss();
     const targetBlock = getCssBlock(css, ".mermaid-flowchart-inline-target");
