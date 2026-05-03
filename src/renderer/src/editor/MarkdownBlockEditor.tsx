@@ -1066,6 +1066,7 @@ export const MarkdownBlockEditor = forwardRef<
         <FrontmatterPanel
           frontmatter={draftMarkdownDocument.frontmatter}
           isReadOnly={isReadOnly}
+          key={draftMarkdownDocument.frontmatter.raw}
           onApply={applyFrontmatterChange}
           text={text}
         />

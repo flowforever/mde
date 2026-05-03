@@ -21,6 +21,10 @@ describe('frontmatter', () => {
 
     expect(result.frontmatter).toMatchObject({
       fieldCount: 2,
+      fields: [
+        { key: 'name', value: 'auto-pick-tasks' },
+        { key: 'description', value: 'Use ready tasks' }
+      ],
       isValid: true,
       raw: 'name: auto-pick-tasks\ndescription: Use ready tasks'
     })
@@ -109,6 +113,7 @@ describe('frontmatter', () => {
     )
 
     expect(result.frontmatter).toMatchObject({
+      fields: [{ key: 'name', value: '[unterminated' }],
       isValid: false,
       raw: 'name: [unterminated'
     })

@@ -1023,16 +1023,38 @@ test('renders and preserves YAML frontmatter outside the editor body', async () 
     const editor = window.getByTestId('markdown-block-editor')
     const editorSurface = editor.locator('.markdown-editor-surface')
 
-    await expect(editor).toContainText('Frontmatter')
+    await expect(
+      window.getByRole('button', { name: /name: auto-pick-tasks/i })
+    ).toBeVisible()
     await expect(editorSurface).toContainText('Auto Pick Tasks')
     await expect(editorSurface).not.toContainText('name: auto-pick-tasks')
+    await expect(editor).not.toContainText('2 fields')
+    await expect
+      .poll(async () =>
+        editor.evaluate((element) => {
+          const frontmatterRect = element
+            .querySelector('.frontmatter-panel')
+            ?.getBoundingClientRect()
+          const contentRect = element
+            .querySelector('.markdown-editor-content')
+            ?.getBoundingClientRect()
 
-    await window.getByRole('button', { name: /frontmatter 2 fields/i }).click()
-    await expect(window.locator('.frontmatter-raw')).toContainText(
-      'description: Use ready tasks'
+          if (!frontmatterRect || !contentRect) {
+            return Number.NaN
+          }
+
+          return Math.abs(frontmatterRect.left - contentRect.left)
+        })
+      )
+      .toBeLessThanOrEqual(1)
+
+    await window.getByRole('button', { name: /name: auto-pick-tasks/i }).click()
+    await expect(window.locator('.frontmatter-field-list')).toContainText('name')
+    await expect(window.locator('.frontmatter-field-list')).toContainText(
+      'Use ready tasks'
     )
 
-    await window.getByRole('button', { name: /edit frontmatter/i }).click()
+    await window.getByRole('button', { name: /^Source$/i }).click()
     await window
       .getByRole('textbox', { name: /raw frontmatter yaml/i })
       .fill('name: updated-frontmatter\ndescription: Updated metadata')
@@ -1057,10 +1079,12 @@ test('renders and preserves YAML frontmatter outside the editor body', async () 
       .getByRole('button', { name: /invalid\.md Markdown file/i })
       .click()
     await expect(
-      window.getByRole('button', { name: /frontmatter 1 field/i })
+      window.getByRole('button', { name: /name: \[unterminated/i })
     ).toContainText(/invalid YAML/i)
-    await window.getByRole('button', { name: /frontmatter 1 field/i }).click()
     await expect(window.getByText(/frontmatter parse failed/i)).toBeVisible()
+    await expect(
+      window.getByRole('textbox', { name: /raw frontmatter yaml/i })
+    ).toHaveValue('name: [unterminated')
 
     await expect(editorSurface).toContainText('Safe body.')
     await focusTextEndInEditor(window, 'Safe body.')
@@ -1124,7 +1148,10 @@ test('renders Markdown body with compact document typography', async () => {
     const editor = window.getByTestId('markdown-block-editor')
     const editorSurface = editor.locator('.markdown-editor-surface')
 
-    await expect(editor).toContainText('Frontmatter')
+    await expect(
+      window.getByRole('button', { name: /owner: docs/i })
+    ).toBeVisible()
+    await expect(editor).not.toContainText('2 fields')
     await expect(editorSurface).toContainText('Render Style Fixture')
     await expect(editorSurface).toContainText('Document Density')
     await expect(editorSurface).toContainText('A short quote should read like Markdown context')

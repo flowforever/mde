@@ -274,9 +274,10 @@ describe("MarkdownBlockEditor accessibility", () => {
       ).toHaveBeenCalledWith("# Auto Pick Tasks\n\nBody text.");
     });
     expect(
-      screen.getByRole("button", { name: /frontmatter 2 fields/i }),
+      screen.getByRole("button", { name: /name: auto-pick-tasks/i }),
     ).toBeVisible();
     expect(screen.getByText(/name: auto-pick-tasks/i)).toBeVisible();
+    expect(screen.queryByText(/2 fields/i)).not.toBeInTheDocument();
   });
 
   it("edits raw YAML frontmatter without rewriting the Markdown body", async () => {
@@ -317,9 +318,9 @@ describe("MarkdownBlockEditor accessibility", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: /frontmatter 2 fields/i }),
+      await screen.findByRole("button", { name: /name: metadata/i }),
     );
-    await user.click(screen.getByRole("button", { name: /edit frontmatter/i }));
+    await user.click(screen.getByRole("button", { name: /^Source$/i }));
     await user.clear(
       screen.getByRole("textbox", { name: /raw frontmatter yaml/i }),
     );

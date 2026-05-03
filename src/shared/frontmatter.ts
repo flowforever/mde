@@ -2,10 +2,16 @@ import { load as parseYaml } from 'js-yaml'
 
 export interface MarkdownFrontmatterBlock {
   readonly fieldCount: number
+  readonly fields: readonly MarkdownFrontmatterField[]
   readonly isValid: boolean
   readonly parseErrorMessage?: string
   readonly raw: string
   readonly summary: string
+}
+
+export interface MarkdownFrontmatterField {
+  readonly key: string
+  readonly value: string
 }
 
 export interface ParsedMarkdownFrontmatter {
@@ -61,6 +67,57 @@ const countFields = (parsedYaml: unknown, raw: string): number => {
     .filter((line) => /^[A-Za-z0-9_-]+[ \t]*:/u.test(line)).length
 }
 
+const formatFrontmatterFieldValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
+}
+
+const RAW_FIELD_PATTERN = /^([A-Za-z0-9_-]+)[ \t]*:[ \t]*(.*)$/u
+
+const createFieldsFromRaw = (raw: string): readonly MarkdownFrontmatterField[] =>
+  raw
+    .split(/\r?\n/u)
+    .map((line) => RAW_FIELD_PATTERN.exec(line))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) =>
+      Object.freeze({
+        key: match[1],
+        value: match[2]
+      })
+    )
+
+const createFrontmatterFields = (
+  parsedYaml: unknown,
+  raw: string
+): readonly MarkdownFrontmatterField[] => {
+  if (!isRecord(parsedYaml)) {
+    return createFieldsFromRaw(raw)
+  }
+
+  return Object.entries(parsedYaml).map(([key, value]) =>
+    Object.freeze({
+      key,
+      value: formatFrontmatterFieldValue(value)
+    })
+  )
+}
+
 const createSummary = (raw: string): string => {
   const summary = raw
     .split(/\r?\n/u)
@@ -77,6 +134,7 @@ const parseFrontmatterBlock = (raw: string): MarkdownFrontmatterBlock => {
     const parsedYaml = raw.trim().length > 0 ? parseYaml(raw) : {}
 
     return Object.freeze({
+      fields: createFrontmatterFields(parsedYaml, raw),
       fieldCount: countFields(parsedYaml, raw),
       isValid: true,
       raw,
@@ -84,6 +142,7 @@ const parseFrontmatterBlock = (raw: string): MarkdownFrontmatterBlock => {
     })
   } catch (error) {
     return Object.freeze({
+      fields: createFieldsFromRaw(raw),
       fieldCount: countFields(null, raw),
       isValid: false,
       parseErrorMessage:
