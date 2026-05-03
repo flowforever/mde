@@ -97,6 +97,7 @@ interface MarkdownBlockEditorProps {
     readonly matchCount: number;
   }) => void;
   readonly path: string;
+  readonly pinnedSearchQueries?: readonly string[];
   readonly searchQuery?: string;
   readonly text: AppText;
   readonly workspaceTree?: readonly TreeNode[];
@@ -135,6 +136,14 @@ interface LinkDialogState {
 
 const SEARCH_MATCH_HIGHLIGHT_NAME = "mde-editor-search-match";
 const SEARCH_ACTIVE_HIGHLIGHT_NAME = "mde-editor-search-active";
+const SEARCH_PIN_HIGHLIGHT_NAMES = [
+  "mde-editor-search-pin-0",
+  "mde-editor-search-pin-1",
+  "mde-editor-search-pin-2",
+  "mde-editor-search-pin-3",
+  "mde-editor-search-pin-4",
+  "mde-editor-search-pin-5",
+];
 const LINK_SUGGESTION_LIMIT = 20;
 const BLUR_SAVE_SETTLE_DELAY_MS = 50;
 const BLUR_SAVE_RETRY_DELAY_MS = 100;
@@ -266,6 +275,9 @@ const clearSearchHighlights = (): void => {
 
   registry?.delete(SEARCH_MATCH_HIGHLIGHT_NAME);
   registry?.delete(SEARCH_ACTIVE_HIGHLIGHT_NAME);
+  SEARCH_PIN_HIGHLIGHT_NAMES.forEach((highlightName) => {
+    registry?.delete(highlightName);
+  });
 };
 
 export const MarkdownBlockEditor = forwardRef<
@@ -293,6 +305,7 @@ export const MarkdownBlockEditor = forwardRef<
     onSaveRequest,
     onSearchStateChange = () => undefined,
     path,
+    pinnedSearchQueries = [],
     searchQuery = "",
     text,
     workspaceTree = [],
@@ -831,7 +844,28 @@ export const MarkdownBlockEditor = forwardRef<
     });
     clearSearchHighlights();
 
-    if (!Highlight || !registry || searchQuery.trim().length === 0) {
+    if (!Highlight || !registry) {
+      return clearSearchHighlights;
+    }
+
+    pinnedSearchQueries
+      .map((query) => query.trim())
+      .filter((query) => query.length > 0)
+      .slice(0, SEARCH_PIN_HIGHLIGHT_NAMES.length)
+      .forEach((query, index) => {
+        const pinnedRanges = surfaceElement
+          ? createSearchRanges(surfaceElement, query)
+          : [];
+
+        if (pinnedRanges.length > 0) {
+          registry.set(
+            SEARCH_PIN_HIGHLIGHT_NAMES[index],
+            new Highlight(...pinnedRanges),
+          );
+        }
+      });
+
+    if (searchQuery.trim().length === 0) {
       return clearSearchHighlights;
     }
 
@@ -864,6 +898,7 @@ export const MarkdownBlockEditor = forwardRef<
   }, [
     activeSearchMatchIndex,
     onSearchStateChange,
+    pinnedSearchQueries,
     searchQuery,
     searchRevision,
   ]);

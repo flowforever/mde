@@ -28,6 +28,7 @@ interface MockMarkdownBlockEditorProps {
     readonly matchCount: number;
   }) => void;
   readonly path: string;
+  readonly pinnedSearchQueries?: readonly string[];
   readonly searchQuery?: string;
 }
 
@@ -46,6 +47,11 @@ vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
       </span>
       {props.searchQuery ? (
         <span data-testid="mock-editor-search-query">{props.searchQuery}</span>
+      ) : null}
+      {props.pinnedSearchQueries && props.pinnedSearchQueries.length > 0 ? (
+        <span data-testid="mock-editor-pinned-search-queries">
+          {props.pinnedSearchQueries.join(",")}
+        </span>
       ) : null}
       {props.isReadOnly ? (
         <span data-testid="mock-editor-readonly">read-only</span>
@@ -2064,12 +2070,16 @@ describe("App shell", () => {
     ).toBeTruthy();
 
     await user.click(searchButton);
-    await user.type(
-      screen.getByRole("searchbox", { name: /search current markdown/i }),
-      "Original{Enter}",
-    );
+    const editorSearchBox = screen.getByRole("searchbox", {
+      name: /search current markdown/i,
+    });
+
+    await user.type(editorSearchBox, "Original{Enter}");
 
     expect(screen.getByTestId("mock-editor-search-query")).toHaveTextContent(
+      "Original",
+    );
+    expect(localStorage.getItem("mde.editorSearchHistory")).toContain(
       "Original",
     );
 
@@ -2084,6 +2094,31 @@ describe("App shell", () => {
         screen.getByRole("searchbox", { name: /search current markdown/i }),
       ).toHaveFocus();
     });
+    expect(
+      await screen.findByRole("button", {
+        name: /use editor search history item Original/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /pin editor search history item Original/i,
+      }),
+    );
+
+    expect(
+      await screen.findByTestId("mock-editor-pinned-search-queries"),
+    ).toHaveTextContent("Original");
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /delete pinned editor search keyword Original/i,
+      }),
+    );
+
+    expect(
+      screen.queryByTestId("mock-editor-pinned-search-queries"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens a global workspace search result and keeps the query highlighted", async () => {
@@ -2188,6 +2223,28 @@ describe("App shell", () => {
     ).toHaveTextContent("alpha");
     await waitFor(() => {
       expect(document.title).toBe("guide.md - /workspace");
+    });
+
+    expect(localStorage.getItem("mde.globalSearchHistory")).toContain("alpha");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true, shiftKey: true });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("searchbox", { name: /search workspace contents/i }),
+      ).toHaveFocus();
+    });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /use workspace search history item alpha/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(editorApi.searchWorkspaceMarkdown).toHaveBeenLastCalledWith(
+        "alpha",
+        "/workspace",
+      );
     });
   });
 

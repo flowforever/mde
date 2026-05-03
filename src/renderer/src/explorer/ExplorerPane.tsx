@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -73,6 +74,14 @@ import {
   type AppText,
   type AppTextKey,
 } from "../i18n/appLanguage";
+import {
+  filterSearchHistory,
+  getSearchShortcutLabel,
+  GLOBAL_SEARCH_HISTORY_STORAGE_KEY,
+  readSearchHistory,
+  rememberSearchHistoryItem,
+  writeSearchHistory,
+} from "../search/searchHistory";
 
 interface ExplorerPaneProps {
   readonly aiSettings?: AiCliSettings;
@@ -502,6 +511,11 @@ export const ExplorerPane = ({
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState("");
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
+  const [globalSearchHistory, setGlobalSearchHistory] = useState(() =>
+    readSearchHistory(GLOBAL_SEARCH_HISTORY_STORAGE_KEY, globalThis.localStorage),
+  );
+  const [isGlobalSearchHistoryOpen, setIsGlobalSearchHistoryOpen] =
+    useState(false);
   const [globalSearchResult, setGlobalSearchResult] =
     useState<WorkspaceSearchResult | null>(null);
   const [isGlobalSearchLoading, setIsGlobalSearchLoading] = useState(false);
@@ -523,6 +537,17 @@ export const ExplorerPane = ({
     ? (hiddenEntryPathsByWorkspace.get(workspaceRoot) ??
       EMPTY_HIDDEN_ENTRY_PATHS)
     : EMPTY_HIDDEN_ENTRY_PATHS;
+  const globalSearchShortcutLabel = useMemo(
+    () => getSearchShortcutLabel("workspace"),
+    [],
+  );
+  const globalSearchButtonTitle = text("globalSearch.searchWithShortcut", {
+    shortcut: globalSearchShortcutLabel,
+  });
+  const visibleGlobalSearchHistory = useMemo(
+    () => filterSearchHistory(globalSearchHistory, globalSearchQuery),
+    [globalSearchHistory, globalSearchQuery],
+  );
 
   const openGlobalSearch = useCallback((): void => {
     setIsGlobalSearchOpen(true);
@@ -530,10 +555,25 @@ export const ExplorerPane = ({
 
   const closeGlobalSearch = useCallback((): void => {
     setIsGlobalSearchOpen(false);
+    setIsGlobalSearchHistoryOpen(false);
     setGlobalSearchQuery("");
     setGlobalSearchResult(null);
     setGlobalSearchErrorMessage(null);
     setIsGlobalSearchLoading(false);
+  }, []);
+
+  const rememberGlobalSearchQuery = useCallback((query: string): void => {
+    setGlobalSearchHistory((currentHistory) => {
+      const nextHistory = rememberSearchHistoryItem(currentHistory, query);
+
+      writeSearchHistory(
+        GLOBAL_SEARCH_HISTORY_STORAGE_KEY,
+        nextHistory,
+        globalThis.localStorage,
+      );
+
+      return nextHistory;
+    });
   }, []);
 
   useEffect(() => {
@@ -1986,7 +2026,7 @@ export const ExplorerPane = ({
               className="explorer-icon-button"
               disabled={!state.workspace}
               onClick={openGlobalSearch}
-              title={text("explorer.searchWorkspaceContents")}
+              title={globalSearchButtonTitle}
               type="button"
             >
               <Search aria-hidden="true" focusable="false" size={16} />
@@ -2368,48 +2408,103 @@ export const ExplorerPane = ({
             className="global-search-dialog"
             role="dialog"
           >
-            <form
-              aria-label={text("explorer.searchWorkspaceContents")}
-              className="global-search-form"
-              onSubmit={(event) => {
-                event.preventDefault();
+            <div
+              className="global-search-input-shell"
+              onBlur={(event) => {
+                const nextFocusedElement = event.relatedTarget;
+
+                if (
+                  nextFocusedElement instanceof Node &&
+                  event.currentTarget.contains(nextFocusedElement)
+                ) {
+                  return;
+                }
+
+                setIsGlobalSearchHistoryOpen(false);
               }}
             >
-              <Search aria-hidden="true" focusable="false" size={18} />
-              <input
+              <form
                 aria-label={text("explorer.searchWorkspaceContents")}
-                onChange={(event) => {
-                  const nextQuery = event.target.value;
-
-                  setGlobalSearchQuery(nextQuery);
-                  if (nextQuery.trim().length === 0) {
-                    setGlobalSearchResult(null);
-                    setGlobalSearchErrorMessage(null);
-                    setIsGlobalSearchLoading(false);
-                  } else {
-                    setGlobalSearchErrorMessage(null);
-                    setIsGlobalSearchLoading(true);
-                  }
+                className="global-search-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  rememberGlobalSearchQuery(globalSearchQuery);
+                  setIsGlobalSearchHistoryOpen(false);
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    closeGlobalSearch();
-                  }
-                }}
-                placeholder={text("globalSearch.placeholder")}
-                ref={globalSearchInputRef}
-                type="search"
-                value={globalSearchQuery}
-              />
-              <button
-                aria-label={text("globalSearch.close")}
-                onClick={closeGlobalSearch}
-                type="button"
               >
-                <X aria-hidden="true" focusable="false" size={16} />
-              </button>
-            </form>
+                <Search aria-hidden="true" focusable="false" size={18} />
+                <input
+                  aria-label={text("explorer.searchWorkspaceContents")}
+                  onChange={(event) => {
+                    const nextQuery = event.target.value;
+
+                    setGlobalSearchQuery(nextQuery);
+                    setIsGlobalSearchHistoryOpen(true);
+                    if (nextQuery.trim().length === 0) {
+                      setGlobalSearchResult(null);
+                      setGlobalSearchErrorMessage(null);
+                      setIsGlobalSearchLoading(false);
+                    } else {
+                      setGlobalSearchErrorMessage(null);
+                      setIsGlobalSearchLoading(true);
+                    }
+                  }}
+                  onFocus={() => {
+                    setIsGlobalSearchHistoryOpen(true);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      closeGlobalSearch();
+                    }
+                  }}
+                  placeholder={text("globalSearch.placeholder")}
+                  ref={globalSearchInputRef}
+                  type="search"
+                  value={globalSearchQuery}
+                />
+                <button
+                  aria-label={text("globalSearch.close")}
+                  onClick={closeGlobalSearch}
+                  type="button"
+                >
+                  <X aria-hidden="true" focusable="false" size={16} />
+                </button>
+              </form>
+              {isGlobalSearchHistoryOpen &&
+              visibleGlobalSearchHistory.length > 0 ? (
+                <div
+                  aria-label={text("globalSearch.history")}
+                  className="search-history-popover global-search-history"
+                  role="listbox"
+                >
+                  {visibleGlobalSearchHistory.map((historyItem) => (
+                    <div className="search-history-row" key={historyItem}>
+                      <button
+                        aria-label={text("globalSearch.useHistoryItem", {
+                          query: historyItem,
+                        })}
+                        className="search-history-query-button"
+                        onClick={() => {
+                          setGlobalSearchQuery(historyItem);
+                          setGlobalSearchResult(null);
+                          setGlobalSearchErrorMessage(null);
+                          setIsGlobalSearchLoading(true);
+                          setIsGlobalSearchHistoryOpen(false);
+                          globalSearchInputRef.current?.focus();
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                        }}
+                        type="button"
+                      >
+                        {historyItem}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="global-search-results" role="list">
               {globalSearchErrorMessage ? (
                 <p className="global-search-message" role="alert">
@@ -2431,6 +2526,7 @@ export const ExplorerPane = ({
                       className="global-search-result"
                       key={`${result.path}:${match.lineNumber}:${match.columnNumber}`}
                       onClick={() => {
+                        rememberGlobalSearchQuery(globalSearchResult.query);
                         onOpenWorkspaceSearchResult(
                           result.path,
                           globalSearchResult.query,

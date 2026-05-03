@@ -18,6 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
+  Pin,
+  PinOff,
   Search,
   StretchHorizontal,
   X,
@@ -64,6 +66,16 @@ import {
   resolveEditorLinkTarget,
 } from "../editor/editorLinks";
 import { getNextSearchMatchIndex } from "../search/editorSearch";
+import {
+  EDITOR_SEARCH_HISTORY_STORAGE_KEY,
+  filterSearchHistory,
+  getSearchShortcutLabel,
+  isSearchQueryPinned,
+  readSearchHistory,
+  rememberSearchHistoryItem,
+  togglePinnedSearchQuery,
+  writeSearchHistory,
+} from "../search/searchHistory";
 import { ExplorerPane } from "../explorer/ExplorerPane";
 import { UpdateDialog, type UpdateDialogStatus } from "./UpdateDialog";
 import {
@@ -463,6 +475,14 @@ export const App = (): React.JSX.Element => {
   ] = useState("");
   const [isEditorSearchOpen, setIsEditorSearchOpen] = useState(false);
   const [editorSearchQuery, setEditorSearchQuery] = useState("");
+  const [editorSearchHistory, setEditorSearchHistory] = useState(() =>
+    readSearchHistory(EDITOR_SEARCH_HISTORY_STORAGE_KEY, globalThis.localStorage),
+  );
+  const [isEditorSearchHistoryOpen, setIsEditorSearchHistoryOpen] =
+    useState(false);
+  const [pinnedEditorSearchQueries, setPinnedEditorSearchQueries] = useState<
+    readonly string[]
+  >([]);
   const [editorSearchState, setEditorSearchState] = useState<EditorSearchState>(
     {
       activeMatchIndex: -1,
@@ -482,6 +502,7 @@ export const App = (): React.JSX.Element => {
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
   const appShellRef = useRef<HTMLElement | null>(null);
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null);
+  const editorSearchShellRef = useRef<HTMLDivElement | null>(null);
   const editorSearchInputRef = useRef<HTMLInputElement | null>(null);
   const hasConsumedInitialLaunchPathRef = useRef(false);
   const appLanguagePack = useMemo(
@@ -493,6 +514,25 @@ export const App = (): React.JSX.Element => {
     [customAppLanguagePacks],
   );
   const text = useMemo(() => createAppText(appLanguagePack), [appLanguagePack]);
+  const editorSearchShortcutLabel = useMemo(
+    () => getSearchShortcutLabel("editor"),
+    [],
+  );
+  const editorSearchButtonTitle = text("editor.markdownSearchWithShortcut", {
+    shortcut: editorSearchShortcutLabel,
+  });
+  const visibleEditorSearchHistory = useMemo(
+    () => filterSearchHistory(editorSearchHistory, editorSearchQuery),
+    [editorSearchHistory, editorSearchQuery],
+  );
+  const unpinnedVisibleEditorSearchHistory = useMemo(
+    () =>
+      visibleEditorSearchHistory.filter(
+        (historyItem) =>
+          !isSearchQueryPinned(pinnedEditorSearchQueries, historyItem),
+      ),
+    [pinnedEditorSearchQueries, visibleEditorSearchHistory],
+  );
 
   const rememberOpenedWorkspace = useCallback((workspace: Workspace): void => {
     writeActiveWorkspace(
@@ -571,6 +611,7 @@ export const App = (): React.JSX.Element => {
     }
 
     setIsEditorSearchOpen(true);
+    setIsEditorSearchHistoryOpen(false);
     window.setTimeout(() => {
       editorSearchInputRef.current?.focus();
       editorSearchInputRef.current?.select();
@@ -579,6 +620,7 @@ export const App = (): React.JSX.Element => {
 
   const closeEditorSearch = useCallback((): void => {
     setIsEditorSearchOpen(false);
+    setIsEditorSearchHistoryOpen(false);
     setEditorSearchQuery("");
     setEditorSearchState({
       activeMatchIndex: -1,
@@ -594,6 +636,44 @@ export const App = (): React.JSX.Element => {
         currentState.matchCount,
       ),
     }));
+  }, []);
+
+  const rememberEditorSearchQuery = useCallback((query: string): void => {
+    setEditorSearchHistory((currentHistory) => {
+      const nextHistory = rememberSearchHistoryItem(currentHistory, query);
+
+      writeSearchHistory(
+        EDITOR_SEARCH_HISTORY_STORAGE_KEY,
+        nextHistory,
+        globalThis.localStorage,
+      );
+
+      return nextHistory;
+    });
+  }, []);
+
+  const applyEditorSearchQuery = useCallback((query: string): void => {
+    setEditorSearchQuery(query);
+    setEditorSearchState({
+      activeMatchIndex: query.trim().length > 0 ? 0 : -1,
+      matchCount: 0,
+    });
+  }, []);
+
+  const togglePinnedEditorSearchQuery = useCallback((query: string): void => {
+    setPinnedEditorSearchQueries((currentQueries) =>
+      togglePinnedSearchQuery(currentQueries, query),
+    );
+  }, []);
+
+  const deletePinnedEditorSearchQuery = useCallback((query: string): void => {
+    setPinnedEditorSearchQueries((currentQueries) =>
+      currentQueries.filter(
+        (pinnedQuery) =>
+          pinnedQuery.trim().toLocaleLowerCase() !==
+          query.trim().toLocaleLowerCase(),
+      ),
+    );
   }, []);
 
   const searchWorkspaceMarkdown = useCallback(
@@ -2399,13 +2479,30 @@ export const App = (): React.JSX.Element => {
     state.loadedFile
       ? {
           element: (
-            <div className="editor-search-shell">
+            <div
+              className="editor-search-shell"
+              onBlur={(event) => {
+                const nextFocusedElement = event.relatedTarget;
+
+                if (
+                  nextFocusedElement instanceof Node &&
+                  event.currentTarget.contains(nextFocusedElement)
+                ) {
+                  return;
+                }
+
+                setIsEditorSearchHistoryOpen(false);
+              }}
+              ref={editorSearchShellRef}
+            >
               {isEditorSearchOpen ? (
                 <form
                   aria-label={text("editor.markdownSearch")}
                   className="editor-search-form"
                   onSubmit={(event) => {
                     event.preventDefault();
+                    rememberEditorSearchQuery(editorSearchQuery);
+                    setIsEditorSearchHistoryOpen(false);
                     cycleEditorSearchMatch();
                   }}
                 >
@@ -2413,13 +2510,11 @@ export const App = (): React.JSX.Element => {
                   <input
                     aria-label={text("editor.markdownSearch")}
                     onChange={(event) => {
-                      const nextQuery = event.target.value;
-
-                      setEditorSearchQuery(nextQuery);
-                      setEditorSearchState({
-                        activeMatchIndex: nextQuery.trim().length > 0 ? 0 : -1,
-                        matchCount: 0,
-                      });
+                      applyEditorSearchQuery(event.target.value);
+                      setIsEditorSearchHistoryOpen(true);
+                    }}
+                    onFocus={() => {
+                      setIsEditorSearchHistoryOpen(true);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
@@ -2447,6 +2542,117 @@ export const App = (): React.JSX.Element => {
                   </button>
                 </form>
               ) : null}
+              {isEditorSearchOpen &&
+              isEditorSearchHistoryOpen &&
+              (pinnedEditorSearchQueries.length > 0 ||
+                unpinnedVisibleEditorSearchHistory.length > 0) ? (
+                <div
+                  aria-label={text("editor.searchHistory")}
+                  className="search-history-popover editor-search-history"
+                  role="listbox"
+                >
+                  {pinnedEditorSearchQueries.map((pinnedQuery) => (
+                    <div
+                      className="search-history-row search-history-pinned-row"
+                      key={`pinned:${pinnedQuery}`}
+                    >
+                      <button
+                        aria-label={text("editor.usePinnedSearchKeyword", {
+                          query: pinnedQuery,
+                        })}
+                        className="search-history-query-button"
+                        onClick={() => {
+                          applyEditorSearchQuery(pinnedQuery);
+                          setIsEditorSearchHistoryOpen(false);
+                          editorSearchInputRef.current?.focus();
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                        }}
+                        type="button"
+                      >
+                        {pinnedQuery}
+                      </button>
+                      <button
+                        aria-label={text("editor.deletePinnedSearchKeyword", {
+                          query: pinnedQuery,
+                        })}
+                        className="search-history-pin-button is-active"
+                        onClick={() => {
+                          deletePinnedEditorSearchQuery(pinnedQuery);
+                          editorSearchInputRef.current?.focus();
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                        }}
+                        title={text("editor.deletePinnedSearchKeyword", {
+                          query: pinnedQuery,
+                        })}
+                        type="button"
+                      >
+                        <X aria-hidden="true" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {unpinnedVisibleEditorSearchHistory.map((historyItem) => {
+                    const isPinned = isSearchQueryPinned(
+                      pinnedEditorSearchQueries,
+                      historyItem,
+                    );
+
+                    return (
+                      <div className="search-history-row" key={historyItem}>
+                        <button
+                          aria-label={text("editor.useSearchHistoryItem", {
+                            query: historyItem,
+                          })}
+                          className="search-history-query-button"
+                          onClick={() => {
+                            applyEditorSearchQuery(historyItem);
+                            setIsEditorSearchHistoryOpen(false);
+                            editorSearchInputRef.current?.focus();
+                          }}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                          }}
+                          type="button"
+                        >
+                          {historyItem}
+                        </button>
+                        <button
+                          aria-label={text(
+                            isPinned
+                              ? "editor.unpinSearchHistoryItem"
+                              : "editor.pinSearchHistoryItem",
+                            { query: historyItem },
+                          )}
+                          className={`search-history-pin-button${isPinned ? " is-active" : ""}`}
+                          onClick={() => {
+                            togglePinnedEditorSearchQuery(historyItem);
+                            editorSearchInputRef.current?.focus();
+                          }}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                          }}
+                          title={text(
+                            isPinned
+                              ? "editor.unpinSearchHistoryItem"
+                              : "editor.pinSearchHistoryItem",
+                            { query: historyItem },
+                          )}
+                          type="button"
+                        >
+                          {isPinned ? (
+                            <PinOff aria-hidden="true" size={14} />
+                          ) : (
+                            <Pin aria-hidden="true" size={14} />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
               <button
                 aria-label={text("editor.markdownSearch")}
                 aria-pressed={isEditorSearchOpen}
@@ -2454,7 +2660,7 @@ export const App = (): React.JSX.Element => {
                 onClick={() => {
                   openEditorSearch();
                 }}
-                title={text("editor.markdownSearch")}
+                title={editorSearchButtonTitle}
                 type="button"
               >
                 <Search aria-hidden="true" size={17} strokeWidth={2} />
@@ -2718,6 +2924,7 @@ export const App = (): React.JSX.Element => {
             onSaveRequest={saveCurrentFile}
             onSearchStateChange={setEditorSearchState}
             path={editorFilePath}
+            pinnedSearchQueries={pinnedEditorSearchQueries}
             ref={editorRef}
             searchQuery={editorSearchQuery}
             text={text}

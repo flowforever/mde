@@ -1510,6 +1510,48 @@ test('searches within the current Markdown editor', async () => {
 
     await window.keyboard.press('Escape')
     await expect(searchBox).toHaveCount(0)
+    await window.keyboard.press(searchShortcut)
+    const reopenedSearchBox = window.getByRole('searchbox', {
+      name: /search current markdown/i
+    })
+
+    await expect(reopenedSearchBox).toBeFocused()
+    await window
+      .getByRole('button', { name: /pin editor search history item markdown/i })
+      .click()
+    await expect
+      .poll(() =>
+        window.evaluate(() => {
+          const cssApi = globalThis.CSS as
+            | (typeof CSS & {
+                highlights?: {
+                  get: (name: string) => { size: number } | undefined
+                }
+              })
+            | undefined
+
+          return cssApi?.highlights?.get('mde-editor-search-pin-0')?.size ?? 0
+        })
+      )
+      .toBeGreaterThan(0)
+    await window
+      .getByRole('button', { name: /delete pinned editor search keyword markdown/i })
+      .click()
+    await expect
+      .poll(() =>
+        window.evaluate(() => {
+          const cssApi = globalThis.CSS as
+            | (typeof CSS & {
+                highlights?: {
+                  get: (name: string) => { size: number } | undefined
+                }
+              })
+            | undefined
+
+          return cssApi?.highlights?.get('mde-editor-search-pin-0')?.size ?? 0
+        })
+      )
+      .toBe(0)
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -1545,6 +1587,20 @@ test('searches the workspace and opens a matched file with editor highlights', a
       window.getByRole('searchbox', { name: /search current markdown/i })
     ).toHaveValue('nested')
     await expect(window.locator('.editor-search-count')).toContainText('1/1')
+    await window.keyboard.press(searchShortcut)
+    const reopenedWorkspaceSearch = window.getByRole('searchbox', {
+      name: /search workspace contents/i
+    })
+
+    await expect(reopenedWorkspaceSearch).toBeFocused()
+    await window
+      .getByRole('button', { name: /use workspace search history item nested/i })
+      .click()
+    await expect(
+      window.getByRole('button', {
+        name: /open search result docs\/intro\.md line 3/i
+      })
+    ).toBeVisible()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

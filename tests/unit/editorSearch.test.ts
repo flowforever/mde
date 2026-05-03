@@ -4,6 +4,11 @@ import {
   findSearchMatches,
   getNextSearchMatchIndex
 } from '../../src/renderer/src/search/editorSearch'
+import {
+  filterSearchHistory,
+  rememberSearchHistoryItem,
+  togglePinnedSearchQuery
+} from '../../src/renderer/src/search/searchHistory'
 
 describe('editorSearch', () => {
   it('finds case-insensitive matches with line and column positions', () => {
@@ -19,5 +24,28 @@ describe('editorSearch', () => {
     expect(getNextSearchMatchIndex(0, 3)).toBe(1)
     expect(getNextSearchMatchIndex(2, 3)).toBe(0)
     expect(getNextSearchMatchIndex(0, 0)).toBe(-1)
+  })
+
+  it('remembers trimmed search terms with newest entries first', () => {
+    const history = rememberSearchHistoryItem(['alpha', 'beta'], '  Beta  ')
+
+    expect(history).toEqual(['Beta', 'alpha'])
+  })
+
+  it('filters search history by the in-progress query', () => {
+    expect(filterSearchHistory(['alpha', 'beta', 'alphabet'], 'alp')).toEqual([
+      'alpha',
+      'alphabet'
+    ])
+    expect(filterSearchHistory(['alpha'], '')).toEqual(['alpha'])
+  })
+
+  it('toggles pinned search queries without mutating existing state', () => {
+    const pinned = ['alpha']
+    const added = togglePinnedSearchQuery(pinned, 'beta')
+
+    expect(added).toEqual(['alpha', 'beta'])
+    expect(pinned).toEqual(['alpha'])
+    expect(togglePinnedSearchQuery(added, 'alpha')).toEqual(['beta'])
   })
 })

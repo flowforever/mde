@@ -891,16 +891,17 @@ describe("MarkdownBlockEditor accessibility", () => {
       <MarkdownBlockEditor
         activeSearchMatchIndex={1}
         colorScheme="light"
-        draftMarkdown="Alpha beta\nalpha ALPHA"
+        draftMarkdown="Alpha beta gamma\nalpha ALPHA"
         errorMessage={null}
         isDirty={false}
         isSaving={false}
-        markdown="Alpha beta\nalpha ALPHA"
+        markdown="Alpha beta gamma\nalpha ALPHA"
         onImageUpload={vi.fn()}
         onMarkdownChange={vi.fn()}
         onSaveRequest={vi.fn()}
         onSearchStateChange={onSearchStateChange}
         path="README.md"
+        pinnedSearchQueries={["beta", "gamma"]}
         searchQuery="alpha"
         text={text}
         workspaceRoot="/workspace"
@@ -909,7 +910,7 @@ describe("MarkdownBlockEditor accessibility", () => {
 
     act(() => {
       screen.getByTestId("mock-contenteditable").textContent =
-        "Alpha beta\nalpha ALPHA";
+        "Alpha beta gamma\nalpha ALPHA";
     });
 
     await waitFor(() => {
@@ -924,6 +925,14 @@ describe("MarkdownBlockEditor accessibility", () => {
     );
     expect(highlightRegistry.set).toHaveBeenCalledWith(
       "mde-editor-search-active",
+      expect.anything(),
+    );
+    expect(highlightRegistry.set).toHaveBeenCalledWith(
+      "mde-editor-search-pin-0",
+      expect.anything(),
+    );
+    expect(highlightRegistry.set).toHaveBeenCalledWith(
+      "mde-editor-search-pin-1",
       expect.anything(),
     );
   });
