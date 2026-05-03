@@ -416,7 +416,7 @@ export const MarkdownBlockEditor = forwardRef<
   );
 
   const serializeMarkdown = useCallback(async (): Promise<string> => {
-    const exportedMarkdown = await exportBlocksToMarkdown(editor);
+    const exportedMarkdown = await exportBlocksToMarkdown(editor, editor.document);
     const portableMarkdown = prepareMarkdownForStorage(
       exportedMarkdown,
       assetContext,
@@ -1090,7 +1090,7 @@ export const MarkdownBlockEditor = forwardRef<
             }
 
             hasLocalChangesRef.current = true;
-            void exportBlocksToMarkdown(changedEditor)
+            void exportBlocksToMarkdown(changedEditor, changedEditor.document)
               .then((contents) => {
                 const portableContents = prepareMarkdownForStorage(
                   contents,

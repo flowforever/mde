@@ -1821,6 +1821,60 @@ test('saves pasted images beside the Markdown file', async () => {
   }
 })
 
+test('preserves consecutive blank lines after saving and reopening markdown', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const blankLinesPath = join(workspacePath, 'docs', 'blank-lines.md')
+
+  await writeFile(
+    blankLinesPath,
+    ['First paragraph', '', '', 'Second paragraph'].join('\n')
+  )
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /expand docs/i }).click()
+    await window
+      .getByRole('button', { name: /blank-lines\.md Markdown file/i })
+      .click()
+
+    const editableDocument = window
+      .getByTestId('blocknote-view')
+      .locator('[contenteditable="true"]')
+      .first()
+
+    await expect(editableDocument).toBeVisible()
+    await editableDocument.click()
+    await window.keyboard.press('End')
+    await window.keyboard.press('Enter')
+    await window.keyboard.insertText('Third paragraph')
+
+    await expect
+      .poll(async () => readFile(blankLinesPath, 'utf8'), { timeout: 10_000 })
+      .toContain('Third paragraph')
+    expect(await readFile(blankLinesPath, 'utf8')).toContain(
+      'First paragraph\n\n\nSecond paragraph'
+    )
+
+    await window
+      .getByRole('button', { name: /README\.md Markdown file/i })
+      .click()
+    await window
+      .getByRole('button', { name: /blank-lines\.md Markdown file/i })
+      .click()
+    await expect(window.getByText('Third paragraph')).toBeVisible()
+    expect(await readFile(blankLinesPath, 'utf8')).toContain(
+      'First paragraph\n\n\nSecond paragraph'
+    )
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('summarizes and translates the current Markdown file with an installed AI CLI', async () => {
   const workspacePath = await createFixtureWorkspace()
   const fakeBinPath = await mkdtemp(join(tmpdir(), 'mde-fake-ai-bin-'))

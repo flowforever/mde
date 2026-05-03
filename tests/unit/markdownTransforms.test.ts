@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
+  MARKDOWN_BLANK_LINE_MARKER,
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
   type MarkdownBlockEditorAdapter
@@ -71,6 +72,64 @@ describe('markdownTransforms', () => {
     expect(result).toContain('```ts')
   })
 
+  it('exports empty paragraph blocks as restorable blank-line markers', async () => {
+    const blocks = [
+      {
+        children: [],
+        content: [{ styles: {}, text: 'First', type: 'text' }],
+        id: 'first',
+        props: {},
+        type: 'paragraph'
+      },
+      {
+        children: [],
+        content: [],
+        id: 'blank',
+        props: {},
+        type: 'paragraph'
+      },
+      {
+        children: [],
+        content: [{ styles: {}, text: 'Second', type: 'text' }],
+        id: 'second',
+        props: {},
+        type: 'paragraph'
+      }
+    ]
+    const editor: MarkdownBlockEditorAdapter<typeof blocks> = {
+      blocksToMarkdownLossy: vi.fn((nextBlocks: typeof blocks = []) =>
+        nextBlocks
+          .map((block) =>
+            Array.isArray(block.content)
+              ? block.content
+                  .map((item: { readonly text?: string }) => item.text ?? '')
+                  .join('')
+              : String(block.content ?? '')
+          )
+          .join('\n\n')
+      ),
+      tryParseMarkdownToBlocks: vi.fn()
+    }
+
+    const result = await exportBlocksToMarkdown(editor, blocks)
+
+    expect(editor.blocksToMarkdownLossy).toHaveBeenCalledWith([
+      blocks[0],
+      {
+        ...blocks[1],
+        content: [
+          {
+            styles: {},
+            text: MARKDOWN_BLANK_LINE_MARKER,
+            type: 'text'
+          }
+        ]
+      },
+      blocks[2]
+    ])
+    expect(result).toBe(`First\n\n${MARKDOWN_BLANK_LINE_MARKER}\n\nSecond`)
+  })
+
   it('resolves local image asset paths to file URLs for editor preview', () => {
     const result = prepareMarkdownForEditor(
       '![Screenshot](.mde/assets/screenshot.png)',
@@ -83,6 +142,50 @@ describe('markdownTransforms', () => {
     expect(result).toBe(
       '![Screenshot](file:///Users/test/workspace/docs/.mde/assets/screenshot.png)'
     )
+  })
+
+  it('preserves intentional blank lines outside fenced code during editor storage round trips', () => {
+    const storedMarkdown = [
+      'First paragraph',
+      '',
+      '',
+      'Second paragraph',
+      '',
+      '```ts',
+      'const value = 1',
+      '',
+      '',
+      'const next = 2',
+      '```'
+    ].join('\n')
+
+    const editorMarkdown = prepareMarkdownForEditor(storedMarkdown, {
+      markdownFilePath: 'docs/README.md',
+      workspaceRoot: '/Users/test/workspace'
+    })
+
+    expect(editorMarkdown).toBe(
+      [
+        'First paragraph',
+        '',
+        MARKDOWN_BLANK_LINE_MARKER,
+        '',
+        'Second paragraph',
+        '',
+        '```ts',
+        'const value = 1',
+        '',
+        '',
+        'const next = 2',
+        '```'
+      ].join('\n')
+    )
+    expect(
+      prepareMarkdownForStorage(editorMarkdown, {
+        markdownFilePath: 'docs/README.md',
+        workspaceRoot: '/Users/test/workspace'
+      })
+    ).toBe(storedMarkdown)
   })
 
   it('keeps stored Markdown portable by converting file URLs back to sibling asset paths', () => {
