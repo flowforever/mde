@@ -2154,7 +2154,8 @@ export const ExplorerPane = ({
                       setWorkspaceSearchQuery(event.target.value);
                     }}
                     placeholder={text("common.search")}
-                    type="search"
+                    role="searchbox"
+                    type="text"
                     value={workspaceSearchQuery}
                   />
                 </label>

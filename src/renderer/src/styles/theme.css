@@ -1057,12 +1057,20 @@ input:focus-visible,
   min-width: 0;
   height: 36px;
   padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
   color: var(--panel-text-strong);
   background: transparent;
   border: 0;
   font: inherit;
   font-size: 15px;
   outline: 0;
+}
+
+input::-webkit-search-cancel-button {
+  display: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .global-search-form button {
@@ -1524,6 +1532,8 @@ input:focus-visible,
   width: 100%;
   min-height: 34px;
   padding: 0 10px;
+  -webkit-appearance: none;
+  appearance: none;
   color: var(--panel-text-strong);
   background: var(--panel-input-bg);
   border: 1px solid var(--panel-border-strong);
@@ -2705,6 +2715,8 @@ body.is-resizing-explorer-panel {
   min-width: 0;
   height: 28px;
   padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
   color: var(--editor-text);
   background: transparent;
   border: 0;

@@ -288,6 +288,9 @@ describe("App shell", () => {
     expect(
       screen.getByRole("searchbox", { name: /search workspaces and files/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: /search workspaces and files/i }),
+    ).toHaveAttribute("type", "text");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 

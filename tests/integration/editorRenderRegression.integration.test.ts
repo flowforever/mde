@@ -51,6 +51,26 @@ describe("editor render regressions", () => {
     expect(preBlock).toContain("padding-top: 42px");
   });
 
+  it("hides browser-native search cancel controls in app search fields", async () => {
+    const css = await readThemeCss();
+    const editorSearchInputBlock = getCssBlock(css, ".editor-search-form input");
+    const globalSearchInputBlock = getCssBlock(css, ".global-search-form input");
+    const workspaceSearchInputBlock = getCssBlock(
+      css,
+      ".workspace-search-field input",
+    );
+    const searchCancelButtonBlock = getCssBlock(
+      css,
+      "input::-webkit-search-cancel-button",
+    );
+
+    expect(editorSearchInputBlock).toContain("-webkit-appearance: none");
+    expect(globalSearchInputBlock).toContain("-webkit-appearance: none");
+    expect(workspaceSearchInputBlock).toContain("-webkit-appearance: none");
+    expect(searchCancelButtonBlock).toContain("-webkit-appearance: none");
+    expect(searchCancelButtonBlock).toContain("display: none");
+  });
+
   it("keeps collapsed frontmatter summary aligned with editor body text", async () => {
     const css = await readThemeCss();
     const summaryButtonBlock = getCssBlock(css, ".frontmatter-summary-button");
