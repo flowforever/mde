@@ -1,5 +1,5 @@
 import { LoaderCircle, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 
 import type { AiGenerationResult } from "../../../shared/ai";
 import { MarkdownBlockEditor } from "../editor/MarkdownBlockEditor";
@@ -44,6 +44,12 @@ export const AiResultPanel = ({
     onRegenerateSummary(instruction);
     setSummaryInstruction("");
   };
+  const rejectReadOnlyImageUpload = useCallback(
+    () => Promise.reject(new Error(text("errors.readOnlyAiResult"))),
+    [text],
+  );
+  const ignoreReadOnlyMarkdownChange = useCallback(() => undefined, []);
+  const ignoreReadOnlySaveRequest = useCallback(() => undefined, []);
 
   return (
     <section aria-label={text("ai.aiResult")} className="ai-result-panel">
@@ -79,11 +85,9 @@ export const AiResultPanel = ({
           isSaving={false}
           key={`${result.kind}:${result.path}:${result.contents}`}
           markdown={result.contents}
-          onImageUpload={() =>
-            Promise.reject(new Error(text("errors.readOnlyAiResult")))
-          }
-          onMarkdownChange={() => undefined}
-          onSaveRequest={() => undefined}
+          onImageUpload={rejectReadOnlyImageUpload}
+          onMarkdownChange={ignoreReadOnlyMarkdownChange}
+          onSaveRequest={ignoreReadOnlySaveRequest}
           path={result.path}
           text={text}
           workspaceRoot={workspaceRoot}

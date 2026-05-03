@@ -49,6 +49,10 @@ import type {
 import packageJson from "../../../../package.json";
 import { appReducer, createInitialAppState } from "./appReducer";
 import {
+  createAiDocumentKey,
+  resolveCurrentAiDocumentKey,
+} from "./aiDocumentScope";
+import {
   MarkdownBlockEditor,
   type MarkdownBlockEditorHandle,
 } from "../editor/MarkdownBlockEditor";
@@ -308,9 +312,6 @@ interface EditorSearchState {
 
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)));
-
-const createAiDocumentKey = (workspaceRoot: string, filePath: string): string =>
-  `${workspaceRoot}\u0000${filePath}`;
 
 const normalizeNativePath = (filePath: string): string =>
   filePath.replace(/\\/g, "/").replace(/\/+$/u, "");
@@ -2266,10 +2267,11 @@ export const App = (): React.JSX.Element => {
     ? text("editor.useCenteredView")
     : text("editor.useFullWidthView");
   const editorLineSpacingLabel = text("editor.lineSpacing");
-  const currentAiDocumentKey =
-    state.workspace && state.loadedFile
-      ? createAiDocumentKey(state.workspace.rootPath, state.loadedFile.path)
-      : null;
+  const currentAiDocumentKey = resolveCurrentAiDocumentKey({
+    loadedFilePath: state.loadedFile?.path,
+    selectedFilePath: state.selectedFilePath,
+    workspaceRoot: state.workspace?.rootPath,
+  });
   const currentAiBusyState: AiActionBusyState = currentAiDocumentKey
     ? (aiBusyStatesByDocument[currentAiDocumentKey] ?? "idle")
     : "idle";

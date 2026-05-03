@@ -14,7 +14,7 @@ MDE 可以调用本机已安装的 Codex 或 Claude Code CLI，为当前 Markdow
 
 ## 缓存位置
 
-AI 结果保存在当前工作区的 `.mde/translations/`。当原文没有变化时，MDE 会复用缓存结果，减少重复 CLI 调用。
+AI 结果保存在当前工作区的 `.mde/translations/`。当原文没有变化时，MDE 会复用缓存结果，减少重复 CLI 调用。重新打开或刷新当前文件时，已显示的缓存结果会继续留在编辑器区域。
 
 ## 设置
 

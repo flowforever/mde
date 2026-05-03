@@ -2445,6 +2445,99 @@ describe("App shell", () => {
     expect(screen.getByText("# Notes")).toBeVisible();
   });
 
+  it("keeps a cached AI result visible while the current Markdown file reloads", async () => {
+    const user = userEvent.setup();
+    const reloadedFile = createDeferred<{ contents: string; path: string }>();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi
+        .fn()
+        .mockResolvedValueOnce({
+          contents: "# Original",
+          path: "README.md",
+        })
+        .mockReturnValueOnce(reloadedFile.promise),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn().mockResolvedValue({
+        cached: true,
+        contents: "## Summary\n\n- Cached summary.",
+        kind: "summary",
+        path: ".mde/translations/README-summary.md",
+        tool: { commandPath: "/fake/codex", id: "codex", name: "Codex" },
+      }),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+
+    render(<App />);
+
+    await screen.findByText("# Original");
+    await user.click(
+      screen.getByRole("button", { name: /summarize markdown/i }),
+    );
+
+    const aiResult = await screen.findByRole("region", {
+      name: /ai result/i,
+    });
+
+    expect(aiResult).toHaveTextContent("Cached summary");
+
+    await user.click(
+      screen.getByRole("button", { name: /README\.md Markdown file/i }),
+    );
+
+    await waitFor(() => {
+      expect(editorApi.readMarkdownFile).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByRole("region", { name: /ai result/i })).toHaveTextContent(
+      "Cached summary",
+    );
+
+    await act(async () => {
+      reloadedFile.resolve({
+        contents: "# Original",
+        path: "README.md",
+      });
+      await Promise.resolve();
+    });
+
+    expect(
+      await screen.findByRole("region", { name: /ai result/i }),
+    ).toHaveTextContent("Cached summary");
+  });
+
   it("opens the theme settings panel and persists the selected theme", async () => {
     const user = userEvent.setup();
 

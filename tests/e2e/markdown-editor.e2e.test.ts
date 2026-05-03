@@ -2128,6 +2128,8 @@ test('summarizes and translates the current Markdown file with an installed AI C
     await expect(aiResult).toContainText('Summary from fake CLI', {
       timeout: E2E_AI_RESULT_TIMEOUT_MS
     })
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await expect(aiResult).toContainText('Summary from fake CLI')
     await expect(aiResult.locator('[contenteditable="false"]').first())
       .toBeVisible()
     await expect(
