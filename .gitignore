@@ -12,3 +12,5 @@ coverage/
 *.key
 *.p12
 *.p8
+.mde
+docs/
