@@ -11,6 +11,9 @@ export type { EditorText, EditorTextKey, EditorTextParams } from './text'
 export { FrontmatterPanel } from './FrontmatterPanel'
 export type { FrontmatterPanelProps } from './FrontmatterPanel'
 
+export { MermaidFlowchartPanel } from './MermaidFlowchartPanel'
+export type { MermaidFlowchartPanelProps } from './MermaidFlowchartPanel'
+
 export {
   createSearchRanges,
   isEditorSearchMutationRelevant

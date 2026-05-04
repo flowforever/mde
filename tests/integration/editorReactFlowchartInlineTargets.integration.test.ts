@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const mermaidFlowchartPanelPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MermaidFlowchartPanel.tsx'
+  'packages/editor-react/src/MermaidFlowchartPanel.tsx'
 )
 const mermaidFlowchartPanelTestPath = join(
   process.cwd(),
@@ -38,7 +38,9 @@ describe('editor-react flowchart inline target package consumption', () => {
         readFile(packageIndexPath, 'utf8')
       ])
 
-    expect(mermaidFlowchartPanel).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(mermaidFlowchartPanel).toMatch(
+      /from ['"]\.\/flowchartInlineTargets['"]/u
+    )
     expect(mermaidFlowchartPanelTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(packageIndex).toContain('areSameInlineFlowchartTargets')
     expect(packageIndex).toContain('getNextMissingInlineFlowchartTargets')

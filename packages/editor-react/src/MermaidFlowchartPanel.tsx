@@ -17,17 +17,18 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import {
-  areSameInlineFlowchartTargets,
-  EDITOR_COMPONENT_IDS as COMPONENT_IDS,
-  getNextMissingInlineFlowchartTargets,
-  type EditorText,
-  type InlineFlowchartTargets,
-} from "@mde/editor-react";
-
 import { extractMermaidBlocks } from "@mde/editor-core/flowcharts";
 import type { MermaidBlockReference as MermaidBlock } from "@mde/editor-core/types";
-interface MermaidFlowchartPanelProps {
+
+import { EDITOR_COMPONENT_IDS as COMPONENT_IDS } from "./componentIds";
+import {
+  areSameInlineFlowchartTargets,
+  getNextMissingInlineFlowchartTargets,
+  type InlineFlowchartTargets,
+} from "./flowchartInlineTargets";
+import type { EditorText } from "./text";
+
+export interface MermaidFlowchartPanelProps {
   readonly colorScheme: "dark" | "light";
   readonly markdown: string;
   readonly text: EditorText;
