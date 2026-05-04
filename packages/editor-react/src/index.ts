@@ -80,6 +80,15 @@ export {
 } from './codeBlockLanguages'
 export type { SupportedCodeLanguage } from './codeBlockLanguages'
 
+export {
+  areSameInlineFlowchartTargets,
+  getNextMissingInlineFlowchartTargets
+} from './flowchartInlineTargets'
+export type {
+  InlineFlowchartTarget,
+  InlineFlowchartTargets
+} from './flowchartInlineTargets'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string
