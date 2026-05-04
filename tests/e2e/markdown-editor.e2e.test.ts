@@ -1258,6 +1258,10 @@ test('opens a dropped workspace Markdown file in the current window', async () =
 
   try {
     await openNewWorkspace(window)
+    await expect(window).toHaveTitle(await realpath(workspacePath))
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
     await dispatchResourceDragEvent(window, 'dragenter', introPath)
     await dispatchResourceDragEvent(window, 'drop', introPath)
 
@@ -3571,6 +3575,18 @@ test('keeps the editing position after idle autosave', async () => {
       .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
       .toContain('Autosave middle A')
     await expect(window.getByText(/unsaved changes/i)).toBeHidden()
+    await expect
+      .poll(
+        async () =>
+          window.evaluate(() => {
+            const selection = globalThis.getSelection()
+            const selectedNodeText = selection?.anchorNode?.textContent ?? ''
+
+            return selectedNodeText.includes('Autosave middle A')
+          }),
+        { timeout: 10_000 }
+      )
+      .toBe(true)
 
     await window.keyboard.insertText(' and still in the middle')
 
