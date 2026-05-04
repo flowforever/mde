@@ -7,7 +7,7 @@ import {
   findContainingWorkspace,
   resolveEditorLinkTarget,
 } from "../../apps/desktop/src/renderer/src/editor/editorLinks";
-import type { TreeNode } from "../../apps/desktop/src/shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 
 const tree: readonly TreeNode[] = [
   { name: "README.md", path: "README.md", type: "file" },

@@ -4,7 +4,7 @@ import {
   collectExpandedLinkDirectoryOptions,
   createInitialLinkDirectoryState
 } from '../../apps/desktop/src/renderer/src/editor/editorLinkDirectories'
-import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 
 describe('editorLinkDirectories', () => {
   const visibleTree: readonly TreeNode[] = [

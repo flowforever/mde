@@ -8,7 +8,7 @@ import {
   DEFAULT_HIDDEN_EXPLORER_WORKSPACES_STORAGE_KEY,
   HIDDEN_EXPLORER_ENTRIES_STORAGE_KEY
 } from '../../apps/desktop/src/renderer/src/explorer/hiddenExplorerEntries'
-import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 
 const createStorage = (
   values: Readonly<Record<string, string>>

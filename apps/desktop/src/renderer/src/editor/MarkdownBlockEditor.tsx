@@ -92,7 +92,7 @@ import {
   composeMarkdownWithFrontmatter,
   splitMarkdownFrontmatter,
 } from "./frontmatter";
-import type { TreeNode } from "../../../shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 
 interface MarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;

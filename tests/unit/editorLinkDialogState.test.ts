@@ -11,7 +11,7 @@ import {
   updateLinkDialogHref,
   updateLinkDialogNewDocumentName
 } from '../../apps/desktop/src/renderer/src/editor/editorLinkDialogState'
-import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 
 const tree: readonly TreeNode[] = [
   {
