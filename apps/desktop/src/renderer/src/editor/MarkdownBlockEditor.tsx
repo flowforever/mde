@@ -32,9 +32,12 @@ import {
   X,
 } from "lucide-react";
 import {
+  chooseMarkdownContentsToSave,
   createSearchRanges,
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   isEditorSearchMutationRelevant,
+  shouldClearLocalChangesAfterUnchangedSave,
+  shouldRetryUnchangedSave,
   type EditorText,
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
@@ -69,11 +72,6 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
 } from "./markdownTransforms";
-import {
-  chooseMarkdownContentsToSave,
-  shouldClearLocalChangesAfterUnchangedSave,
-  shouldRetryUnchangedSave,
-} from "./editorSaveLifecycle";
 import {
   createInitialLinkDialogState,
   ensureMarkdownExtension,

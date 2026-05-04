@@ -4,7 +4,7 @@ import {
   chooseMarkdownContentsToSave,
   shouldClearLocalChangesAfterUnchangedSave,
   shouldRetryUnchangedSave
-} from '../../apps/desktop/src/renderer/src/editor/editorSaveLifecycle'
+} from '@mde/editor-react'
 
 describe('editor save lifecycle helpers', () => {
   it('preserves the latest non-empty draft when serialization returns empty markdown', () => {

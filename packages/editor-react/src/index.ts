@@ -60,6 +60,13 @@ export {
   isEditorSearchMutationRelevant
 } from './searchRanges'
 
+export {
+  chooseMarkdownContentsToSave,
+  shouldClearLocalChangesAfterUnchangedSave,
+  shouldRetryUnchangedSave
+} from './saveLifecycle'
+export type { MarkdownSaveCandidate } from './saveLifecycle'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string
