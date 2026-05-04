@@ -35,7 +35,7 @@ import type {
 import {
   findTextSearchMatches,
   normalizeSearchQuery
-} from '../../shared/search'
+} from '@mde/editor-core/search'
 import { splitMarkdownFrontmatter } from '@mde/editor-core/frontmatter'
 import {
   createDocumentHistoryService,

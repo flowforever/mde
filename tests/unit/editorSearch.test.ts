@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  findSearchMatches,
+  findTextSearchMatches,
   getNextSearchMatchIndex
-} from '../../apps/desktop/src/renderer/src/search/editorSearch'
+} from '@mde/editor-core/search'
 import {
   filterSearchHistory,
   GLOBAL_SEARCH_HISTORY_LIMIT,
@@ -13,7 +13,7 @@ import {
 
 describe('editorSearch', () => {
   it('finds case-insensitive matches with line and column positions', () => {
-    expect(findSearchMatches('Alpha beta\nalpha ALPHA', 'alpha')).toEqual([
+    expect(findTextSearchMatches('Alpha beta\nalpha ALPHA', 'alpha')).toEqual([
       { columnNumber: 1, endOffset: 5, lineNumber: 1, startOffset: 0 },
       { columnNumber: 1, endOffset: 16, lineNumber: 2, startOffset: 11 },
       { columnNumber: 7, endOffset: 22, lineNumber: 2, startOffset: 17 }

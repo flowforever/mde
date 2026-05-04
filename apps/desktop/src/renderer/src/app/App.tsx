@@ -76,7 +76,7 @@ import {
   collectMarkdownFilePaths,
   resolveEditorLinkTarget,
 } from "../editor/editorLinks";
-import { getNextSearchMatchIndex } from "../search/editorSearch";
+import { getNextSearchMatchIndex } from "@mde/editor-core/search";
 import {
   EDITOR_SEARCH_HISTORY_STORAGE_KEY,
   filterSearchHistory,

@@ -18,6 +18,9 @@ describe('shared editor package exports', () => {
     expect(require.resolve('@mde/editor-core/markdown')).toMatch(
       /packages\/editor-core\/src\/markdown\.ts$/u
     )
+    expect(require.resolve('@mde/editor-core/search')).toMatch(
+      /packages\/editor-core\/src\/search\.ts$/u
+    )
     expect(require.resolve('@mde/editor-host/fake')).toMatch(
       /packages\/editor-host\/src\/fake\.ts$/u
     )
