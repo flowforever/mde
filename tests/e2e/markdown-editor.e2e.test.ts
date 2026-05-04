@@ -175,8 +175,10 @@ const dispatchResourceDragEvent = async (
   window: Page,
   type: 'dragenter' | 'dragover' | 'dragleave' | 'drop',
   resourcePath: string
-): Promise<boolean> =>
-  window.evaluate(
+): Promise<boolean> => {
+  const canonicalResourcePath = await realpath(resourcePath)
+
+  return window.evaluate(
     ({ eventType, uri }) => {
       const shell = document.querySelector('.app-shell')
 
@@ -198,9 +200,10 @@ const dispatchResourceDragEvent = async (
     },
     {
       eventType: type,
-      uri: pathToFileURL(resourcePath).toString()
+      uri: pathToFileURL(canonicalResourcePath).toString()
     }
   )
+}
 
 const openNewWorkspace = async (window: Page): Promise<void> => {
   await ensureWorkspaceDialogOpen(window)
