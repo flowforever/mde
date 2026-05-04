@@ -35,6 +35,7 @@ import {
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   type EditorText,
 } from "@mde/editor-react";
+import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
@@ -62,6 +63,7 @@ import {
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
+  PASSTHROUGH_MARKDOWN_ASSET_RESOLVER,
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
 } from "./markdownTransforms";
@@ -109,6 +111,7 @@ interface MarkdownBlockEditorProps {
   readonly isSaving: boolean;
   readonly lineSpacing?: EditorLineSpacing;
   readonly markdown: string;
+  readonly markdownAssetResolver?: MarkdownAssetResolver;
   readonly markdownFilePaths?: readonly string[];
   readonly onCreateLinkedMarkdown?: (filePath: string) => Promise<string>;
   readonly onExitHistoryPreview?: () => void;
@@ -233,6 +236,7 @@ export const MarkdownBlockEditor = forwardRef<
     isSaving,
     lineSpacing = "standard",
     markdownFilePaths = [],
+    markdownAssetResolver = PASSTHROUGH_MARKDOWN_ASSET_RESOLVER,
     markdown,
     onCreateLinkedMarkdown,
     onExitHistoryPreview = () => undefined,
@@ -308,13 +312,6 @@ export const MarkdownBlockEditor = forwardRef<
   useEffect(() => {
     textRef.current = text;
   }, [text]);
-  const assetContext = useMemo(
-    () => ({
-      markdownFilePath: path,
-      workspaceRoot,
-    }),
-    [path, workspaceRoot],
-  );
   const persistedMarkdownDocument = useMemo(
     () => splitMarkdownFrontmatter(markdown),
     [markdown],
@@ -324,8 +321,12 @@ export const MarkdownBlockEditor = forwardRef<
     [draftMarkdown],
   );
   const editorMarkdown = useMemo(
-    () => prepareMarkdownForEditor(persistedMarkdownDocument.body, assetContext),
-    [assetContext, persistedMarkdownDocument.body],
+    () =>
+      prepareMarkdownForEditor(
+        persistedMarkdownDocument.body,
+        markdownAssetResolver,
+      ),
+    [markdownAssetResolver, persistedMarkdownDocument.body],
   );
   const directoryOptions = useMemo<readonly LinkDirectoryOption[]>(() => {
     if (!linkDialogState) {
@@ -375,7 +376,7 @@ export const MarkdownBlockEditor = forwardRef<
     const exportedMarkdown = await exportBlocksToMarkdown(editor, editor.document);
     const portableMarkdown = prepareMarkdownForStorage(
       exportedMarkdown,
-      assetContext,
+      markdownAssetResolver,
     );
     const bodyMarkdown = replaceMermaidBlocksFromSource(
       portableMarkdown,
@@ -383,7 +384,7 @@ export const MarkdownBlockEditor = forwardRef<
     );
 
     return composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown);
-  }, [assetContext, draftMarkdownDocument, editor]);
+  }, [draftMarkdownDocument, editor, markdownAssetResolver]);
 
   const saveMarkdown = useCallback(async (options: {
     readonly preserveLocalChangesWhenUnchanged?: boolean;
@@ -1133,7 +1134,7 @@ export const MarkdownBlockEditor = forwardRef<
               .then((contents) => {
                 const portableContents = prepareMarkdownForStorage(
                   contents,
-                  assetContext,
+                  markdownAssetResolver,
                 );
                 const bodyMarkdown = replaceMermaidBlocksFromSource(
                   portableContents,

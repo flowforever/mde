@@ -1,8 +1,9 @@
 import { LoaderCircle, X } from "lucide-react";
-import { type FormEvent, useCallback, useState } from "react";
+import { type FormEvent, useCallback, useMemo, useState } from "react";
 
 import type { AiGenerationResult } from "../../../shared/ai";
 import { MarkdownBlockEditor } from "../editor/MarkdownBlockEditor";
+import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
 import type { AppText } from "../i18n/appLanguage";
 import { COMPONENT_IDS } from "../componentIds";
 
@@ -48,6 +49,14 @@ export const AiResultPanel = ({
   const rejectReadOnlyImageUpload = useCallback(
     () => Promise.reject(new Error(text("errors.readOnlyAiResult"))),
     [text],
+  );
+  const markdownAssetResolver = useMemo(
+    () =>
+      createDesktopMarkdownAssetResolver({
+        markdownFilePath: result.path,
+        workspaceRoot,
+      }),
+    [result.path, workspaceRoot],
   );
   const ignoreReadOnlyMarkdownChange = useCallback(() => undefined, []);
   const ignoreReadOnlySaveRequest = useCallback(() => undefined, []);
@@ -97,6 +106,7 @@ export const AiResultPanel = ({
           isSaving={false}
           key={`${result.kind}:${result.path}:${result.contents}`}
           markdown={result.contents}
+          markdownAssetResolver={markdownAssetResolver}
           onImageUpload={rejectReadOnlyImageUpload}
           onMarkdownChange={ignoreReadOnlyMarkdownChange}
           onSaveRequest={ignoreReadOnlySaveRequest}

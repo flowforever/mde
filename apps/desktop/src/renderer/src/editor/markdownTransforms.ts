@@ -2,10 +2,6 @@ import {
   rewriteMarkdownImageTargets,
   type MarkdownAssetResolver
 } from '@mde/editor-core/assets'
-import {
-  createDesktopMarkdownAssetResolver,
-  type MarkdownAssetContext
-} from './desktopMarkdownAssetResolver'
 
 export interface MarkdownBlockEditorAdapter<Blocks> {
   readonly tryParseMarkdownToBlocks: (markdown: string) => Blocks | Promise<Blocks>
@@ -13,6 +9,11 @@ export interface MarkdownBlockEditorAdapter<Blocks> {
 }
 
 export const MARKDOWN_BLANK_LINE_MARKER = '\u200b'
+export const PASSTHROUGH_MARKDOWN_ASSET_RESOLVER: MarkdownAssetResolver =
+  Object.freeze({
+    toEditorUrl: () => null,
+    toStoragePath: () => null
+  })
 
 const isBlankLine = (line: string): boolean => line.trim().length === 0
 
@@ -177,8 +178,7 @@ const withBlankLineMarkersForEmptyParagraphs = (blocks: unknown): unknown => {
 
 export const prepareMarkdownForEditor = (
   markdown: string,
-  context: MarkdownAssetContext,
-  assetResolver: MarkdownAssetResolver = createDesktopMarkdownAssetResolver(context)
+  assetResolver: MarkdownAssetResolver = PASSTHROUGH_MARKDOWN_ASSET_RESOLVER
 ): string =>
   prepareBlankLinesForEditor(
     rewriteMarkdownImageTargets(markdown, assetResolver.toEditorUrl)
@@ -186,8 +186,7 @@ export const prepareMarkdownForEditor = (
 
 export const prepareMarkdownForStorage = (
   markdown: string,
-  context: MarkdownAssetContext,
-  assetResolver: MarkdownAssetResolver = createDesktopMarkdownAssetResolver(context)
+  assetResolver: MarkdownAssetResolver = PASSTHROUGH_MARKDOWN_ASSET_RESOLVER
 ): string => {
   const markdownWithRestoredBlankLines =
     restoreBlankLineMarkersOutsideFences(markdown)

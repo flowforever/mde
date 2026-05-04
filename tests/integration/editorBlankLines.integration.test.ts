@@ -51,22 +51,13 @@ describe('editor blank line round trips', () => {
   it('preserves consecutive blank lines through BlockNote import and export', async () => {
     const editor = BlockNoteEditor.create()
     const storedMarkdown = 'First paragraph\n\n\nSecond paragraph'
-    const assetContext = {
-      markdownFilePath: 'docs/README.md',
-      workspaceRoot: '/Users/test/workspace'
-    }
-    const editorMarkdown = prepareMarkdownForEditor(
-      storedMarkdown,
-      assetContext
-    )
+    const editorMarkdown = prepareMarkdownForEditor(storedMarkdown)
     const blocks = editor.tryParseMarkdownToBlocks(editorMarkdown)
 
     expect(blocks).toHaveLength(3)
 
     const exportedMarkdown = await exportBlocksToMarkdown(editor, blocks)
 
-    expect(prepareMarkdownForStorage(exportedMarkdown, assetContext)).toBe(
-      `${storedMarkdown}\n`
-    )
+    expect(prepareMarkdownForStorage(exportedMarkdown)).toBe(`${storedMarkdown}\n`)
   })
 })

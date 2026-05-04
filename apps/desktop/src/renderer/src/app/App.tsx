@@ -62,6 +62,7 @@ import {
   MarkdownBlockEditor,
   type MarkdownBlockEditorHandle,
 } from "../editor/MarkdownBlockEditor";
+import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
 import {
   readEditorViewMode,
   writeEditorViewMode,
@@ -2512,6 +2513,14 @@ export const App = (): React.JSX.Element => {
     state.draftMarkdown ??
     state.loadedFile?.contents ??
     "";
+  const editorMarkdownAssetResolver = useMemo(
+    () =>
+      createDesktopMarkdownAssetResolver({
+        markdownFilePath: editorFilePath,
+        workspaceRoot: state.workspace?.rootPath ?? "",
+      }),
+    [editorFilePath, state.workspace?.rootPath],
+  );
   const repairedImageAssetCount =
     !historyPreview && state.loadedFile?.repairedImageAssetCount
       ? state.loadedFile.repairedImageAssetCount
@@ -3152,6 +3161,7 @@ export const App = (): React.JSX.Element => {
                 : []
             }
             markdown={editorMarkdown}
+            markdownAssetResolver={editorMarkdownAssetResolver}
             onCreateLinkedMarkdown={createMarkdownFileFromEditorLink}
             onExitHistoryPreview={closeHistoryPreview}
             onImageUpload={uploadImageAsset}

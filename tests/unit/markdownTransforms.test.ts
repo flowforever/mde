@@ -8,6 +8,7 @@ import {
   prepareMarkdownForStorage,
   type MarkdownBlockEditorAdapter
 } from '../../apps/desktop/src/renderer/src/editor/markdownTransforms'
+import { createDesktopMarkdownAssetResolver } from '../../apps/desktop/src/renderer/src/editor/desktopMarkdownAssetResolver'
 
 describe('markdownTransforms', () => {
   it('imports Markdown-compatible block types through the editor adapter', async () => {
@@ -133,10 +134,10 @@ describe('markdownTransforms', () => {
   it('resolves local image asset paths to file URLs for editor preview', () => {
     const result = prepareMarkdownForEditor(
       '![Screenshot](.mde/assets/screenshot.png)',
-      {
+      createDesktopMarkdownAssetResolver({
         markdownFilePath: 'docs/README.md',
         workspaceRoot: '/Users/test/workspace'
-      }
+      })
     )
 
     expect(result).toBe(
@@ -147,10 +148,6 @@ describe('markdownTransforms', () => {
   it('accepts an injected asset resolver for non-desktop preview URLs', () => {
     const result = prepareMarkdownForEditor(
       '![Screenshot](asset://logical-id)',
-      {
-        markdownFilePath: 'docs/README.md',
-        workspaceRoot: '/Users/test/workspace'
-      },
       {
         toEditorUrl: (reference) =>
           reference.rawTarget === 'asset://logical-id'
@@ -178,10 +175,7 @@ describe('markdownTransforms', () => {
       '```'
     ].join('\n')
 
-    const editorMarkdown = prepareMarkdownForEditor(storedMarkdown, {
-      markdownFilePath: 'docs/README.md',
-      workspaceRoot: '/Users/test/workspace'
-    })
+    const editorMarkdown = prepareMarkdownForEditor(storedMarkdown)
 
     expect(editorMarkdown).toBe(
       [
@@ -200,20 +194,17 @@ describe('markdownTransforms', () => {
       ].join('\n')
     )
     expect(
-      prepareMarkdownForStorage(editorMarkdown, {
-        markdownFilePath: 'docs/README.md',
-        workspaceRoot: '/Users/test/workspace'
-      })
+      prepareMarkdownForStorage(editorMarkdown)
     ).toBe(storedMarkdown)
   })
 
   it('keeps stored Markdown portable by converting file URLs back to sibling asset paths', () => {
     const result = prepareMarkdownForStorage(
       '![Screenshot](file:///Users/test/workspace/docs/.mde/assets/screenshot.png)',
-      {
+      createDesktopMarkdownAssetResolver({
         markdownFilePath: 'docs/README.md',
         workspaceRoot: '/Users/test/workspace'
-      }
+      })
     )
 
     expect(result).toBe('![Screenshot](.mde/assets/screenshot.png)')
@@ -222,10 +213,6 @@ describe('markdownTransforms', () => {
   it('accepts an injected asset resolver for non-desktop storage paths', () => {
     const result = prepareMarkdownForStorage(
       '![Screenshot](host-display://logical-id)',
-      {
-        markdownFilePath: 'docs/README.md',
-        workspaceRoot: '/Users/test/workspace'
-      },
       {
         toEditorUrl: () => null,
         toStoragePath: (reference) =>
