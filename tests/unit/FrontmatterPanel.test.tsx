@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FrontmatterPanel } from "../../apps/desktop/src/renderer/src/editor/FrontmatterPanel";
+import { FrontmatterPanel } from "@mde/editor-react";
 import type { MarkdownFrontmatterBlock } from "@mde/editor-core/frontmatter";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,

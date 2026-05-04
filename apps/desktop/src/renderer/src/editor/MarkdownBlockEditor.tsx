@@ -41,6 +41,7 @@ import {
   ensureMarkdownExtension,
   getEditorLinkEntryName,
   exportBlocksToMarkdown,
+  FrontmatterPanel,
   importMarkdownToBlocks,
   isEditorSearchMutationRelevant,
   joinWorkspacePath,
@@ -75,7 +76,6 @@ import {
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
 import { createVisibleEditorLinkTree } from "./editorLinkDirectories";
-import { FrontmatterPanel } from "./FrontmatterPanel";
 import {
   composeMarkdownWithFrontmatter,
   splitMarkdownFrontmatter,

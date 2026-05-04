@@ -24,12 +24,20 @@ const RENDERER_SOURCE_ROOT = join(
   "renderer",
   "src",
 );
+const EDITOR_REACT_SOURCE_ROOT = join(
+  process.cwd(),
+  "packages",
+  "editor-react",
+  "src",
+);
 const nonConcreteMarkers = ["命名规则", "第三方内部", "不分配"];
 
 const normalizeMarkdownCodeCell = (cell: string): string =>
   cell.replace(/^`|`$/g, "");
 
-const readRendererSources = async (directoryPath: string): Promise<string> => {
+const readComponentIdConsumerSources = async (
+  directoryPath: string,
+): Promise<string> => {
   const directoryEntries = await readdir(directoryPath, { withFileTypes: true });
   const sourceChunks = await Promise.all(
     directoryEntries
@@ -38,7 +46,7 @@ const readRendererSources = async (directoryPath: string): Promise<string> => {
         const entryPath = join(directoryPath, entry.name);
 
         if (entry.isDirectory()) {
-          return readRendererSources(entryPath);
+          return readComponentIdConsumerSources(entryPath);
         }
 
         if (!entry.isFile() || !/\.(ts|tsx)$/.test(entry.name)) {
@@ -104,7 +112,10 @@ describe("component naming reference", () => {
   });
 
   it("binds every concrete component id to a renderer data-component-id constant reference", async () => {
-    const rendererSources = await readRendererSources(RENDERER_SOURCE_ROOT);
+    const rendererSources = await Promise.all([
+      readComponentIdConsumerSources(RENDERER_SOURCE_ROOT),
+      readComponentIdConsumerSources(EDITOR_REACT_SOURCE_ROOT),
+    ]).then((sourceChunks) => sourceChunks.join("\n"));
 
     expect(rendererSources).toContain("data-component-id={");
 
