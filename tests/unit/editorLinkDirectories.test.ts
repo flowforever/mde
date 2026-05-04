@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   collectExpandedLinkDirectoryOptions,
   createInitialLinkDirectoryState
-} from '../../apps/desktop/src/renderer/src/editor/editorLinkDirectories'
+} from '@mde/editor-react'
 import type { TreeNode } from '@mde/editor-host/file-tree'
 
 describe('editorLinkDirectories', () => {

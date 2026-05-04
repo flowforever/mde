@@ -33,18 +33,31 @@ import {
 } from "lucide-react";
 import {
   chooseMarkdownContentsToSave,
+  collectExpandedLinkDirectoryOptions,
   createEditorCodeHighlighter,
+  createInitialLinkDialogState,
   createSearchRanges,
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
+  ensureMarkdownExtension,
+  getEditorLinkEntryName,
   isEditorSearchMutationRelevant,
+  joinWorkspacePath,
+  moveLinkDialogSuggestionSelection,
   normalizeImportedCodeBlockLanguages,
   replaceEditorDocumentWithoutUndoHistory,
+  selectLinkDialogDirectory,
+  setLinkDialogError,
+  setLinkDialogMode,
   shouldClearLocalChangesAfterUnchangedSave,
   shouldImportMarkdownIntoEditor,
   shouldRetryUnchangedSave,
   SUPPORTED_CODE_LANGUAGES,
   type EditorLineSpacing,
   type EditorText,
+  type LinkDialogState,
+  type LinkDirectoryOption,
+  updateLinkDialogHref,
+  updateLinkDialogNewDocumentName,
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
 import {
@@ -56,11 +69,7 @@ import {
 
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
-import {
-  collectExpandedLinkDirectoryOptions,
-  createVisibleEditorLinkTree,
-  type LinkDirectoryOption,
-} from "./editorLinkDirectories";
+import { createVisibleEditorLinkTree } from "./editorLinkDirectories";
 import {
   exportBlocksToMarkdown,
   importMarkdownToBlocks,
@@ -68,19 +77,6 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
 } from "./markdownTransforms";
-import {
-  createInitialLinkDialogState,
-  ensureMarkdownExtension,
-  getEditorLinkEntryName,
-  joinWorkspacePath,
-  moveLinkDialogSuggestionSelection,
-  selectLinkDialogDirectory,
-  setLinkDialogError,
-  setLinkDialogMode,
-  type LinkDialogState,
-  updateLinkDialogHref,
-  updateLinkDialogNewDocumentName,
-} from "./editorLinkDialogState";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import {
   composeMarkdownWithFrontmatter,

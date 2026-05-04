@@ -10,7 +10,7 @@ import {
   setLinkDialogMode,
   updateLinkDialogHref,
   updateLinkDialogNewDocumentName
-} from '../../apps/desktop/src/renderer/src/editor/editorLinkDialogState'
+} from '@mde/editor-react'
 import type { TreeNode } from '@mde/editor-host/file-tree'
 
 const tree: readonly TreeNode[] = [

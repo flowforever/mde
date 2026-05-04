@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  createVisibleEditorLinkTree,
   collectExpandedLinkDirectoryOptions
+} from '@mde/editor-react'
+import {
+  createVisibleEditorLinkTree
 } from '../../apps/desktop/src/renderer/src/editor/editorLinkDirectories'
 import {
   DEFAULT_HIDDEN_EXPLORER_WORKSPACES_STORAGE_KEY,

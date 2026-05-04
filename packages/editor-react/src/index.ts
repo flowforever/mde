@@ -108,6 +108,29 @@ export {
 } from './layoutPreferences'
 export type { EditorLineSpacing, EditorViewMode } from './layoutPreferences'
 
+export {
+  collectExpandedLinkDirectoryOptions,
+  createInitialLinkDirectoryState
+} from './linkDirectories'
+export type {
+  InitialLinkDirectoryState,
+  LinkDirectoryOption
+} from './linkDirectories'
+
+export {
+  createInitialLinkDialogState,
+  ensureMarkdownExtension,
+  getEditorLinkEntryName,
+  joinWorkspacePath,
+  moveLinkDialogSuggestionSelection,
+  selectLinkDialogDirectory,
+  setLinkDialogError,
+  setLinkDialogMode,
+  updateLinkDialogHref,
+  updateLinkDialogNewDocumentName
+} from './linkDialogState'
+export type { LinkDialogState } from './linkDialogState'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string
