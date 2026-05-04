@@ -43,6 +43,7 @@ import {
   shouldImportMarkdownIntoEditor,
   shouldRetryUnchangedSave,
   SUPPORTED_CODE_LANGUAGES,
+  type EditorLineSpacing,
   type EditorText,
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
@@ -55,7 +56,6 @@ import {
 
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
-import type { EditorLineSpacing } from "./editorLineSpacing";
 import {
   collectExpandedLinkDirectoryOptions,
   createVisibleEditorLinkTree,

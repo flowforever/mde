@@ -3,12 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   EDITOR_LINE_SPACING_OPTIONS,
   readEditorLineSpacing,
-  writeEditorLineSpacing,
-} from "../../apps/desktop/src/renderer/src/editor/editorLineSpacing";
-import {
   readEditorViewMode,
+  writeEditorLineSpacing,
   writeEditorViewMode,
-} from "../../apps/desktop/src/renderer/src/editor/editorViewMode";
+} from "@mde/editor-react";
 
 describe("editor layout preferences integration", () => {
   it("persists editor width and line spacing preferences independently", () => {

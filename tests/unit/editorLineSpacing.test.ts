@@ -4,7 +4,7 @@ import {
   EDITOR_LINE_SPACING_STORAGE_KEY,
   readEditorLineSpacing,
   writeEditorLineSpacing,
-} from "../../apps/desktop/src/renderer/src/editor/editorLineSpacing";
+} from "@mde/editor-react";
 
 const createStorage = (
   initialValue?: string,

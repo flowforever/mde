@@ -97,6 +97,17 @@ export type {
   InlineFlowchartTargets
 } from './flowchartInlineTargets'
 
+export {
+  EDITOR_LINE_SPACING_OPTIONS,
+  EDITOR_LINE_SPACING_STORAGE_KEY,
+  EDITOR_VIEW_MODE_STORAGE_KEY,
+  readEditorLineSpacing,
+  readEditorViewMode,
+  writeEditorLineSpacing,
+  writeEditorViewMode
+} from './layoutPreferences'
+export type { EditorLineSpacing, EditorViewMode } from './layoutPreferences'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string

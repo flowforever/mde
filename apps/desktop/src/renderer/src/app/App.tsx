@@ -59,19 +59,17 @@ import {
   resolveCurrentAiDocumentKey,
 } from "./aiDocumentScope";
 import {
+  EDITOR_LINE_SPACING_OPTIONS,
+  readEditorLineSpacing,
+  readEditorViewMode,
+  writeEditorLineSpacing,
+  writeEditorViewMode,
+} from "@mde/editor-react";
+import {
   MarkdownBlockEditor,
   type MarkdownBlockEditorHandle,
 } from "../editor/MarkdownBlockEditor";
 import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
-import {
-  readEditorViewMode,
-  writeEditorViewMode,
-} from "../editor/editorViewMode";
-import {
-  EDITOR_LINE_SPACING_OPTIONS,
-  readEditorLineSpacing,
-  writeEditorLineSpacing,
-} from "../editor/editorLineSpacing";
 import { collectMarkdownFilePaths } from "@mde/editor-core/links";
 import { resolveEditorLinkTarget } from "../editor/editorLinks";
 import { getNextSearchMatchIndex } from "@mde/editor-core/search";
