@@ -1,6 +1,6 @@
 export interface EditorReactPackageInfo {
   readonly packageName: '@mde/editor-react'
-  readonly phase: 'skeleton'
+  readonly phase: 'runtime'
 }
 
 export { EDITOR_COMPONENT_IDS } from './componentIds'
@@ -109,5 +109,5 @@ export type { MarkdownBlockEditorAdapter } from './markdownTransforms'
 
 export const editorReactPackageInfo: EditorReactPackageInfo = Object.freeze({
   packageName: '@mde/editor-react',
-  phase: 'skeleton'
+  phase: 'runtime'
 })

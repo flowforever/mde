@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 
+import { editorReactPackageInfo } from '@mde/editor-react/testing'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
@@ -33,5 +34,12 @@ describe('shared editor package exports', () => {
     expect(require.resolve('@mde/editor-react/testing')).toMatch(
       /packages\/editor-react\/src\/testing\.ts$/u
     )
+  })
+
+  it('describes editor-react as a runtime package instead of a skeleton package', () => {
+    expect(editorReactPackageInfo).toEqual({
+      packageName: '@mde/editor-react',
+      phase: 'runtime'
+    })
   })
 })
