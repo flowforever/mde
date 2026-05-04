@@ -36,6 +36,12 @@ import {
   type EditorText,
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
+import {
+  collectMarkdownFilePaths,
+  createMarkdownPathSuggestions,
+  createRelativeMarkdownLink,
+  isSupportedMarkdownLinkHref as isSupportedEditorLinkHref,
+} from "@mde/editor-core/links";
 
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
@@ -49,12 +55,6 @@ import {
   replaceEditorDocumentWithoutUndoHistory,
   shouldImportMarkdownIntoEditor,
 } from "./editorHydration";
-import {
-  collectMarkdownFilePaths,
-  createMarkdownPathSuggestions,
-  createRelativeMarkdownLink,
-  isSupportedEditorLinkHref,
-} from "./editorLinks";
 import {
   collectExpandedLinkDirectoryOptions,
   createVisibleEditorLinkTree,

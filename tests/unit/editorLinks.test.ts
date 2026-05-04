@@ -4,6 +4,8 @@ import {
   collectMarkdownFilePaths,
   createMarkdownPathSuggestions,
   createRelativeMarkdownLink,
+} from "@mde/editor-core/links";
+import {
   findContainingWorkspace,
   resolveEditorLinkTarget,
 } from "../../apps/desktop/src/renderer/src/editor/editorLinks";

@@ -6,19 +6,10 @@ import {
   isFileUrl,
   isHttpUrl,
   isMarkdownPath,
-  isSupportedMarkdownLinkHref,
   normalizeNativePath,
   normalizeWorkspaceLinkPath,
 } from "@mde/editor-core/links";
 import type { RecentWorkspace } from "../workspaces/recentWorkspaces";
-
-export {
-  collectMarkdownFilePaths,
-  createMarkdownPathSuggestions,
-  createRelativeMarkdownLink,
-  normalizeWorkspacePath,
-} from "@mde/editor-core/links";
-export type { MarkdownPathSuggestion } from "@mde/editor-core/links";
 
 export type EditorLinkTarget =
   | {
@@ -156,8 +147,6 @@ export const findContainingWorkspace = (
     workspaceRoot: matchingWorkspace.workspace.rootPath,
   };
 };
-
-export const isSupportedEditorLinkHref = isSupportedMarkdownLinkHref;
 
 export const resolveEditorLinkTarget = ({
   currentFilePath,

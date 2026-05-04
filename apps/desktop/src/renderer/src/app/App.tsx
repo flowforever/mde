@@ -72,10 +72,8 @@ import {
   readEditorLineSpacing,
   writeEditorLineSpacing,
 } from "../editor/editorLineSpacing";
-import {
-  collectMarkdownFilePaths,
-  resolveEditorLinkTarget,
-} from "../editor/editorLinks";
+import { collectMarkdownFilePaths } from "@mde/editor-core/links";
+import { resolveEditorLinkTarget } from "../editor/editorLinks";
 import { getNextSearchMatchIndex } from "@mde/editor-core/search";
 import {
   EDITOR_SEARCH_HISTORY_STORAGE_KEY,
