@@ -1982,13 +1982,7 @@ export const ExplorerPane = ({
         </span>
         <span className="theme-selector-copy">
           <span>{text("settings.themeFooterLabel")}</span>
-          <span>
-            {isFollowingSystemTheme
-              ? text("theme.systemThemeLabel", {
-                  theme: getThemeLabel(resolvedTheme, text),
-                })
-              : getThemeLabel(resolvedTheme, text)}
-          </span>
+          <span>{getThemeLabel(resolvedTheme, text)}</span>
         </span>
         <span className="theme-selector-swatches" aria-hidden="true">
           {resolvedTheme.swatches.map((swatch) => (

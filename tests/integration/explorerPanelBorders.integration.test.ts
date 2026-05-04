@@ -35,4 +35,41 @@ describe('explorer panel borders', () => {
     expect(getCssBlock(css, '.explorer-recent-files-section.is-collapsed'))
       .toContain('border-top: 1px solid var(--panel-border)')
   })
+
+  it('keeps the footer settings control at the standard icon button size', async () => {
+    const css = await readThemeCss()
+    const settingsButtonBlock = getCssBlock(
+      css,
+      '.explorer-footer-settings-button'
+    )
+    const themeSelectorBlock = getCssBlock(css, '.theme-selector-button')
+    const themeCopyBlock = getCssBlock(css, '.theme-selector-copy')
+    const themePrimaryTextBlock = getCssBlock(
+      css,
+      '.theme-selector-copy span:first-child'
+    )
+    const themeSecondaryTextBlock = getCssBlock(
+      css,
+      '.theme-selector-copy span:last-child'
+    )
+
+    expect(settingsButtonBlock).toContain('align-self: center')
+    expect(settingsButtonBlock).toContain('justify-self: center')
+    expect(settingsButtonBlock).toContain('width: 32px')
+    expect(settingsButtonBlock).toContain('min-width: 32px')
+    expect(settingsButtonBlock).toContain('height: 32px')
+    expect(settingsButtonBlock).toContain('min-height: 32px')
+    expect(settingsButtonBlock).not.toContain('height: 38px')
+    expect(themeSelectorBlock).toContain('height: 32px')
+    expect(themeSelectorBlock).toContain('min-height: 32px')
+    expect(themeSelectorBlock).toContain('gap: 4px')
+    expect(themeSelectorBlock).toContain('padding: 3px')
+    expect(themeCopyBlock).toContain('align-items: baseline')
+    expect(themeCopyBlock).toContain('gap: 6px')
+    expect(themePrimaryTextBlock).toContain('flex: 0 0 auto')
+    expect(themePrimaryTextBlock).toContain('line-height: 16px')
+    expect(themeSecondaryTextBlock).toContain('flex: 1 1 auto')
+    expect(themeSecondaryTextBlock).toContain('min-width: 0')
+    expect(themeSecondaryTextBlock).toContain('line-height: 15px')
+  })
 })

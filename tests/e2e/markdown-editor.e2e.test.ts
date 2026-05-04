@@ -2789,15 +2789,29 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
         button.evaluate((element) => Math.round(element.getBoundingClientRect().top))
       )
     )
+    const toolbarButtonHeights = await Promise.all(
+      toolbarButtons.map((button) =>
+        button.evaluate((element) =>
+          Math.round(element.getBoundingClientRect().height)
+        )
+      )
+    )
     const settingsButton = window.getByRole('button', {
       name: /^open settings$/i
     })
     const themeButton = window.getByRole('button', {
       name: /^change theme$/i
     })
-    const footerButtonTops = await Promise.all(
+    const footerButtonMetrics = await Promise.all(
       [settingsButton, themeButton].map((button) =>
-        button.evaluate((element) => Math.round(element.getBoundingClientRect().top))
+        button.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+
+          return {
+            centerY: Math.round(rect.top + rect.height / 2),
+            height: Math.round(rect.height)
+          }
+        })
       )
     )
     const borderWidths = await window.evaluate(() => {
@@ -2817,7 +2831,12 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     })
 
     expect(new Set(toolbarButtonTops).size).toBe(1)
-    expect(new Set(footerButtonTops).size).toBe(1)
+    expect(new Set(toolbarButtonHeights).size).toBe(1)
+    footerButtonMetrics.forEach((metric) => {
+      expect(metric.height).toBe(toolbarButtonHeights[0])
+    })
+    expect(new Set(footerButtonMetrics.map((metric) => metric.centerY)).size)
+      .toBe(1)
     expect(borderWidths).toEqual({
       explorerRight: '0px',
       recentTop: '0px',

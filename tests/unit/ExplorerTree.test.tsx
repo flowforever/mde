@@ -1701,8 +1701,12 @@ describe("ExplorerTree", () => {
     expect(themeButton).toHaveClass("theme-selector-button");
     expect(settingsButton.parentElement).toBe(footer);
     expect(themeButton.parentElement).toBe(footer);
+    expect(Array.from(footer?.children ?? [])).toEqual([
+      settingsButton,
+      themeButton,
+    ]);
     expect(settingsButton).not.toContainElement(themeButton);
-    expect(themeButton).toHaveTextContent("System Carbon");
+    expect(themeButton).toHaveTextContent("Carbon");
   });
 
   it("keeps hidden entries scoped by workspace and can show them from the context menu", async () => {
