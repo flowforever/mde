@@ -4,7 +4,7 @@ import {
   DARK_EDITOR_CODE_THEME,
   getEditorCodeThemeForThemeFamily,
   LIGHT_EDITOR_CODE_THEME
-} from '../../apps/desktop/src/renderer/src/editor/editorCodeHighlighter'
+} from '@mde/editor-react'
 
 describe('editorCodeHighlighter', () => {
   it('uses a dark Shiki theme for dark app themes', () => {

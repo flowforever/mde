@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import {
   chooseMarkdownContentsToSave,
+  createEditorCodeHighlighter,
   createSearchRanges,
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   isEditorSearchMutationRelevant,
@@ -54,7 +55,6 @@ import {
 
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
-import { createEditorCodeHighlighter } from "./editorCodeHighlighter";
 import type { EditorLineSpacing } from "./editorLineSpacing";
 import {
   collectExpandedLinkDirectoryOptions,

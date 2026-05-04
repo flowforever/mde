@@ -4,7 +4,7 @@ import {
   createEditorCodeHighlighter,
   DARK_EDITOR_CODE_THEME,
   LIGHT_EDITOR_CODE_THEME
-} from '../../apps/desktop/src/renderer/src/editor/editorCodeHighlighter'
+} from '@mde/editor-react'
 
 describe('editor code highlighter integration', () => {
   afterEach(() => {

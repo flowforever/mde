@@ -74,6 +74,14 @@ export {
 export type { EditorHydrationAdapter } from './hydration'
 
 export {
+  createEditorCodeHighlighter,
+  DARK_EDITOR_CODE_THEME,
+  getEditorCodeThemeForThemeFamily,
+  LIGHT_EDITOR_CODE_THEME
+} from './codeHighlighter'
+export type { EditorCodeTheme } from './codeHighlighter'
+
+export {
   normalizeCodeBlockLanguageId,
   normalizeImportedCodeBlockLanguages,
   SUPPORTED_CODE_LANGUAGES

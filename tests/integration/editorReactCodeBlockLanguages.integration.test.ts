@@ -9,7 +9,7 @@ const markdownBlockEditorPath = join(
 )
 const codeHighlighterPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/editorCodeHighlighter.ts'
+  'packages/editor-react/src/codeHighlighter.ts'
 )
 const codeBlockLanguageTestPath = join(
   process.cwd(),
@@ -48,7 +48,7 @@ describe('editor-react code block language package consumption', () => {
     ])
 
     expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
-    expect(codeHighlighter).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(codeHighlighter).toMatch(/from ['"]\.\/codeBlockLanguages['"]/u)
     expect(codeBlockLanguageTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(packageIndex).toContain('normalizeImportedCodeBlockLanguages')
     expect(packageIndex).toContain('SUPPORTED_CODE_LANGUAGES')

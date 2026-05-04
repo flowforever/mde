@@ -1,11 +1,11 @@
 import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
-import { SUPPORTED_CODE_LANGUAGES } from "@mde/editor-react";
+import { SUPPORTED_CODE_LANGUAGES } from "./codeBlockLanguages";
 
 export const LIGHT_EDITOR_CODE_THEME = "github-light";
 export const DARK_EDITOR_CODE_THEME = "github-dark";
 
-type EditorCodeTheme =
+export type EditorCodeTheme =
   | typeof LIGHT_EDITOR_CODE_THEME
   | typeof DARK_EDITOR_CODE_THEME;
 
