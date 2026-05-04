@@ -135,7 +135,7 @@ vi.mock("../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor", () => 
 import { App } from "../../apps/desktop/src/renderer/src/app/App";
 import { APP_THEME_STORAGE_KEY } from "../../apps/desktop/src/renderer/src/theme/appThemes";
 import type { AiApi, AiGenerationResult } from "../../apps/desktop/src/shared/ai";
-import type { TreeNode } from "../../apps/desktop/src/shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { UpdateApi } from "../../apps/desktop/src/shared/update";
 import type { EditorApi } from "../../apps/desktop/src/shared/workspace";
 

@@ -1,4 +1,4 @@
-import type { TreeNode } from './fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 import type {
   DeletedDocumentHistoryEntry,
   DocumentHistoryPreview,

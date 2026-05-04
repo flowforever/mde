@@ -1,4 +1,4 @@
-import type { TreeNode } from '../../../shared/fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 import type { FileContents, Workspace } from '../../../shared/workspace'
 import type {
   DeletedDocumentHistoryEntry,

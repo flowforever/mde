@@ -6,7 +6,7 @@ import type {
   MouseEvent,
 } from "react";
 
-import type { TreeNode } from "../../../shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { ExplorerInlineEditor, ExplorerTreeProps } from "./explorerTypes";
 import { COMPONENT_IDS } from "../componentIds";
 

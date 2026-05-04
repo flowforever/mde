@@ -119,7 +119,7 @@ import {
   type WorkspaceFileHistory,
   writeWorkspaceFileHistory,
 } from "../workspaces/workspaceFileHistory";
-import type { TreeNode } from "../../../shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 import {
   AiSummaryActionButton,
   AiTranslateActionMenu,

@@ -69,7 +69,7 @@ import {
   type ThemePreference,
 } from "../theme/appThemes";
 import type { RecentWorkspace } from "../workspaces/recentWorkspaces";
-import type { TreeNode } from "../../../shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { DeletedDocumentHistoryEntry } from "../../../shared/documentHistory";
 import {
   isCustomAppLanguagePack,

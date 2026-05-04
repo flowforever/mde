@@ -1,7 +1,7 @@
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, extname } from 'node:path'
 
-import type { TreeNode } from '../../shared/fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 import type { Workspace, WorkspacePathInfo } from '../../shared/workspace'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 

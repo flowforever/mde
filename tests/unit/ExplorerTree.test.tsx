@@ -13,7 +13,7 @@ import { ExplorerTree } from "../../apps/desktop/src/renderer/src/explorer/Explo
 import { ExplorerPane } from "../../apps/desktop/src/renderer/src/explorer/ExplorerPane";
 import { COMPONENT_IDS } from "../../apps/desktop/src/renderer/src/componentIds";
 import type { AppState } from "../../apps/desktop/src/renderer/src/app/appTypes";
-import type { TreeNode } from "../../apps/desktop/src/shared/fileTree";
+import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { RecentWorkspace } from "../../apps/desktop/src/renderer/src/workspaces/recentWorkspaces";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,

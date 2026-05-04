@@ -1,7 +1,7 @@
 import type * as Electron from 'electron'
 
 import { FILE_CHANNELS, WORKSPACE_CHANNELS } from '../main/ipc/channels'
-import type { TreeNode } from '../shared/fileTree'
+import type { TreeNode } from '@mde/editor-host/file-tree'
 import type {
   EditorApi,
   FileContents,
