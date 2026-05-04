@@ -36,10 +36,12 @@ import {
   createSearchRanges,
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   isEditorSearchMutationRelevant,
+  normalizeImportedCodeBlockLanguages,
   replaceEditorDocumentWithoutUndoHistory,
   shouldClearLocalChangesAfterUnchangedSave,
   shouldImportMarkdownIntoEditor,
   shouldRetryUnchangedSave,
+  SUPPORTED_CODE_LANGUAGES,
   type EditorText,
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
@@ -53,10 +55,6 @@ import {
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
 import { createEditorCodeHighlighter } from "./editorCodeHighlighter";
-import {
-  normalizeImportedCodeBlockLanguages,
-  SUPPORTED_CODE_LANGUAGES,
-} from "./editorCodeBlockLanguages";
 import type { EditorLineSpacing } from "./editorLineSpacing";
 import {
   collectExpandedLinkDirectoryOptions,

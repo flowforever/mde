@@ -73,6 +73,13 @@ export {
 } from './hydration'
 export type { EditorHydrationAdapter } from './hydration'
 
+export {
+  normalizeCodeBlockLanguageId,
+  normalizeImportedCodeBlockLanguages,
+  SUPPORTED_CODE_LANGUAGES
+} from './codeBlockLanguages'
+export type { SupportedCodeLanguage } from './codeBlockLanguages'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string

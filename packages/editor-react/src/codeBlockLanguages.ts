@@ -1,6 +1,6 @@
 import type { Block } from "@blocknote/core";
 
-interface SupportedCodeLanguage {
+export interface SupportedCodeLanguage {
   aliases?: string[];
   readonly name: string;
 }
@@ -80,5 +80,4 @@ const normalizeImportedCodeBlock = (block: Block): Block => {
 
 export const normalizeImportedCodeBlockLanguages = (
   blocks: readonly Block[],
-): readonly Block[] =>
-  blocks.map(normalizeImportedCodeBlock);
+): readonly Block[] => blocks.map(normalizeImportedCodeBlock);
