@@ -6,7 +6,7 @@ description: Use when Codex should run an autonomous loop over READY local task 
 
 ## Overview
 
-Run an autonomous task loop for MDE: pick one local READY task or GitHub issue marked `WILL-DO`, confirm it can be completed without human participation, develop it, verify it, release it when appropriate, archive the task, then reload this skill and continue.
+Run a continuous autonomous task loop for MDE: pick one local READY task or GitHub issue marked `WILL-DO`, confirm it can be completed without human participation, develop it, verify it, release it when appropriate, archive the task, then reload this skill and continue. The loop does not stop just because no candidate is currently available.
 
 ## Selection Rules
 
@@ -32,7 +32,7 @@ Run an autonomous task loop for MDE: pick one local READY task or GitHub issue m
 
 * Process exactly one autonomous task per loop.
 
-* If no local READY task or GitHub `WILL-DO` issue exists, wait 5 minutes, then search again.
+* If no local READY task or GitHub `WILL-DO` issue exists, wait 5 minutes, then search again. Repeat this wait-and-search cycle indefinitely until a candidate appears or the user explicitly stops the loop.
 
 * Skip ambiguous documents instead of inferring readiness from body text.
 
@@ -90,7 +90,7 @@ If the task is not fully autonomous after this investigation, do not mark develo
 
 2. Select the highest-priority candidate: READY local bug, then READY local requirement, then GitHub `WILL-DO` issue.
 
-3. Apply the Autonomy Gate. If investigation confirms the task is not fully autonomous, record what was checked plus the needed human input, then return to step 2.
+3. Apply the Autonomy Gate. If investigation confirms the task is not fully autonomous, record what was checked plus the needed human input, then return to step 2. If every visible candidate is blocked, wait 5 minutes and restart from step 1 instead of pausing.
 
 4. Update the selected task source with a status note showing that development has started: edit the local task document, or add a GitHub issue comment.
 
@@ -110,6 +110,8 @@ If the task is not fully autonomous after this investigation, do not mark develo
 
 12. Return to step 1.
 
+If any loop finds no selectable candidate, do not send a final status response solely because the queue is empty. Wait 5 minutes and restart from step 1. Brief progress updates are fine while waiting; the agent should keep the turn alive and keep polling.
+
 ## Release and Archive Rules
 
 * Do not move a task document to `done` before the production release succeeds.
@@ -124,19 +126,27 @@ If the task is not fully autonomous after this investigation, do not mark develo
 
 * Preserve GitHub issue history; add new comments instead of editing or deleting existing issue text.
 
-## Stop Conditions
+## Continuous Loop Rules
 
-Pause the loop and report back when:
+Do not pause or end the turn only because:
 
-* A required approval, credential, signing secret, or external access is missing.
+* No READY local task exists.
 
-* Every READY local task and GitHub `WILL-DO` issue is blocked by the Autonomy Gate.
+* No GitHub `WILL-DO` issue exists.
 
-* Verification fails and the failure cannot be fixed within the task scope.
+* Every currently visible candidate is blocked by the Autonomy Gate.
 
-* The selected task is incomplete, contradictory, or not actionable enough to implement safely.
+* Verification fails for one candidate and the failure has been recorded.
 
-* The user asks to stop, pause, or change priorities.
+In these cases, record the relevant status note when there is a task or issue to annotate, wait 5 minutes, reload this skill, and search again.
+
+Only stop the continuous loop when:
+
+* The user explicitly asks to stop, pause, or change priorities.
+
+* The harness or environment prevents further polling or tool execution.
+
+* Continuing would require a destructive action, credential disclosure, force-push, or other unsafe operation that cannot be bypassed by selecting another task.
 
 ## Quick Reference
 
@@ -146,7 +156,7 @@ Pause the loop and report back when:
 | GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; then apply the Autonomy Gate                   |
 | Multiple candidates found          | Prefer `docs/bugs/`, then `docs/requirements/`, then GitHub; complete one task before taking another |
 | Candidate appears ambiguous        | Investigate repository context and make reasonable conservative assumptions                          |
-| Candidate still needs human input  | Do not start it; record checks, blocker, and select another candidate                                |
-| No candidate found                 | Wait 5 minutes and check again                                                                       |
-| Release fails                      | Keep the task outside `done` and fix or report the blocker                                           |
+| Candidate still needs human input  | Do not start it; record checks, blocker, and select another candidate; if none remain, wait and loop |
+| No candidate found                 | Wait 5 minutes and check again indefinitely                                                          |
+| Release fails                      | Keep the task outside `done`; fix if possible, otherwise record the blocker and continue the loop    |
 | Skill file changes                 | Reload it before the next loop                                                                       |
