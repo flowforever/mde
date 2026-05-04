@@ -31,7 +31,10 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import type { EditorText } from "@mde/editor-react";
+import {
+  EDITOR_COMPONENT_IDS as COMPONENT_IDS,
+  type EditorText,
+} from "@mde/editor-react";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
@@ -90,7 +93,6 @@ import {
   splitMarkdownFrontmatter,
 } from "./frontmatter";
 import type { TreeNode } from "../../../shared/fileTree";
-import { COMPONENT_IDS } from "../componentIds";
 
 interface MarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;

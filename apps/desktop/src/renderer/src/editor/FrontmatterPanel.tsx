@@ -1,9 +1,11 @@
 import { AlertTriangle, Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useState, type JSX } from 'react'
-import type { EditorText } from '@mde/editor-react'
+import {
+  EDITOR_COMPONENT_IDS as COMPONENT_IDS,
+  type EditorText
+} from '@mde/editor-react'
 
 import type { MarkdownFrontmatterBlock } from './frontmatter'
-import { COMPONENT_IDS } from '../componentIds'
 
 interface FrontmatterPanelProps {
   readonly frontmatter: MarkdownFrontmatterBlock

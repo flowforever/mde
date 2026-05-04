@@ -1,3 +1,5 @@
+import { EDITOR_COMPONENT_IDS } from "@mde/editor-react";
+
 interface ComponentNameIdEntry {
   readonly componentId: string;
   readonly constantPath: string;
@@ -86,7 +88,7 @@ export const COMPONENT_NAME_ID_MAP = {
     standardName: "Collapsed Editor Actions Menu",
   },
   editorDocumentPathLabel: {
-    componentId: "editor.document-path-label",
+    componentId: EDITOR_COMPONENT_IDS.editor.documentPathLabel,
     constantPath: "editor.documentPathLabel",
     standardName: "Document Path Label",
   },
@@ -96,42 +98,42 @@ export const COMPONENT_NAME_ID_MAP = {
     standardName: "Empty Editor State",
   },
   editorExitHistoryPreviewButton: {
-    componentId: "editor.exit-history-preview-button",
+    componentId: EDITOR_COMPONENT_IDS.editor.exitHistoryPreviewButton,
     constantPath: "editor.exitHistoryPreviewButton",
     standardName: "Exit History Preview Button",
   },
   editorFrontmatterModeButton: {
-    componentId: "editor.frontmatter-mode-button",
+    componentId: EDITOR_COMPONENT_IDS.editor.frontmatterModeButton,
     constantPath: "editor.frontmatterModeButton",
     standardName: "Frontmatter Mode Button",
   },
   editorFrontmatterPanel: {
-    componentId: "editor.frontmatter-panel",
+    componentId: EDITOR_COMPONENT_IDS.editor.frontmatterPanel,
     constantPath: "editor.frontmatterPanel",
     standardName: "Frontmatter Panel",
   },
   editorFrontmatterRawYamlField: {
-    componentId: "editor.frontmatter-raw-yaml-field",
+    componentId: EDITOR_COMPONENT_IDS.editor.frontmatterRawYamlField,
     constantPath: "editor.frontmatterRawYamlField",
     standardName: "Frontmatter Raw YAML Field",
   },
   editorFrontmatterSummary: {
-    componentId: "editor.frontmatter-summary",
+    componentId: EDITOR_COMPONENT_IDS.editor.frontmatterSummary,
     constantPath: "editor.frontmatterSummary",
     standardName: "Frontmatter Summary",
   },
   editorHistoryPreviewBanner: {
-    componentId: "editor.history-preview-banner",
+    componentId: EDITOR_COMPONENT_IDS.editor.historyPreviewBanner,
     constantPath: "editor.historyPreviewBanner",
     standardName: "History Preview Banner",
   },
   editorMarkdownEditingSurface: {
-    componentId: "editor.markdown-editing-surface",
+    componentId: EDITOR_COMPONENT_IDS.editor.markdownEditingSurface,
     constantPath: "editor.markdownEditingSurface",
     standardName: "Markdown Editing Surface",
   },
   editorMarkdownEditorShell: {
-    componentId: "editor.markdown-editor-shell",
+    componentId: EDITOR_COMPONENT_IDS.editor.markdownEditorShell,
     constantPath: "editor.markdownEditorShell",
     standardName: "Markdown Editor Shell",
   },
@@ -141,17 +143,17 @@ export const COMPONENT_NAME_ID_MAP = {
     standardName: "Editor Pane",
   },
   editorRestoreThisVersionButton: {
-    componentId: "editor.restore-this-version-button",
+    componentId: EDITOR_COMPONENT_IDS.editor.restoreThisVersionButton,
     constantPath: "editor.restoreThisVersionButton",
     standardName: "Restore This Version Button",
   },
   editorSaveStateIndicator: {
-    componentId: "editor.save-state-indicator",
+    componentId: EDITOR_COMPONENT_IDS.editor.saveStateIndicator,
     constantPath: "editor.saveStateIndicator",
     standardName: "Save State Indicator",
   },
   editorTitlebar: {
-    componentId: "editor.titlebar",
+    componentId: EDITOR_COMPONENT_IDS.editor.titlebar,
     constantPath: "editor.titlebar",
     standardName: "Editor Titlebar",
   },
@@ -266,112 +268,112 @@ export const COMPONENT_NAME_ID_MAP = {
     standardName: "Workspace Search Button",
   },
   flowchartCloseFlowchartPreviewButton: {
-    componentId: "flowchart.close-flowchart-preview-button",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.closeFlowchartPreviewButton,
     constantPath: "flowchart.closeFlowchartPreviewButton",
     standardName: "Close Flowchart Preview Button",
   },
   flowchartDialogToolbar: {
-    componentId: "flowchart.dialog-toolbar",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.dialogToolbar,
     constantPath: "flowchart.dialogToolbar",
     standardName: "Flowchart Dialog Toolbar",
   },
   flowchartErrorState: {
-    componentId: "flowchart.error-state",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.errorState,
     constantPath: "flowchart.errorState",
     standardName: "Flowchart Error State",
   },
   flowchartPreviewButton: {
-    componentId: "flowchart.preview-button",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.previewButton,
     constantPath: "flowchart.previewButton",
     standardName: "Flowchart Preview Button",
   },
   flowchartPreviewCard: {
-    componentId: "flowchart.preview-card",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.previewCard,
     constantPath: "flowchart.previewCard",
     standardName: "Flowchart Preview Card",
   },
   flowchartPreviewDialog: {
-    componentId: "flowchart.preview-dialog",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.previewDialog,
     constantPath: "flowchart.previewDialog",
     standardName: "Flowchart Preview Dialog",
   },
   flowchartPreviewLayoutToggle: {
-    componentId: "flowchart.preview-layout-toggle",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.previewLayoutToggle,
     constantPath: "flowchart.previewLayoutToggle",
     standardName: "Preview Layout Toggle",
   },
   flowchartResetViewButton: {
-    componentId: "flowchart.reset-view-button",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.resetViewButton,
     constantPath: "flowchart.resetViewButton",
     standardName: "Reset View Button",
   },
   flowchartViewport: {
-    componentId: "flowchart.viewport",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.viewport,
     constantPath: "flowchart.viewport",
     standardName: "Flowchart Viewport",
   },
   flowchartZoomInButton: {
-    componentId: "flowchart.zoom-in-button",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.zoomInButton,
     constantPath: "flowchart.zoomInButton",
     standardName: "Zoom In Button",
   },
   flowchartZoomOutButton: {
-    componentId: "flowchart.zoom-out-button",
+    componentId: EDITOR_COMPONENT_IDS.flowchart.zoomOutButton,
     constantPath: "flowchart.zoomOutButton",
     standardName: "Zoom Out Button",
   },
   linkCreateAndInsertButton: {
-    componentId: "link.create-and-insert-button",
+    componentId: EDITOR_COMPONENT_IDS.link.createAndInsertButton,
     constantPath: "link.createAndInsertButton",
     standardName: "Create And Insert Button",
   },
   linkDirectoryRow: {
-    componentId: "link.directory-row",
+    componentId: EDITOR_COMPONENT_IDS.link.directoryRow,
     constantPath: "link.directoryRow",
     standardName: "Link Directory Row",
   },
   linkDirectoryTree: {
-    componentId: "link.directory-tree",
+    componentId: EDITOR_COMPONENT_IDS.link.directoryTree,
     constantPath: "link.directoryTree",
     standardName: "Link Directory Tree",
   },
   linkExistingLinkTab: {
-    componentId: "link.existing-link-tab",
+    componentId: EDITOR_COMPONENT_IDS.link.existingLinkTab,
     constantPath: "link.existingLinkTab",
     standardName: "Existing Link Tab",
   },
   linkNewDocumentNameField: {
-    componentId: "link.new-document-name-field",
+    componentId: EDITOR_COMPONENT_IDS.link.newDocumentNameField,
     constantPath: "link.newDocumentNameField",
     standardName: "New Document Name Field",
   },
   linkNewDocumentTab: {
-    componentId: "link.new-document-tab",
+    componentId: EDITOR_COMPONENT_IDS.link.newDocumentTab,
     constantPath: "link.newDocumentTab",
     standardName: "New Document Tab",
   },
   linkPickerCloseButton: {
-    componentId: "link.picker-close-button",
+    componentId: EDITOR_COMPONENT_IDS.link.pickerCloseButton,
     constantPath: "link.pickerCloseButton",
     standardName: "Link Picker Close Button",
   },
   linkPickerDialog: {
-    componentId: "link.picker-dialog",
+    componentId: EDITOR_COMPONENT_IDS.link.pickerDialog,
     constantPath: "link.pickerDialog",
     standardName: "Link Picker Dialog",
   },
   linkSuggestionRow: {
-    componentId: "link.suggestion-row",
+    componentId: EDITOR_COMPONENT_IDS.link.suggestionRow,
     constantPath: "link.suggestionRow",
     standardName: "Link Suggestion Row",
   },
   linkSuggestionsList: {
-    componentId: "link.suggestions-list",
+    componentId: EDITOR_COMPONENT_IDS.link.suggestionsList,
     constantPath: "link.suggestionsList",
     standardName: "Link Suggestions List",
   },
   linkTargetField: {
-    componentId: "link.target-field",
+    componentId: EDITOR_COMPONENT_IDS.link.targetField,
     constantPath: "link.targetField",
     standardName: "Link Target Field",
   },
