@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const markdownBlockEditorTestPath = join(
   process.cwd(),
@@ -38,7 +38,7 @@ describe('editor-react search range adapter package consumption', () => {
         readFile(packageIndexPath, 'utf8')
       ])
 
-    expect(markdownBlockEditor).toContain('from "@mde/editor-react"')
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/searchRanges['"]/u)
     expect(markdownBlockEditorTest).toContain('from "@mde/editor-react"')
     expect(packageIndex).toContain('createSearchRanges')
     expect(packageIndex).toContain('isEditorSearchMutationRelevant')

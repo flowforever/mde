@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const appPath = join(process.cwd(), 'apps/desktop/src/renderer/src/app/App.tsx')
 const editorLinksPath = join(

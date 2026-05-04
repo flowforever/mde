@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const desktopLinkDirectoriesPath = join(
   process.cwd(),
@@ -59,7 +59,8 @@ describe('editor-react link dialog state package consumption', () => {
       readFile(packageIndexPath, 'utf8')
     ])
 
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/linkDirectories['"]/u)
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/linkDialogState['"]/u)
     expect(desktopLinkDirectories).not.toContain(
       'createInitialLinkDirectoryState'
     )

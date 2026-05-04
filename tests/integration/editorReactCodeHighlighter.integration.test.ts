@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const codeHighlighterUnitTestPath = join(
   process.cwd(),
@@ -47,7 +47,7 @@ describe('editor-react code highlighter package consumption', () => {
       readFile(packageIndexPath, 'utf8')
     ])
 
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/codeHighlighter['"]/u)
     expect(codeHighlighterUnitTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(codeHighlighterIntegrationTest).toMatch(
       /from ['"]@mde\/editor-react['"]/u

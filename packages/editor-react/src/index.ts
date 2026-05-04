@@ -14,6 +14,13 @@ export type { FrontmatterPanelProps } from './FrontmatterPanel'
 export { MermaidFlowchartPanel } from './MermaidFlowchartPanel'
 export type { MermaidFlowchartPanelProps } from './MermaidFlowchartPanel'
 
+export { MarkdownBlockEditor } from './MarkdownBlockEditor'
+export type {
+  CreateVisibleLinkWorkspaceTree,
+  MarkdownBlockEditorHandle,
+  MarkdownBlockEditorProps
+} from './MarkdownBlockEditor'
+
 export {
   createSearchRanges,
   isEditorSearchMutationRelevant

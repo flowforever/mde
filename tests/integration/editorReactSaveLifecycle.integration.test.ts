@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const saveLifecycleTestPath = join(
   process.cwd(),
@@ -38,7 +38,7 @@ describe('editor-react save lifecycle package consumption', () => {
         readFile(packageIndexPath, 'utf8')
       ])
 
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/saveLifecycle['"]/u)
     expect(saveLifecycleTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(packageIndex).toContain('chooseMarkdownContentsToSave')
     expect(packageIndex).toContain('shouldRetryUnchangedSave')

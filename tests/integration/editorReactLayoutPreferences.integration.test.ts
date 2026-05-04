@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const appPath = join(process.cwd(), 'apps/desktop/src/renderer/src/app/App.tsx')
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const layoutPreferenceIntegrationTestPath = join(
   process.cwd(),
@@ -61,7 +61,9 @@ describe('editor-react layout preference package consumption', () => {
     ])
 
     expect(app).toMatch(/from ['"]@mde\/editor-react['"]/u)
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(markdownBlockEditor).toMatch(
+      /from ['"]\.\/layoutPreferences['"]/u
+    )
     expect(layoutPreferenceIntegrationTest).toMatch(
       /from ['"]@mde\/editor-react['"]/u
     )

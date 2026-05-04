@@ -60,15 +60,13 @@ import {
 } from "./aiDocumentScope";
 import {
   EDITOR_LINE_SPACING_OPTIONS,
+  MarkdownBlockEditor,
   readEditorLineSpacing,
   readEditorViewMode,
+  type MarkdownBlockEditorHandle,
   writeEditorLineSpacing,
   writeEditorViewMode,
 } from "@mde/editor-react";
-import {
-  MarkdownBlockEditor,
-  type MarkdownBlockEditorHandle,
-} from "../editor/MarkdownBlockEditor";
 import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
 import { createVisibleEditorLinkTree } from "../editor/editorLinkDirectories";
 import { collectMarkdownFilePaths } from "@mde/editor-core/links";

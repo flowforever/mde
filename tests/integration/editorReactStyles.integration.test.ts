@@ -13,7 +13,7 @@ describe('editor-react stylesheet entrypoint', () => {
         readProjectFile('apps/desktop/src/renderer/src/main.tsx'),
         readProjectFile('packages/editor-react/styles.css'),
         readProjectFile(
-          'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+          'packages/editor-react/src/MarkdownBlockEditor.tsx'
         )
       ])
 

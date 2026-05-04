@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const codeHighlighterPath = join(
   process.cwd(),
@@ -47,7 +47,9 @@ describe('editor-react code block language package consumption', () => {
       readFile(packageIndexPath, 'utf8')
     ])
 
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(markdownBlockEditor).toMatch(
+      /from ['"]\.\/codeBlockLanguages['"]/u
+    )
     expect(codeHighlighter).toMatch(/from ['"]\.\/codeBlockLanguages['"]/u)
     expect(codeBlockLanguageTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(packageIndex).toContain('normalizeImportedCodeBlockLanguages')

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const hydrationTestPath = join(
   process.cwd(),
@@ -38,7 +38,7 @@ describe('editor-react hydration package consumption', () => {
         readFile(packageIndexPath, 'utf8')
       ])
 
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/hydration['"]/u)
     expect(hydrationTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(packageIndex).toContain('replaceEditorDocumentWithoutUndoHistory')
     expect(packageIndex).toContain('shouldImportMarkdownIntoEditor')

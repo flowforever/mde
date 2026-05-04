@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownBlockEditorPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/MarkdownBlockEditor.tsx'
+  'packages/editor-react/src/MarkdownBlockEditor.tsx'
 )
 const frontmatterPanelUnitTestPath = join(
   process.cwd(),
@@ -47,10 +47,7 @@ describe('editor-react frontmatter panel package consumption', () => {
       readFile(packageIndexPath, 'utf8')
     ])
 
-    expect(markdownBlockEditor).toMatch(/from ['"]@mde\/editor-react['"]/u)
-    expect(markdownBlockEditor).not.toMatch(
-      /from ['"]\.\/FrontmatterPanel['"]/u
-    )
+    expect(markdownBlockEditor).toMatch(/from ['"]\.\/FrontmatterPanel['"]/u)
     expect(frontmatterPanelUnitTest).toMatch(/from ['"]@mde\/editor-react['"]/u)
     expect(markdownBlockEditorUnitTest).toMatch(
       /from ['"]@mde\/editor-react['"]/u

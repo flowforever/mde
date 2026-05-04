@@ -1,8 +1,8 @@
 import { LoaderCircle, X } from "lucide-react";
+import { MarkdownBlockEditor } from "@mde/editor-react";
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 
 import type { AiGenerationResult } from "../../../shared/ai";
-import { MarkdownBlockEditor } from "../editor/MarkdownBlockEditor";
 import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
 import type { AppText } from "../i18n/appLanguage";
 import { COMPONENT_IDS } from "../componentIds";

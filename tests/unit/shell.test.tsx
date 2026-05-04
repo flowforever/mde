@@ -38,7 +38,8 @@ const mockEditorState = vi.hoisted(() => ({
   changeIndex: 0,
 }));
 
-vi.mock("../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor", () => {
+vi.mock("@mde/editor-react", async (importOriginal) => {
+  const actual = await importOriginal();
   const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
     <section aria-label="Mock editor">
       <span>{props.path}</span>
@@ -129,7 +130,7 @@ vi.mock("../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor", () => 
     </section>
   );
 
-  return { MarkdownBlockEditor: MockMarkdownBlockEditor };
+  return { ...(actual as object), MarkdownBlockEditor: MockMarkdownBlockEditor };
 });
 
 import { App } from "../../apps/desktop/src/renderer/src/app/App";

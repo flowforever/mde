@@ -15,16 +15,21 @@ const capturedEditorProps = vi.hoisted(
     }[],
 );
 
-vi.mock("../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor", () => ({
-  MarkdownBlockEditor: (props: {
-    readonly markdown: string;
-    readonly onImageUpload: unknown;
-  }) => {
-    capturedEditorProps.push({ onImageUpload: props.onImageUpload });
+vi.mock("@mde/editor-react", async (importOriginal) => {
+  const actual = await importOriginal();
 
-    return <div data-testid="readonly-ai-editor">{props.markdown}</div>;
-  },
-}));
+  return {
+    ...(actual as object),
+    MarkdownBlockEditor: (props: {
+      readonly markdown: string;
+      readonly onImageUpload: unknown;
+    }) => {
+      capturedEditorProps.push({ onImageUpload: props.onImageUpload });
+
+      return <div data-testid="readonly-ai-editor">{props.markdown}</div>;
+    },
+  };
+});
 
 const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 
