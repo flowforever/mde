@@ -17,6 +17,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import type { EditorText } from "@mde/editor-react";
 
 import { extractMermaidBlocks, type MermaidBlock } from "./flowchartMarkdown";
 import {
@@ -24,13 +25,12 @@ import {
   getNextMissingInlineFlowchartTargets,
   type InlineFlowchartTargets,
 } from "./flowchartInlineTargets";
-import type { AppText } from "../i18n/appLanguage";
 import { COMPONENT_IDS } from "../componentIds";
 
 interface MermaidFlowchartPanelProps {
   readonly colorScheme: "dark" | "light";
   readonly markdown: string;
-  readonly text: AppText;
+  readonly text: EditorText;
 }
 
 interface RenderedFlowchart {

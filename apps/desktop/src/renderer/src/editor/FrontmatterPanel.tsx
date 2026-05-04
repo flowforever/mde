@@ -1,22 +1,22 @@
 import { AlertTriangle, Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useState, type JSX } from 'react'
+import type { EditorText } from '@mde/editor-react'
 
 import type { MarkdownFrontmatterBlock } from './frontmatter'
-import type { AppText } from '../i18n/appLanguage'
 import { COMPONENT_IDS } from '../componentIds'
 
 interface FrontmatterPanelProps {
   readonly frontmatter: MarkdownFrontmatterBlock
   readonly isReadOnly: boolean
   readonly onApply: (raw: string) => void
-  readonly text: AppText
+  readonly text: EditorText
 }
 
 type FrontmatterViewMode = 'fields' | 'source'
 
 const getSummaryLabel = (
   frontmatter: MarkdownFrontmatterBlock,
-  text: AppText
+  text: EditorText
 ): string =>
   frontmatter.summary.length > 0
     ? frontmatter.summary

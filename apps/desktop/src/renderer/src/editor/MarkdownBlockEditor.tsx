@@ -31,6 +31,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
+import type { EditorText } from "@mde/editor-react";
 
 import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
@@ -89,7 +90,6 @@ import {
   splitMarkdownFrontmatter,
 } from "./frontmatter";
 import type { TreeNode } from "../../../shared/fileTree";
-import type { AppText } from "../i18n/appLanguage";
 import { COMPONENT_IDS } from "../componentIds";
 
 interface MarkdownBlockEditorProps {
@@ -122,7 +122,7 @@ interface MarkdownBlockEditorProps {
   readonly path: string;
   readonly pinnedSearchQueries?: readonly string[];
   readonly searchQuery?: string;
-  readonly text: AppText;
+  readonly text: EditorText;
   readonly workspaceTree?: readonly TreeNode[];
   readonly workspaceRoot: string;
 }

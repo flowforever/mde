@@ -3,6 +3,58 @@ export interface EditorReactPackageInfo {
   readonly phase: 'skeleton'
 }
 
+export type EditorTextKey =
+  | 'common.cancel'
+  | 'editor.frontmatter'
+  | 'editor.frontmatterApply'
+  | 'editor.frontmatterEmpty'
+  | 'editor.frontmatterFields'
+  | 'editor.frontmatterInvalid'
+  | 'editor.frontmatterParseFailed'
+  | 'editor.frontmatterRawYaml'
+  | 'editor.frontmatterSource'
+  | 'editor.linkCreateAndInsert'
+  | 'editor.linkDialogClose'
+  | 'editor.linkDialogKicker'
+  | 'editor.linkDialogTitle'
+  | 'editor.linkDirectoryTree'
+  | 'editor.linkExistingDocument'
+  | 'editor.linkNewDocument'
+  | 'editor.linkNewDocumentDefaultName'
+  | 'editor.linkNewDocumentName'
+  | 'editor.linkNewDocumentNameRequired'
+  | 'editor.linkNoSuggestions'
+  | 'editor.linkRootDirectory'
+  | 'editor.linkSlashDescription'
+  | 'editor.linkSlashTitle'
+  | 'editor.linkSuggestions'
+  | 'editor.linkTarget'
+  | 'editor.linkTargetPlaceholder'
+  | 'editor.saving'
+  | 'editor.unsavedChanges'
+  | 'errors.createMarkdownFileFailed'
+  | 'errors.markdownParseFailed'
+  | 'errors.markdownSerializeFailed'
+  | 'flowchart.closePreview'
+  | 'flowchart.label'
+  | 'flowchart.openPreview'
+  | 'flowchart.previewDialog'
+  | 'flowchart.renderFailed'
+  | 'flowchart.resetView'
+  | 'flowchart.useCenteredPreview'
+  | 'flowchart.useFullPagePreview'
+  | 'flowchart.zoomIn'
+  | 'flowchart.zoomOut'
+  | 'history.exitPreview'
+  | 'history.readOnlyPreview'
+  | 'history.restoreThisVersion'
+
+export type EditorTextParams = Readonly<Record<string, string | number>>
+export type EditorText = (
+  key: EditorTextKey,
+  params?: EditorTextParams
+) => string
+
 export const editorReactPackageInfo: EditorReactPackageInfo = Object.freeze({
   packageName: '@mde/editor-react',
   phase: 'skeleton'
