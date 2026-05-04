@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   findSearchMatches,
   getNextSearchMatchIndex
-} from '../../src/renderer/src/search/editorSearch'
+} from '../../apps/desktop/src/renderer/src/search/editorSearch'
 import {
   filterSearchHistory,
   GLOBAL_SEARCH_HISTORY_LIMIT,
   rememberSearchHistoryItem,
   togglePinnedSearchQuery
-} from '../../src/renderer/src/search/searchHistory'
+} from '../../apps/desktop/src/renderer/src/search/searchHistory'
 
 describe('editorSearch', () => {
   it('finds case-insensitive matches with line and column positions', () => {

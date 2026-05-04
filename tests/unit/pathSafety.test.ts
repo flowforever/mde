@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assertPathInsideWorkspace,
   resolveWorkspacePath
-} from '../../src/main/services/pathSafety'
+} from '../../apps/desktop/src/main/services/pathSafety'
 
 describe('pathSafety', () => {
   const workspacePath = resolve('/tmp/mde-workspace')

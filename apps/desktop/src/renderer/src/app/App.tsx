@@ -47,7 +47,7 @@ import type {
   UpdateCheckResult,
   UpdateDownloadProgress,
 } from "../../../shared/update";
-import packageJson from "../../../../package.json";
+import packageJson from "../../../../../../package.json";
 import { appReducer, createInitialAppState } from "./appReducer";
 import {
   createDropOpenPlan,

@@ -4,11 +4,11 @@ import {
   EDITOR_LINE_SPACING_OPTIONS,
   readEditorLineSpacing,
   writeEditorLineSpacing,
-} from "../../src/renderer/src/editor/editorLineSpacing";
+} from "../../apps/desktop/src/renderer/src/editor/editorLineSpacing";
 import {
   readEditorViewMode,
   writeEditorViewMode,
-} from "../../src/renderer/src/editor/editorViewMode";
+} from "../../apps/desktop/src/renderer/src/editor/editorViewMode";
 
 describe("editor layout preferences integration", () => {
   it("persists editor width and line spacing preferences independently", () => {

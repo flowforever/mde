@@ -11,17 +11,17 @@ import userEvent from "@testing-library/user-event";
 import type { FormEventHandler, KeyboardEventHandler, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
-import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
+import { COMPONENT_IDS } from "../../apps/desktop/src/renderer/src/componentIds";
+import { MarkdownBlockEditor } from "../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor";
 import {
   createSearchRanges,
   isEditorSearchMutationRelevant,
-} from "../../src/renderer/src/editor/editorSearchRanges";
+} from "../../apps/desktop/src/renderer/src/editor/editorSearchRanges";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
   type AppText,
-} from "../../src/renderer/src/i18n/appLanguage";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
 
 const text: AppText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 const zhText: AppText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);

@@ -9,7 +9,7 @@ import {
   createMdeCliScript,
   ensureMdeCliRegistered,
   registerMdeCliInBackground
-} from '../../src/main/services/cliRegistrationService'
+} from '../../apps/desktop/src/main/services/cliRegistrationService'
 
 describe('cliRegistrationService', () => {
   it('leaves an existing mde command untouched', async () => {

@@ -5,7 +5,7 @@ import {
   getDroppedResourcePath,
   getRelativeWorkspacePath,
   hasDroppedResourceTransfer,
-} from "../../src/renderer/src/app/dropOpen";
+} from "../../apps/desktop/src/renderer/src/app/dropOpen";
 
 const createDataTransfer = ({
   files = [],

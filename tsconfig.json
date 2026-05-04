@@ -28,8 +28,8 @@
   "include": [
     "*.config.ts",
     "packages/**/*.ts",
-    "src/**/*.ts",
-    "src/**/*.tsx",
+    "apps/desktop/src/**/*.ts",
+    "apps/desktop/src/**/*.tsx",
     "tests/**/*.ts",
     "tests/**/*.tsx",
     "user-manual/.vitepress/**/*.ts"

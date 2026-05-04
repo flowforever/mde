@@ -5,7 +5,7 @@ import {
   readSearchHistory,
   rememberSearchHistoryItem,
   writeSearchHistory
-} from '../../src/renderer/src/search/searchHistory'
+} from '../../apps/desktop/src/renderer/src/search/searchHistory'
 
 const createStorage = (): Storage => {
   const values = new Map<string, string>()

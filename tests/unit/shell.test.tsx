@@ -10,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
+import { COMPONENT_IDS } from "../../apps/desktop/src/renderer/src/componentIds";
 
 interface MockMarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;
@@ -38,7 +38,7 @@ const mockEditorState = vi.hoisted(() => ({
   changeIndex: 0,
 }));
 
-vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
+vi.mock("../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor", () => {
   const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
     <section aria-label="Mock editor">
       <span>{props.path}</span>
@@ -132,12 +132,12 @@ vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => {
   return { MarkdownBlockEditor: MockMarkdownBlockEditor };
 });
 
-import { App } from "../../src/renderer/src/app/App";
-import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
-import type { AiApi, AiGenerationResult } from "../../src/shared/ai";
-import type { TreeNode } from "../../src/shared/fileTree";
-import type { UpdateApi } from "../../src/shared/update";
-import type { EditorApi } from "../../src/shared/workspace";
+import { App } from "../../apps/desktop/src/renderer/src/app/App";
+import { APP_THEME_STORAGE_KEY } from "../../apps/desktop/src/renderer/src/theme/appThemes";
+import type { AiApi, AiGenerationResult } from "../../apps/desktop/src/shared/ai";
+import type { TreeNode } from "../../apps/desktop/src/shared/fileTree";
+import type { UpdateApi } from "../../apps/desktop/src/shared/update";
+import type { EditorApi } from "../../apps/desktop/src/shared/workspace";
 
 const createDeferred = <Value,>(): {
   readonly promise: Promise<Value>;

@@ -3,8 +3,8 @@ import { join } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { configureAutoUpdates } from '../../src/main/autoUpdate'
-import { UPDATE_CHANNELS } from '../../src/main/ipc/channels'
+import { configureAutoUpdates } from '../../apps/desktop/src/main/autoUpdate'
+import { UPDATE_CHANNELS } from '../../apps/desktop/src/main/ipc/channels'
 
 const createIpcMain = () => {
   const handlers = new Map<string, (event: unknown) => Promise<unknown>>()

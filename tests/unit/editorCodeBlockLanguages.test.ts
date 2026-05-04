@@ -4,7 +4,7 @@ import type { Block } from "@blocknote/core";
 import {
   normalizeCodeBlockLanguageId,
   normalizeImportedCodeBlockLanguages,
-} from "../../src/renderer/src/editor/editorCodeBlockLanguages";
+} from "../../apps/desktop/src/renderer/src/editor/editorCodeBlockLanguages";
 
 describe("editorCodeBlockLanguages", () => {
   it("normalizes common fenced code aliases to visible selector language ids", () => {

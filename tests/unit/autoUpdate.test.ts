@@ -9,8 +9,8 @@ import {
   createGitHubManualUpdateService,
   findCompatibleDmgAsset,
   shouldCheckForUpdates
-} from '../../src/main/autoUpdate'
-import { UPDATE_CHANNELS } from '../../src/main/ipc/channels'
+} from '../../apps/desktop/src/main/autoUpdate'
+import { UPDATE_CHANNELS } from '../../apps/desktop/src/main/ipc/channels'
 
 const releaseResponse = {
   body: '## Bug Fixes\n\n- Improved editor updates.',

@@ -9,7 +9,7 @@ import {
   rememberWorkspace,
   writeActiveWorkspace,
   writeRecentWorkspaces
-} from '../../src/renderer/src/workspaces/recentWorkspaces'
+} from '../../apps/desktop/src/renderer/src/workspaces/recentWorkspaces'
 
 const createStorage = (
   initialValue?: string,

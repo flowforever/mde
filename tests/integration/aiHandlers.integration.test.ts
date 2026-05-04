@@ -4,11 +4,11 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { AI_CHANNELS, WORKSPACE_CHANNELS } from "../../src/main/ipc/channels";
-import { registerAiHandlers } from "../../src/main/ipc/registerAiHandlers";
-import { registerWorkspaceHandlers } from "../../src/main/ipc/registerWorkspaceHandlers";
-import { createAiService } from "../../src/main/services/aiService";
-import { createWorkspaceService } from "../../src/main/services/workspaceService";
+import { AI_CHANNELS, WORKSPACE_CHANNELS } from "../../apps/desktop/src/main/ipc/channels";
+import { registerAiHandlers } from "../../apps/desktop/src/main/ipc/registerAiHandlers";
+import { registerWorkspaceHandlers } from "../../apps/desktop/src/main/ipc/registerWorkspaceHandlers";
+import { createAiService } from "../../apps/desktop/src/main/services/aiService";
+import { createWorkspaceService } from "../../apps/desktop/src/main/services/workspaceService";
 
 type AiServiceOptions = NonNullable<Parameters<typeof createAiService>[0]>;
 type LocateCommand = NonNullable<AiServiceOptions["locateCommand"]>;

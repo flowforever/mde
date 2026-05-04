@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   composeMarkdownWithFrontmatter,
   splitMarkdownFrontmatter
-} from '../../src/renderer/src/editor/frontmatter'
+} from '../../apps/desktop/src/renderer/src/editor/frontmatter'
 
 describe('frontmatter', () => {
   it('splits YAML frontmatter only at the start of a document', () => {

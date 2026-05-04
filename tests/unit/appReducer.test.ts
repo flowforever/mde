@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { appReducer, createInitialAppState } from '../../src/renderer/src/app/appReducer'
-import type { Workspace } from '../../src/shared/workspace'
+import { appReducer, createInitialAppState } from '../../apps/desktop/src/renderer/src/app/appReducer'
+import type { Workspace } from '../../apps/desktop/src/shared/workspace'
 import type {
   DeletedDocumentHistoryEntry,
   DocumentHistoryVersion
-} from '../../src/shared/documentHistory'
+} from '../../apps/desktop/src/shared/documentHistory'
 
 describe('appReducer', () => {
   const workspace: Workspace = {

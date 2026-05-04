@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getLaunchPathFromArgv } from '../../src/main/launchArgs'
+import { getLaunchPathFromArgv } from '../../apps/desktop/src/main/launchArgs'
 
 describe('launch args', () => {
   it('returns null when no path is provided', () => {

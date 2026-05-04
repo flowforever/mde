@@ -7,7 +7,7 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
   type MarkdownBlockEditorAdapter
-} from '../../src/renderer/src/editor/markdownTransforms'
+} from '../../apps/desktop/src/renderer/src/editor/markdownTransforms'
 
 describe('markdownTransforms', () => {
   it('imports Markdown-compatible block types through the editor adapter', async () => {

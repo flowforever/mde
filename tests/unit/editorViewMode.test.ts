@@ -4,7 +4,7 @@ import {
   EDITOR_VIEW_MODE_STORAGE_KEY,
   readEditorViewMode,
   writeEditorViewMode
-} from '../../src/renderer/src/editor/editorViewMode'
+} from '../../apps/desktop/src/renderer/src/editor/editorViewMode'
 
 const createStorage = (
   initialValue?: string

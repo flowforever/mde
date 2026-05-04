@@ -14,7 +14,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { createMarkdownFileService } from '../../src/main/services/markdownFileService'
+import { createMarkdownFileService } from '../../apps/desktop/src/main/services/markdownFileService'
 
 describe('markdownFileService', () => {
   it('reads Markdown files inside the workspace', async () => {

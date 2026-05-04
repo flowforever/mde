@@ -14,7 +14,7 @@ import {
   createPreloadPath,
   createMoveEntryToTrash,
   createWindowOptions
-} from '../../src/main/index'
+} from '../../apps/desktop/src/main/index'
 
 describe('Electron window config', () => {
   it('uses MDE-prefixed runtime diagnostics names', () => {
@@ -326,7 +326,7 @@ describe('Release automation config', () => {
 
 describe('Renderer security policy', () => {
   it('declares a restrictive content security policy', async () => {
-    const html = await readFile('src/renderer/index.html', 'utf8')
+    const html = await readFile('apps/desktop/src/renderer/index.html', 'utf8')
 
     expect(html).toContain('http-equiv="Content-Security-Policy"')
     expect(html).toContain("default-src 'self'")

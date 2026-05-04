@@ -4,7 +4,7 @@ import {
   DOCUMENT_HISTORY_EVENT_LABEL_KEYS,
   DOCUMENT_HISTORY_FILTERS,
   isDocumentHistoryEvent
-} from '../../src/shared/documentHistory'
+} from '../../apps/desktop/src/shared/documentHistory'
 
 describe('documentHistory shared types', () => {
   it('recognizes only supported document history events', () => {

@@ -2,12 +2,12 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FrontmatterPanel } from "../../src/renderer/src/editor/FrontmatterPanel";
-import type { MarkdownFrontmatterBlock } from "../../src/renderer/src/editor/frontmatter";
+import { FrontmatterPanel } from "../../apps/desktop/src/renderer/src/editor/FrontmatterPanel";
+import type { MarkdownFrontmatterBlock } from "../../apps/desktop/src/renderer/src/editor/frontmatter";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
-} from "../../src/renderer/src/i18n/appLanguage";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
 
 const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 

@@ -14,7 +14,7 @@ import {
   resolveSystemAppLanguageId,
   writeAppLanguagePreference,
   writeCustomAppLanguagePacks,
-} from "../../src/renderer/src/i18n/appLanguage";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
 
 describe("app language preferences", () => {
   it("selects Chinese for Chinese system locales and English otherwise", () => {

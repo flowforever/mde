@@ -4,11 +4,11 @@ import { basename, dirname, join, resolve } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { WORKSPACE_CHANNELS } from '../../src/main/ipc/channels'
-import { registerWorkspaceHandlers } from '../../src/main/ipc/registerWorkspaceHandlers'
-import { createWorkspaceService } from '../../src/main/services/workspaceService'
-import type { TreeNode } from '../../src/shared/fileTree'
-import type { WorkspaceLaunchResource } from '../../src/shared/workspace'
+import { WORKSPACE_CHANNELS } from '../../apps/desktop/src/main/ipc/channels'
+import { registerWorkspaceHandlers } from '../../apps/desktop/src/main/ipc/registerWorkspaceHandlers'
+import { createWorkspaceService } from '../../apps/desktop/src/main/services/workspaceService'
+import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
+import type { WorkspaceLaunchResource } from '../../apps/desktop/src/shared/workspace'
 
 const fixtureWorkspacePath = resolve('tests/fixtures/workspace')
 

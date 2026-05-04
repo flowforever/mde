@@ -38,7 +38,7 @@ export default tseslint.config(
     files: [
       '*.config.ts',
       'packages/**/*.{ts,tsx}',
-      'src/**/*.{ts,tsx}',
+      'apps/desktop/src/**/*.{ts,tsx}',
       'tests/**/*.{ts,tsx}',
       'user-manual/.vitepress/**/*.ts'
     ],
@@ -64,7 +64,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['packages/editor-react/**/*.{tsx,jsx}', 'src/renderer/**/*.{tsx,jsx}'],
+    files: ['packages/editor-react/**/*.{tsx,jsx}', 'apps/desktop/src/renderer/**/*.{tsx,jsx}'],
     plugins: {
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh
@@ -78,7 +78,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/main/**/*.{ts,tsx}', 'src/preload/**/*.{ts,tsx}'],
+    files: ['apps/desktop/src/main/**/*.{ts,tsx}', 'apps/desktop/src/preload/**/*.{ts,tsx}'],
     languageOptions: {
       globals: {
         ...globals.node

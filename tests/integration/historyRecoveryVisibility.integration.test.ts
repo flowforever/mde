@@ -2,13 +2,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { appReducer, createInitialAppState } from "../../src/renderer/src/app/appReducer";
-import { ExplorerPane } from "../../src/renderer/src/explorer/ExplorerPane";
+import { appReducer, createInitialAppState } from "../../apps/desktop/src/renderer/src/app/appReducer";
+import { ExplorerPane } from "../../apps/desktop/src/renderer/src/explorer/ExplorerPane";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
-} from "../../src/renderer/src/i18n/appLanguage";
-import type { AppState } from "../../src/renderer/src/app/appTypes";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
+import type { AppState } from "../../apps/desktop/src/renderer/src/app/appTypes";
 
 const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 

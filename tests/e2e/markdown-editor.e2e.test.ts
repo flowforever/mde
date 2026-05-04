@@ -18,8 +18,8 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
-import { COMPONENT_IDS } from '../../src/renderer/src/componentIds'
-import { getAppThemeRows, type AppThemeId } from '../../src/renderer/src/theme/appThemes'
+import { COMPONENT_IDS } from '../../apps/desktop/src/renderer/src/componentIds'
+import { getAppThemeRows, type AppThemeId } from '../../apps/desktop/src/renderer/src/theme/appThemes'
 
 const E2E_TEST_TIMEOUT_MS = 120_000
 const E2E_BUILD_TIMEOUT_MS = 600_000

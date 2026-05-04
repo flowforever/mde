@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extractMermaidBlocks,
   replaceMermaidBlockSource
-} from '../../src/renderer/src/editor/flowchartMarkdown'
+} from '../../apps/desktop/src/renderer/src/editor/flowchartMarkdown'
 
 describe('flowchartMarkdown', () => {
   it('extracts Mermaid fenced blocks from Markdown', () => {

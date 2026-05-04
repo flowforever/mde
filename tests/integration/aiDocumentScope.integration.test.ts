@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAiDocumentKey,
   resolveCurrentAiDocumentKey,
-} from "../../src/renderer/src/app/aiDocumentScope";
+} from "../../apps/desktop/src/renderer/src/app/aiDocumentScope";
 
 describe("AI document scope", () => {
   it("keeps the selected Markdown file scoped while the loaded file is refreshing", () => {

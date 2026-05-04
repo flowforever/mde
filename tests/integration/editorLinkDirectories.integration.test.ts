@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest'
 import {
   createVisibleEditorLinkTree,
   collectExpandedLinkDirectoryOptions
-} from '../../src/renderer/src/editor/editorLinkDirectories'
+} from '../../apps/desktop/src/renderer/src/editor/editorLinkDirectories'
 import {
   DEFAULT_HIDDEN_EXPLORER_WORKSPACES_STORAGE_KEY,
   HIDDEN_EXPLORER_ENTRIES_STORAGE_KEY
-} from '../../src/renderer/src/explorer/hiddenExplorerEntries'
-import type { TreeNode } from '../../src/shared/fileTree'
+} from '../../apps/desktop/src/renderer/src/explorer/hiddenExplorerEntries'
+import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
 
 const createStorage = (
   values: Readonly<Record<string, string>>

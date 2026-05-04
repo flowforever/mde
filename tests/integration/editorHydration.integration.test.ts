@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   replaceEditorDocumentWithoutUndoHistory,
   shouldImportMarkdownIntoEditor
-} from '../../src/renderer/src/editor/editorHydration'
+} from '../../apps/desktop/src/renderer/src/editor/editorHydration'
 
 describe('editor hydration integration', () => {
   it('replaces imported editor content without adding the load to undo history', () => {

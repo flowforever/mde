@@ -8,7 +8,7 @@ import {
   isSupportedMarkdownLinkHref,
   resolveMarkdownLinkTarget
 } from '../../packages/editor-core/src/links'
-import type { TreeNode } from '../../src/shared/fileTree'
+import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
 
 const tree: readonly TreeNode[] = [
   { name: 'README.md', path: 'README.md', type: 'file' },

@@ -6,8 +6,8 @@ import {
   createRelativeMarkdownLink,
   findContainingWorkspace,
   resolveEditorLinkTarget,
-} from "../../src/renderer/src/editor/editorLinks";
-import type { TreeNode } from "../../src/shared/fileTree";
+} from "../../apps/desktop/src/renderer/src/editor/editorLinks";
+import type { TreeNode } from "../../apps/desktop/src/shared/fileTree";
 
 const tree: readonly TreeNode[] = [
   { name: "README.md", path: "README.md", type: "file" },

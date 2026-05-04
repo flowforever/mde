@@ -6,7 +6,7 @@ import {
   forgetCustomAiTranslationLanguage,
   readCustomAiTranslationLanguages,
   rememberCustomAiTranslationLanguage
-} from '../../src/renderer/src/ai/aiLanguages'
+} from '../../apps/desktop/src/renderer/src/ai/aiLanguages'
 
 describe('aiLanguages', () => {
   it('keeps built-in translation languages stable', () => {

@@ -13,7 +13,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { createDocumentHistoryService } from '../../src/main/services/documentHistoryService'
+import { createDocumentHistoryService } from '../../apps/desktop/src/main/services/documentHistoryService'
 
 describe('documentHistoryService', () => {
   const createWorkspace = async (): Promise<string> =>

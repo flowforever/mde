@@ -10,8 +10,8 @@ import {
   setLinkDialogMode,
   updateLinkDialogHref,
   updateLinkDialogNewDocumentName
-} from '../../src/renderer/src/editor/editorLinkDialogState'
-import type { TreeNode } from '../../src/shared/fileTree'
+} from '../../apps/desktop/src/renderer/src/editor/editorLinkDialogState'
+import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
 
 const tree: readonly TreeNode[] = [
   {

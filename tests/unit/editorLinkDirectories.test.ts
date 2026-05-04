@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   collectExpandedLinkDirectoryOptions,
   createInitialLinkDirectoryState
-} from '../../src/renderer/src/editor/editorLinkDirectories'
-import type { TreeNode } from '../../src/shared/fileTree'
+} from '../../apps/desktop/src/renderer/src/editor/editorLinkDirectories'
+import type { TreeNode } from '../../apps/desktop/src/shared/fileTree'
 
 describe('editorLinkDirectories', () => {
   const visibleTree: readonly TreeNode[] = [

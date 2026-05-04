@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { APP_THEMES } from "../../src/renderer/src/theme/appThemes";
+import { APP_THEMES } from "../../apps/desktop/src/renderer/src/theme/appThemes";
 
 const REQUIRED_THEME_TOKENS = [
   "app-bg",
@@ -40,7 +40,7 @@ const REQUIRED_THEME_TOKENS = [
 ] as const;
 
 const readThemeCss = (): Promise<string> =>
-  readFile(resolve("src/renderer/src/styles/theme.css"), "utf8");
+  readFile(resolve("apps/desktop/src/renderer/src/styles/theme.css"), "utf8");
 
 const normalizeHexColor = (hexColor: string): string => hexColor.toLowerCase();
 

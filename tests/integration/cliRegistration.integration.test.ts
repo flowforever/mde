@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { ensureMdeCliRegistered } from '../../src/main/services/cliRegistrationService'
+import { ensureMdeCliRegistered } from '../../apps/desktop/src/main/services/cliRegistrationService'
 
 describe('cli registration integration', () => {
   it('writes an executable mde command into a writable PATH directory', async () => {

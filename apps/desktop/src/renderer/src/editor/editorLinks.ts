@@ -9,7 +9,7 @@ import {
   isSupportedMarkdownLinkHref,
   normalizeNativePath,
   normalizeWorkspaceLinkPath,
-} from "../../../../packages/editor-core/src/links";
+} from "../../../../../../packages/editor-core/src/links";
 import type { RecentWorkspace } from "../workspaces/recentWorkspaces";
 
 export {
@@ -17,8 +17,8 @@ export {
   createMarkdownPathSuggestions,
   createRelativeMarkdownLink,
   normalizeWorkspacePath,
-} from "../../../../packages/editor-core/src/links";
-export type { MarkdownPathSuggestion } from "../../../../packages/editor-core/src/links";
+} from "../../../../../../packages/editor-core/src/links";
+export type { MarkdownPathSuggestion } from "../../../../../../packages/editor-core/src/links";
 
 export type EditorLinkTarget =
   | {

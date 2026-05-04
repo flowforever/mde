@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const readThemeCss = (): Promise<string> =>
-  readFile(resolve("src/renderer/src/styles/theme.css"), "utf8");
+  readFile(resolve("apps/desktop/src/renderer/src/styles/theme.css"), "utf8");
 
 const getCssBlock = (css: string, selector: string): string => {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

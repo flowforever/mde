@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
-import { E2E_WINDOW_MODE_ENV } from '../../src/shared/appIdentity'
+import { E2E_WINDOW_MODE_ENV } from '../../apps/desktop/src/shared/appIdentity'
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
 

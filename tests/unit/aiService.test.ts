@@ -11,7 +11,7 @@ import { delimiter, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { createAiService } from "../../src/main/services/aiService";
+import { createAiService } from "../../apps/desktop/src/main/services/aiService";
 
 type AiServiceOptions = NonNullable<Parameters<typeof createAiService>[0]>;
 type LocateCommand = NonNullable<AiServiceOptions["locateCommand"]>;

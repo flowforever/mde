@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { createWorkspaceService } from '../../src/main/services/workspaceService'
-import { createMarkdownFileService } from '../../src/main/services/markdownFileService'
+import { createWorkspaceService } from '../../apps/desktop/src/main/services/workspaceService'
+import { createMarkdownFileService } from '../../apps/desktop/src/main/services/markdownFileService'
 
 describe('workspaceService', () => {
   it('sorts directories before Markdown files and ignores unsupported entries', async () => {

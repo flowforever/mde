@@ -1,12 +1,12 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AiActionMenu } from "../../src/renderer/src/ai/AiActionMenu";
-import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
+import { AiActionMenu } from "../../apps/desktop/src/renderer/src/ai/AiActionMenu";
+import { COMPONENT_IDS } from "../../apps/desktop/src/renderer/src/componentIds";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
-} from "../../src/renderer/src/i18n/appLanguage";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
 
 type BusyState = "idle" | "refining-summary" | "summarizing" | "translating";
 

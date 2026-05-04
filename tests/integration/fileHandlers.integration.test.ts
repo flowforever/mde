@@ -15,13 +15,13 @@ import { pathToFileURL } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { FILE_CHANNELS, WORKSPACE_CHANNELS } from '../../src/main/ipc/channels'
-import { registerFileHandlers } from '../../src/main/ipc/registerFileHandlers'
-import { registerWorkspaceHandlers } from '../../src/main/ipc/registerWorkspaceHandlers'
-import { createMarkdownFileService } from '../../src/main/services/markdownFileService'
-import { createDocumentHistoryService } from '../../src/main/services/documentHistoryService'
-import { createWorkspaceService } from '../../src/main/services/workspaceService'
-import type { FileContents } from '../../src/shared/workspace'
+import { FILE_CHANNELS, WORKSPACE_CHANNELS } from '../../apps/desktop/src/main/ipc/channels'
+import { registerFileHandlers } from '../../apps/desktop/src/main/ipc/registerFileHandlers'
+import { registerWorkspaceHandlers } from '../../apps/desktop/src/main/ipc/registerWorkspaceHandlers'
+import { createMarkdownFileService } from '../../apps/desktop/src/main/services/markdownFileService'
+import { createDocumentHistoryService } from '../../apps/desktop/src/main/services/documentHistoryService'
+import { createWorkspaceService } from '../../apps/desktop/src/main/services/workspaceService'
+import type { FileContents } from '../../apps/desktop/src/shared/workspace'
 
 const fixtureWorkspacePath = resolve('tests/fixtures/workspace')
 

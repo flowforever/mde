@@ -5,7 +5,7 @@ import {
   DISABLE_SINGLE_INSTANCE_ENV,
   E2E_USER_DATA_PATH_ENV,
   E2E_WINDOW_MODE_ENV,
-} from "../../src/shared/appIdentity";
+} from "../../apps/desktop/src/shared/appIdentity";
 import { createElectronLaunchEnv } from "../e2e/support/e2eLaunchEnv";
 
 describe("E2E launch environment", () => {

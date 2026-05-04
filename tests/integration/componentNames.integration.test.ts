@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { COMPONENT_NAME_ID_MAP } from "../../src/renderer/src/componentIds";
+import { COMPONENT_NAME_ID_MAP } from "../../apps/desktop/src/renderer/src/componentIds";
 
 interface ManualComponentRow {
   readonly componentId: string;
@@ -16,7 +16,14 @@ const MANUAL_PATH = join(
   "zh-CN",
   "component-names.md",
 );
-const RENDERER_SOURCE_ROOT = join(process.cwd(), "src", "renderer", "src");
+const RENDERER_SOURCE_ROOT = join(
+  process.cwd(),
+  "apps",
+  "desktop",
+  "src",
+  "renderer",
+  "src",
+);
 const nonConcreteMarkers = ["命名规则", "第三方内部", "不分配"];
 
 const normalizeMarkdownCodeCell = (cell: string): string =>

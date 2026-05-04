@@ -9,16 +9,16 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ExplorerTree } from "../../src/renderer/src/explorer/ExplorerTree";
-import { ExplorerPane } from "../../src/renderer/src/explorer/ExplorerPane";
-import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
-import type { AppState } from "../../src/renderer/src/app/appTypes";
-import type { TreeNode } from "../../src/shared/fileTree";
-import type { RecentWorkspace } from "../../src/renderer/src/workspaces/recentWorkspaces";
+import { ExplorerTree } from "../../apps/desktop/src/renderer/src/explorer/ExplorerTree";
+import { ExplorerPane } from "../../apps/desktop/src/renderer/src/explorer/ExplorerPane";
+import { COMPONENT_IDS } from "../../apps/desktop/src/renderer/src/componentIds";
+import type { AppState } from "../../apps/desktop/src/renderer/src/app/appTypes";
+import type { TreeNode } from "../../apps/desktop/src/shared/fileTree";
+import type { RecentWorkspace } from "../../apps/desktop/src/renderer/src/workspaces/recentWorkspaces";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
-} from "../../src/renderer/src/i18n/appLanguage";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
 
 const EXPLORER_INTERACTION_TEST_TIMEOUT = 30_000;
 const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);

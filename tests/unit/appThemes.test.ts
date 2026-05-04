@@ -13,7 +13,7 @@ import {
   selectAppTheme,
   type ThemePreference,
   writeThemePreference
-} from '../../src/renderer/src/theme/appThemes'
+} from '../../apps/desktop/src/renderer/src/theme/appThemes'
 
 const getHexHue = (hexColor: string): number => {
   const normalizedHexColor = hexColor.replace('#', '')

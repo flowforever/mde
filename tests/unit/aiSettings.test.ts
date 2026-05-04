@@ -6,8 +6,8 @@ import {
   readAiCliSettings,
   resolveAiGenerationOptions,
   writeAiCliSettings
-} from '../../src/renderer/src/ai/aiSettings'
-import type { AiTool } from '../../src/shared/ai'
+} from '../../apps/desktop/src/renderer/src/ai/aiSettings'
+import type { AiTool } from '../../apps/desktop/src/shared/ai'
 
 const createStorage = (): Storage => {
   let entries: Record<string, string> = {}

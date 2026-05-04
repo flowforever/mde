@@ -1,12 +1,12 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { AiResultPanel } from "../../src/renderer/src/ai/AiResultPanel";
+import { AiResultPanel } from "../../apps/desktop/src/renderer/src/ai/AiResultPanel";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
-} from "../../src/renderer/src/i18n/appLanguage";
-import type { AiGenerationResult } from "../../src/shared/ai";
+} from "../../apps/desktop/src/renderer/src/i18n/appLanguage";
+import type { AiGenerationResult } from "../../apps/desktop/src/shared/ai";
 
 const capturedEditorProps = vi.hoisted(
   () =>
@@ -15,7 +15,7 @@ const capturedEditorProps = vi.hoisted(
     }[],
 );
 
-vi.mock("../../src/renderer/src/editor/MarkdownBlockEditor", () => ({
+vi.mock("../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor", () => ({
   MarkdownBlockEditor: (props: {
     readonly markdown: string;
     readonly onImageUpload: unknown;

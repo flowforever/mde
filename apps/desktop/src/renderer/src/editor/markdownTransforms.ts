@@ -1,7 +1,7 @@
 import {
   rewriteMarkdownImageTargets,
   type MarkdownAssetResolver
-} from '../../../../packages/editor-core/src/assets'
+} from '../../../../../../packages/editor-core/src/assets'
 import {
   createDesktopMarkdownAssetResolver,
   type MarkdownAssetContext

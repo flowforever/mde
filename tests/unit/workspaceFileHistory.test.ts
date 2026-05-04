@@ -9,8 +9,8 @@ import {
   removeWorkspaceFileHistoryEntry,
   renameWorkspaceFileHistoryEntry,
   writeWorkspaceFileHistory
-} from '../../src/renderer/src/workspaces/workspaceFileHistory'
-import type { WorkspaceFileHistory } from '../../src/renderer/src/workspaces/workspaceFileHistory'
+} from '../../apps/desktop/src/renderer/src/workspaces/workspaceFileHistory'
+import type { WorkspaceFileHistory } from '../../apps/desktop/src/renderer/src/workspaces/workspaceFileHistory'
 
 const createStorage = (
   initialValue?: string

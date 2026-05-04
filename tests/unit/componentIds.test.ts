@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   COMPONENT_IDS,
   COMPONENT_NAME_ID_MAP,
-} from "../../src/renderer/src/componentIds";
+} from "../../apps/desktop/src/renderer/src/componentIds";
 
 const kebabComponentIdPattern =
   /^(app|workspace|explorer|editor|search|link|flowchart|ai|settings|updates)\.[a-z0-9]+(?:-[a-z0-9]+)*$/;

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { E2E_WINDOW_MODE_ENV } from "../../src/shared/appIdentity";
+import { E2E_WINDOW_MODE_ENV } from "../../apps/desktop/src/shared/appIdentity";
 import {
   applyReadyToShowWindowMode,
   parseE2EWindowMode,
   resolveReadyToShowWindowAction,
-} from "../../src/main/e2eWindowMode";
+} from "../../apps/desktop/src/main/e2eWindowMode";
 
 describe("E2E window mode", () => {
   it("parses supported modes and defaults unknown E2E values to hidden", () => {

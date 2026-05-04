@@ -3,7 +3,7 @@ import {
   DISABLE_SINGLE_INSTANCE_ENV,
   E2E_USER_DATA_PATH_ENV,
   E2E_WINDOW_MODE_ENV,
-} from '../../../src/shared/appIdentity'
+} from '../../../apps/desktop/src/shared/appIdentity'
 
 const DEFAULT_E2E_WINDOW_MODE = 'hidden'
 
