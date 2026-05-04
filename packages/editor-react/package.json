@@ -1,0 +1,18 @@
+{
+  "name": "@mde/editor-react",
+  "version": "1.5.3",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./styles.css",
+    "./testing": "./src/testing.ts"
+  },
+  "peerDependencies": {
+    "@blocknote/core": "^0.49.0",
+    "@blocknote/mantine": "^0.49.0",
+    "@blocknote/react": "^0.49.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  }
+}

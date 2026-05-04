@@ -30,8 +30,8 @@ export const normalizeCodeBlockLanguageId = (languageId: string): string =>
   codeLanguageAliasMap.get(languageId) ?? languageId;
 
 const normalizeChildren = (
-  children: readonly Block[] | undefined,
-): { readonly children: readonly Block[] | undefined; readonly changed: boolean } => {
+  children: Block[] | undefined,
+): { readonly children: Block[] | undefined; readonly changed: boolean } => {
   if (!children) {
     return { changed: false, children };
   }
@@ -55,7 +55,7 @@ const normalizeImportedCodeBlock = (block: Block): Block => {
 
   if (block.type !== "codeBlock") {
     return normalizedChildren.changed
-      ? ({ ...block, children: normalizedChildren.children as Block[] } as Block)
+      ? { ...block, children: normalizedChildren.children ?? block.children }
       : block;
   }
 
@@ -70,12 +70,12 @@ const normalizeImportedCodeBlock = (block: Block): Block => {
 
   return {
     ...block,
-    children: normalizedChildren.children as Block[],
+    children: normalizedChildren.children ?? block.children,
     props: {
       ...block.props,
       language: normalizedLanguage,
     },
-  } as Block;
+  };
 };
 
 export const normalizeImportedCodeBlockLanguages = (

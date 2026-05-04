@@ -1,4 +1,6 @@
-import type { TreeNode } from '../fileTree'
+import type { TreeNode } from './fileTree'
+
+export type { TreeNode } from './fileTree'
 
 export type EditorHostErrorCode =
   | 'unsupported'

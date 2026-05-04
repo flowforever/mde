@@ -1,7 +1,7 @@
 import type {
   MarkdownFrontmatterBlock,
   ParsedMarkdownFrontmatter
-} from '../frontmatter'
+} from './frontmatter'
 
 export interface MarkdownSourceDocument extends ParsedMarkdownFrontmatter {
   readonly rawMarkdown: string

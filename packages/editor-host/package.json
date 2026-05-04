@@ -1,0 +1,13 @@
+{
+  "name": "@mde/editor-host",
+  "version": "1.5.3",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bridge": "./src/bridge.ts",
+    "./fake": "./src/fake.ts",
+    "./file-tree": "./src/fileTree.ts",
+    "./types": "./src/types.ts"
+  }
+}

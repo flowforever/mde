@@ -1,4 +1,3 @@
-import type { TreeNode } from '../fileTree'
 import type { EditorLinkTarget, MarkdownLinkReference } from './types'
 
 const markdownLinkPattern = /(?<!!)\[[^\]]*\]\(([^)\s]+)(?:[^)]*)\)/g
@@ -7,6 +6,19 @@ export interface MarkdownPathSuggestion {
   readonly path: string
   readonly relativePath: string
 }
+
+export type MarkdownPathTreeNode =
+  | {
+      readonly name: string
+      readonly path: string
+      readonly type: 'file'
+    }
+  | {
+      readonly children: readonly MarkdownPathTreeNode[]
+      readonly name: string
+      readonly path: string
+      readonly type: 'directory'
+    }
 
 export const normalizeWorkspacePath = (filePath: string): string =>
   filePath.replace(/\\/g, '/').replace(/^\/+/u, '').replace(/\/+$/u, '')
@@ -116,7 +128,7 @@ export const normalizeWorkspaceLinkPath = (
 }
 
 export const collectMarkdownFilePaths = (
-  nodes: readonly TreeNode[]
+  nodes: readonly MarkdownPathTreeNode[]
 ): readonly string[] =>
   nodes.flatMap((node) => {
     if (node.type === 'directory') {

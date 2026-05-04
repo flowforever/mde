@@ -209,7 +209,7 @@ describe('Release automation config', () => {
       ])
     )
     expect(packageJson.scripts?.['release:github']).toBe(
-      'npm run release:github:mac'
+      'pnpm run release:github:mac'
     )
     expect(packageJson.scripts?.['release:github:mac']).toContain(
       '--publish always'

@@ -164,7 +164,7 @@ const mockSystemThemePreference = (initialMatches: boolean) => {
     addEventListener: vi.fn(
       (_type: string, listener: EventListenerOrEventListenerObject) => {
         if (typeof listener === "function") {
-          listeners.add(listener as (event: MediaQueryListEvent) => void);
+          listeners.add(listener);
         }
       },
     ),
@@ -178,7 +178,7 @@ const mockSystemThemePreference = (initialMatches: boolean) => {
     removeEventListener: vi.fn(
       (_type: string, listener: EventListenerOrEventListenerObject) => {
         if (typeof listener === "function") {
-          listeners.delete(listener as (event: MediaQueryListEvent) => void);
+          listeners.delete(listener);
         }
       },
     ),

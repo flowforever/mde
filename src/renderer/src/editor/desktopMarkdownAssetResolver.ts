@@ -1,5 +1,5 @@
-import type { MarkdownAssetResolver } from '../../../shared/editorCore/assets'
-import type { MarkdownAssetReference } from '../../../shared/editorCore/types'
+import type { MarkdownAssetResolver } from '../../../../packages/editor-core/src/assets'
+import type { MarkdownAssetReference } from '../../../../packages/editor-core/src/types'
 
 export interface MarkdownAssetContext {
   readonly markdownFilePath: string

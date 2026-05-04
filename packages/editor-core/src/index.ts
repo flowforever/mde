@@ -1,5 +1,7 @@
 export * from './assets'
 export * from './flowcharts'
+export * from './frontmatter'
 export * from './links'
 export * from './markdown'
+export * from './search'
 export * from './types'

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-const editorCoreRoot = join(process.cwd(), 'src/shared/editorCore')
+const editorCoreRoot = join(process.cwd(), 'packages/editor-core/src')
 const forbiddenPatterns = [
   /from ['"]react['"]/u,
   /from ['"]@blocknote\//u,

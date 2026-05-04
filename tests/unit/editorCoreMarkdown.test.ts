@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parseMarkdownSemanticDocument,
   parseMarkdownSourceDocument
-} from '../../src/shared/editorCore/markdown'
+} from '../../packages/editor-core/src/markdown'
 
 describe('editor core Markdown semantics', () => {
   it('preserves source offsets, BOM, CRLF, frontmatter, and raw Markdown', () => {

@@ -1,4 +1,4 @@
-import type { TreeNode } from '../fileTree'
+import type { TreeNode } from './fileTree'
 import type {
   EditorDocumentRef,
   EditorHost,

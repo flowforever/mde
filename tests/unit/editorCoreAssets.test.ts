@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   collectMarkdownAssetReferences,
   rewriteMarkdownImageTargets
-} from '../../src/shared/editorCore/assets'
+} from '../../packages/editor-core/src/assets'
 
 describe('editor core assets', () => {
   it('classifies portable paths, external URLs, and host display URLs', () => {

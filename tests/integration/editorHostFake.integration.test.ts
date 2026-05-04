@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createFakeEditorHost } from '../../src/shared/editorHost/fake'
+import { createFakeEditorHost } from '../../packages/editor-host/src/fake'
 
 describe('fake editor host integration', () => {
   it('covers save, upload image, create linked document, open link, and workspace tree flows', async () => {

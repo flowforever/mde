@@ -1,0 +1,19 @@
+{
+  "name": "@mde/editor-core",
+  "version": "1.5.3",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./assets": "./src/assets.ts",
+    "./flowcharts": "./src/flowcharts.ts",
+    "./frontmatter": "./src/frontmatter.ts",
+    "./links": "./src/links.ts",
+    "./markdown": "./src/markdown.ts",
+    "./search": "./src/search.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1"
+  }
+}

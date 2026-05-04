@@ -1,4 +1,4 @@
-import { splitMarkdownFrontmatter } from '../frontmatter'
+import { splitMarkdownFrontmatter } from './frontmatter'
 import { collectMarkdownAssetReferences } from './assets'
 import { extractMermaidBlocks } from './flowcharts'
 import { collectMarkdownLinkReferences } from './links'

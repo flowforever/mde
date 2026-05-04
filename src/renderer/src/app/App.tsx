@@ -351,7 +351,7 @@ const removeAiDocumentEntry = <Value,>(
     Object.entries(entries).filter(
       ([candidateKey]) => candidateKey !== documentKey,
     ),
-  ) as Record<string, Value>;
+  );
 
 const getWindowTitle = (
   workspace: Workspace | null,

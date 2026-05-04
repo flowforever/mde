@@ -7,7 +7,7 @@ import {
   createRelativeMarkdownLink,
   isSupportedMarkdownLinkHref,
   resolveMarkdownLinkTarget
-} from '../../src/shared/editorCore/links'
+} from '../../packages/editor-core/src/links'
 import type { TreeNode } from '../../src/shared/fileTree'
 
 const tree: readonly TreeNode[] = [

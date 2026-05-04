@@ -93,9 +93,7 @@ export const launchElectronApp = async (
   })
 
   const mainDiagnostics = await app.evaluate(() => {
-    const diagnostics = globalThis.__mdeStartupDiagnostics as
-      | StartupDiagnostics
-      | undefined
+    const diagnostics = globalThis.__mdeStartupDiagnostics
 
     if (!diagnostics) {
       throw new Error('Main-process startup diagnostics were not initialized')
