@@ -10,7 +10,7 @@ const markdownBlockEditorPath = join(
 const appPath = join(process.cwd(), 'apps/desktop/src/renderer/src/app/App.tsx')
 const editorLinksPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/editorLinks.ts'
+  'apps/desktop/src/renderer/src/editorHost/editorLinks.ts'
 )
 
 describe('editor-core links package consumption', () => {

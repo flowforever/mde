@@ -67,10 +67,10 @@ import {
   writeEditorLineSpacing,
   writeEditorViewMode,
 } from "@mde/editor-react";
-import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
-import { createVisibleEditorLinkTree } from "../editor/editorLinkDirectories";
+import { createDesktopMarkdownAssetResolver } from "../editorHost/desktopMarkdownAssetResolver";
+import { createVisibleEditorLinkTree } from "../editorHost/editorLinkDirectories";
 import { collectMarkdownFilePaths } from "@mde/editor-core/links";
-import { resolveEditorLinkTarget } from "../editor/editorLinks";
+import { resolveEditorLinkTarget } from "../editorHost/editorLinks";
 import { getNextSearchMatchIndex } from "@mde/editor-core/search";
 import {
   EDITOR_SEARCH_HISTORY_STORAGE_KEY,

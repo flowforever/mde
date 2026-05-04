@@ -9,7 +9,7 @@ const markdownBlockEditorPath = join(
 )
 const desktopLinkDirectoriesPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/editorLinkDirectories.ts'
+  'apps/desktop/src/renderer/src/editorHost/editorLinkDirectories.ts'
 )
 const linkDirectoriesUnitTestPath = join(
   process.cwd(),

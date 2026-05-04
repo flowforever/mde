@@ -8,7 +8,7 @@ import {
 import {
   findContainingWorkspace,
   resolveEditorLinkTarget,
-} from "../../apps/desktop/src/renderer/src/editor/editorLinks";
+} from "../../apps/desktop/src/renderer/src/editorHost/editorLinks";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 
 const tree: readonly TreeNode[] = [

@@ -10,7 +10,7 @@ const markdownBlockEditorPath = join(
 const appPath = join(process.cwd(), 'apps/desktop/src/renderer/src/app/App.tsx')
 const desktopLinkDirectoriesPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/editorLinkDirectories.ts'
+  'apps/desktop/src/renderer/src/editorHost/editorLinkDirectories.ts'
 )
 
 describe('editor link tree adapter boundary', () => {

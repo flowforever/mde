@@ -8,7 +8,7 @@ import {
   prepareMarkdownForStorage,
   type MarkdownBlockEditorAdapter
 } from '@mde/editor-react'
-import { createDesktopMarkdownAssetResolver } from '../../apps/desktop/src/renderer/src/editor/desktopMarkdownAssetResolver'
+import { createDesktopMarkdownAssetResolver } from '../../apps/desktop/src/renderer/src/editorHost/desktopMarkdownAssetResolver'
 
 describe('markdownTransforms', () => {
   it('imports Markdown-compatible block types through the editor adapter', async () => {

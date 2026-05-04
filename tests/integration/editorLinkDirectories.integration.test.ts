@@ -5,7 +5,7 @@ import {
 } from '@mde/editor-react'
 import {
   createVisibleEditorLinkTree
-} from '../../apps/desktop/src/renderer/src/editor/editorLinkDirectories'
+} from '../../apps/desktop/src/renderer/src/editorHost/editorLinkDirectories'
 import {
   DEFAULT_HIDDEN_EXPLORER_WORKSPACES_STORAGE_KEY,
   HIDDEN_EXPLORER_ENTRIES_STORAGE_KEY
