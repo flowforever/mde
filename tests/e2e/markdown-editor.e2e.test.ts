@@ -770,6 +770,42 @@ test('switches the app language from Preference settings and persists it', async
   }
 })
 
+test('keeps editor contents visible when switching the app language', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+    await expect(editor).toContainText('Root markdown file.')
+
+    await focusTextEndInEditor(window, 'Root markdown file.')
+    await window.keyboard.press('Enter')
+    await window.keyboard.insertText('Language switch draft remains')
+    await expect(editor).toContainText('Language switch draft remains')
+
+    await window.getByRole('button', { name: /^open settings$/i }).click()
+    await expect(window.getByRole('dialog', { name: /^Settings$/ })).toBeVisible()
+    await window.getByRole('button', { name: /^Preference$/ }).click()
+    await window.getByRole('combobox', { name: /^Language$/ }).selectOption('zh')
+
+    await expect(window.getByRole('dialog', { name: /^设置$/ })).toBeVisible()
+    await expect(editor).toContainText('Root markdown file.')
+    await expect(editor).toContainText('Language switch draft remains')
+    await expect
+      .poll(async () => readFile(readmePath, 'utf8'), { timeout: 5_000 })
+      .toContain('Root markdown file.')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('selects the current system theme family without leaving follow-system mode', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp()
 

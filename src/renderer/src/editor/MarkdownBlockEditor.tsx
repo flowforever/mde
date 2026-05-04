@@ -42,7 +42,10 @@ import {
   SUPPORTED_CODE_LANGUAGES,
 } from "./editorCodeBlockLanguages";
 import type { EditorLineSpacing } from "./editorLineSpacing";
-import { replaceEditorDocumentWithoutUndoHistory } from "./editorHydration";
+import {
+  replaceEditorDocumentWithoutUndoHistory,
+  shouldImportMarkdownIntoEditor,
+} from "./editorHydration";
 import {
   collectMarkdownFilePaths,
   createMarkdownPathSuggestions,
@@ -311,6 +314,8 @@ export const MarkdownBlockEditor = forwardRef<
   const pendingBlurSaveTimeoutRef = useRef<number | null>(null);
   const latestDraftMarkdownRef = useRef(draftMarkdown);
   const lastSerializedEditorMarkdownRef = useRef<string | null>(null);
+  const textRef = useRef(text);
+  const previousTextRef = useRef(text);
   const documentIdentity = useMemo(
     () => `${workspaceRoot}:${path}`,
     [path, workspaceRoot],
@@ -329,6 +334,9 @@ export const MarkdownBlockEditor = forwardRef<
   useEffect(() => {
     onOpenLinkRef.current = onOpenLink;
   }, [onOpenLink]);
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
   const assetContext = useMemo(
     () => ({
       markdownFilePath: path,
@@ -422,8 +430,14 @@ export const MarkdownBlockEditor = forwardRef<
     try {
       const contents = await serializeMarkdown();
       const latestDraftMarkdown = latestDraftMarkdownRef.current;
+      const shouldPreserveNonEmptyDraft =
+        contents.trim().length === 0 &&
+        latestDraftMarkdown.trim().length > 0 &&
+        markdown.trim().length > 0 &&
+        lastSerializedEditorMarkdownRef.current === latestDraftMarkdown;
       const contentsToSave =
-        contents === markdown && latestDraftMarkdown !== markdown
+        shouldPreserveNonEmptyDraft ||
+        (contents === markdown && latestDraftMarkdown !== markdown)
           ? latestDraftMarkdown
           : contents;
 
@@ -677,6 +691,41 @@ export const MarkdownBlockEditor = forwardRef<
     [editor, openLinkDialog, text],
   );
 
+  const hydrateEditorFromMarkdown = useCallback(
+    async (isCurrent: () => boolean): Promise<void> => {
+      try {
+        const blocks = normalizeImportedCodeBlockLanguages(
+          await importMarkdownToBlocks(editor, editorMarkdown),
+        );
+
+        if (!isCurrent()) {
+          return;
+        }
+
+        isHydratingRef.current = true;
+        replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[]);
+        lastSerializedEditorMarkdownRef.current = markdown;
+        setParseErrorMessage(null);
+        window.setTimeout(() => {
+          if (isCurrent()) {
+            isHydratingRef.current = false;
+          }
+        }, 0);
+      } catch (error) {
+        if (isCurrent()) {
+          isHydratingRef.current = false;
+          setParseErrorMessage(
+            getErrorMessage(
+              error,
+              textRef.current("errors.markdownParseFailed"),
+            ),
+          );
+        }
+      }
+    },
+    [editor, editorMarkdown, markdown],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
@@ -700,41 +749,18 @@ export const MarkdownBlockEditor = forwardRef<
     let isCurrent = true;
 
     const loadMarkdown = async (): Promise<void> => {
-      try {
-        if (hasLocalChangesRef.current) {
-          return;
-        }
-
-        if (lastSerializedEditorMarkdownRef.current === markdown) {
-          setParseErrorMessage(null);
-          return;
-        }
-
-        const blocks = normalizeImportedCodeBlockLanguages(
-          await importMarkdownToBlocks(editor, editorMarkdown),
-        );
-
-        if (!isCurrent) {
-          return;
-        }
-
-        isHydratingRef.current = true;
-        replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[]);
-        lastSerializedEditorMarkdownRef.current = markdown;
+      if (
+        !shouldImportMarkdownIntoEditor({
+          hasLocalChanges: hasLocalChangesRef.current,
+          lastSerializedEditorMarkdown: lastSerializedEditorMarkdownRef.current,
+          markdown,
+        })
+      ) {
         setParseErrorMessage(null);
-        window.setTimeout(() => {
-          if (isCurrent) {
-            isHydratingRef.current = false;
-          }
-        }, 0);
-      } catch (error) {
-        if (isCurrent) {
-          isHydratingRef.current = false;
-          setParseErrorMessage(
-            getErrorMessage(error, text("errors.markdownParseFailed")),
-          );
-        }
+        return;
       }
+
+      await hydrateEditorFromMarkdown(() => isCurrent);
     };
 
     void loadMarkdown();
@@ -743,7 +769,23 @@ export const MarkdownBlockEditor = forwardRef<
       isCurrent = false;
       isHydratingRef.current = false;
     };
-  }, [documentIdentity, editor, editorMarkdown, markdown, text]);
+  }, [documentIdentity, hydrateEditorFromMarkdown, markdown]);
+
+  useEffect(() => {
+    if (previousTextRef.current === text) {
+      return undefined;
+    }
+
+    previousTextRef.current = text;
+    let isCurrent = true;
+
+    void hydrateEditorFromMarkdown(() => isCurrent);
+
+    return () => {
+      isCurrent = false;
+      isHydratingRef.current = false;
+    };
+  }, [hydrateEditorFromMarkdown, text]);
 
   useEffect(() => {
     latestDraftMarkdownRef.current = draftMarkdown;

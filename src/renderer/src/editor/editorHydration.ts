@@ -17,6 +17,22 @@ export interface EditorHydrationAdapter<Block> {
   ) => unknown
 }
 
+export const shouldImportMarkdownIntoEditor = ({
+  hasLocalChanges,
+  lastSerializedEditorMarkdown,
+  markdown
+}: {
+  readonly hasLocalChanges: boolean
+  readonly lastSerializedEditorMarkdown: string | null
+  readonly markdown: string
+}): boolean => {
+  if (hasLocalChanges) {
+    return false
+  }
+
+  return lastSerializedEditorMarkdown !== markdown
+}
+
 export const replaceEditorDocumentWithoutUndoHistory = <Block>(
   editor: EditorHydrationAdapter<Block>,
   blocks: Block[]

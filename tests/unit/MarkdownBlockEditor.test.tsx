@@ -23,6 +23,7 @@ import {
 } from "../../src/renderer/src/i18n/appLanguage";
 
 const text: AppText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+const zhText: AppText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);
 
 interface MockHighlightRegistry {
   readonly delete: ReturnType<typeof vi.fn>;
@@ -186,6 +187,17 @@ vi.mock("mermaid", () => ({
 }));
 
 describe("MarkdownBlockEditor accessibility", () => {
+  const waitForEditorHydration = async (): Promise<void> => {
+    await waitFor(() => {
+      expect(mockBlockNoteState.lastEditor?.replaceBlocks).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 0);
+      });
+    });
+  };
+
   const installHighlightMock = (): MockHighlightRegistry => {
     const registry = {
       delete: vi.fn(),
@@ -236,6 +248,74 @@ describe("MarkdownBlockEditor accessibility", () => {
     expect(
       screen.queryByRole("button", { name: /save README\.md/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("restores the current draft when app language text changes", async () => {
+    const user = userEvent.setup();
+    const onMarkdownChange = vi.fn();
+    const savedMarkdown = "# Fixture Workspace\n\nRoot markdown file.";
+    const draftMarkdown =
+      "# Fixture Workspace\n\nRoot markdown file.\n\nLanguage switch draft.";
+    const { rerender } = render(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={savedMarkdown}
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown={savedMarkdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={onMarkdownChange}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.tryParseMarkdownToBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      draftMarkdown,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+
+    await waitFor(() => {
+      expect(onMarkdownChange).toHaveBeenCalledWith(draftMarkdown);
+    });
+
+    rerender(
+      <MarkdownBlockEditor
+        colorScheme="light"
+        draftMarkdown={draftMarkdown}
+        errorMessage={null}
+        isDirty
+        isSaving={false}
+        markdown={draftMarkdown}
+        onImageUpload={vi.fn()}
+        onMarkdownChange={onMarkdownChange}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={zhText}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.tryParseMarkdownToBlocks,
+      ).toHaveBeenCalledTimes(2);
+    });
+
+    expect(
+      mockBlockNoteState.lastEditor?.tryParseMarkdownToBlocks,
+    ).toHaveBeenLastCalledWith(draftMarkdown);
   });
 
   it("renders YAML frontmatter as metadata and parses only the Markdown body", async () => {
@@ -582,6 +662,7 @@ describe("MarkdownBlockEditor accessibility", () => {
       </>,
     );
 
+    await waitForEditorHydration();
     await user.click(
       screen.getByRole("button", { name: /trigger editor change/i }),
     );
@@ -706,6 +787,70 @@ describe("MarkdownBlockEditor accessibility", () => {
     });
   });
 
+  it("does not save empty markdown when blur serialization is transiently empty", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+    const savedMarkdown = "# Saved";
+    const draftMarkdown = ["# Saved", "", "Language switch draft"].join("\n");
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={savedMarkdown}
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown={savedMarkdown}
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitForEditorHydration();
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      draftMarkdown,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={draftMarkdown}
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown={draftMarkdown}
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={zhText}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue("");
+
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 250);
+      });
+    });
+    expect(onSaveRequest).not.toHaveBeenCalledWith("");
+  });
+
   it("saves editor input on blur before the BlockNote change callback settles", async () => {
     const user = userEvent.setup();
     const onSaveRequest = vi.fn();
@@ -827,6 +972,7 @@ describe("MarkdownBlockEditor accessibility", () => {
       </>,
     );
 
+    await waitForEditorHydration();
     await user.click(
       screen.getByRole("button", { name: /trigger editor change/i }),
     );
