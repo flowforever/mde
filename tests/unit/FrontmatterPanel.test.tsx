@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FrontmatterPanel } from "../../apps/desktop/src/renderer/src/editor/FrontmatterPanel";
-import type { MarkdownFrontmatterBlock } from "../../apps/desktop/src/renderer/src/editor/frontmatter";
+import type { MarkdownFrontmatterBlock } from "@mde/editor-core/frontmatter";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,

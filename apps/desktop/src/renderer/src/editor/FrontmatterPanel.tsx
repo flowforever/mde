@@ -4,8 +4,7 @@ import {
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   type EditorText
 } from '@mde/editor-react'
-
-import type { MarkdownFrontmatterBlock } from './frontmatter'
+import type { MarkdownFrontmatterBlock } from '@mde/editor-core/frontmatter'
 
 interface FrontmatterPanelProps {
   readonly frontmatter: MarkdownFrontmatterBlock

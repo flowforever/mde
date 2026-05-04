@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   composeMarkdownWithFrontmatter,
   splitMarkdownFrontmatter,
-} from "../../apps/desktop/src/renderer/src/editor/frontmatter";
+} from "@mde/editor-core/frontmatter";
 
 describe("frontmatter round trips", () => {
   it("keeps raw YAML metadata lossless while exposing lightweight fields", () => {

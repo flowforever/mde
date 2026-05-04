@@ -91,7 +91,7 @@ import { FrontmatterPanel } from "./FrontmatterPanel";
 import {
   composeMarkdownWithFrontmatter,
   splitMarkdownFrontmatter,
-} from "./frontmatter";
+} from "@mde/editor-core/frontmatter";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 
 interface MarkdownBlockEditorProps {

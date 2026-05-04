@@ -27,7 +27,7 @@ import type {
   AiTool,
   AiToolId,
 } from "../../shared/ai";
-import { getMarkdownBody } from "../../shared/frontmatter";
+import { getMarkdownBody } from "@mde/editor-core/frontmatter";
 import { assertPathInsideWorkspace, resolveWorkspacePath } from "./pathSafety";
 
 const execFileAsync = promisify(execFile);
