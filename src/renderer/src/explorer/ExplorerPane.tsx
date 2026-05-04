@@ -405,6 +405,12 @@ const resolveCreatedEntryPath = (
   return joinEntryPath(directoryPath, entryPath);
 };
 
+const isEntryAtOrInsideDirectoryPath = (
+  directoryPath: string,
+  entryPath: string,
+): boolean =>
+  entryPath === directoryPath || entryPath.startsWith(`${directoryPath}/`);
+
 interface ThemeDialogColumn {
   readonly id: AppThemeTone;
   readonly labelKey: AppTextKey;
@@ -644,14 +650,40 @@ export const ExplorerPane = ({
   const workspaceContentRef = useRef<HTMLDivElement | null>(null);
   const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
   const locateFileRequestIdRef = useRef(0);
-  const expandedDirectoryPaths =
+  const baseExpandedDirectoryPaths =
     expandedDirectoryState.workspaceRoot === workspaceRoot
       ? expandedDirectoryState.paths
       : EMPTY_EXPANDED_DIRECTORY_PATHS;
+  const expandedDirectoryPaths = useMemo(() => {
+    const selectedEntryAncestorPaths = state.selectedEntryPath
+      ? getAncestorDirectoryPaths(state.selectedEntryPath)
+      : [];
+
+    if (selectedEntryAncestorPaths.length === 0) {
+      return baseExpandedDirectoryPaths;
+    }
+
+    return new Set([
+      ...baseExpandedDirectoryPaths,
+      ...selectedEntryAncestorPaths,
+    ]);
+  }, [baseExpandedDirectoryPaths, state.selectedEntryPath]);
+  const selectedNode =
+    state.workspace && state.selectedEntryPath
+      ? findNodeByPath(state.workspace.tree, state.selectedEntryPath)
+      : null;
+  const selectedFileLocateRequest =
+    selectedNode?.type === "file" && workspaceRoot && state.selectedEntryPath
+      ? {
+          id: 0,
+          path: state.selectedEntryPath,
+          workspaceRoot,
+        }
+      : null;
   const activeLocateFileRequest =
     locateFileRequest?.workspaceRoot === workspaceRoot
       ? locateFileRequest
-      : null;
+      : selectedFileLocateRequest;
   const hiddenEntryPaths = workspaceRoot
     ? (hiddenEntryPathsByWorkspace.get(workspaceRoot) ??
       EMPTY_HIDDEN_ENTRY_PATHS)
@@ -882,14 +914,14 @@ export const ExplorerPane = ({
     setSettingsUpdateErrorMessage(null);
   };
 
-  const requestLocateFile = (filePath: string): void => {
+  const requestLocateFile = useCallback((filePath: string): void => {
     locateFileRequestIdRef.current += 1;
     setLocateFileRequest({
       id: locateFileRequestIdRef.current,
       path: filePath,
       workspaceRoot,
     });
-  };
+  }, [workspaceRoot]);
 
   const refreshDirectoryPaths = (
     directoryPaths: Iterable<string>,
@@ -949,6 +981,14 @@ export const ExplorerPane = ({
         workspaceRoot,
       };
     });
+
+    if (
+      !isExpanded &&
+      state.selectedEntryPath &&
+      isEntryAtOrInsideDirectoryPath(directoryPath, state.selectedEntryPath)
+    ) {
+      onSelectEntry(null);
+    }
 
     if (isExpanded) {
       refreshDirectoryPaths([directoryPath]);

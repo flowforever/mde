@@ -12,6 +12,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { expect, test, type Page } from '@playwright/test'
 
@@ -169,6 +170,37 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
   await expect(workspaceDialogBackdrop).toBeVisible()
   await expect(workspaceDialog).toBeVisible()
 }
+
+const dispatchResourceDragEvent = async (
+  window: Page,
+  type: 'dragenter' | 'dragover' | 'dragleave' | 'drop',
+  resourcePath: string
+): Promise<boolean> =>
+  window.evaluate(
+    ({ eventType, uri }) => {
+      const shell = document.querySelector('.app-shell')
+
+      if (!shell) {
+        throw new Error('Missing app shell')
+      }
+
+      const dataTransfer = new DataTransfer()
+
+      dataTransfer.setData('text/uri-list', uri)
+
+      const event = new DragEvent(eventType, {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer
+      })
+
+      return !shell.dispatchEvent(event)
+    },
+    {
+      eventType: type,
+      uri: pathToFileURL(resourcePath).toString()
+    }
+  )
 
 const openNewWorkspace = async (window: Page): Promise<void> => {
   await ensureWorkspaceDialogOpen(window)
@@ -1120,6 +1152,150 @@ test('opens a workspace from a command line path', async () => {
       window.getByRole('button', { name: /manage workspaces/i })
     ).toBeVisible()
     await expect(window).toHaveTitle(await realpath(workspacePath))
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('shows and clears the external resource drop target feedback', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const introPath = join(workspacePath, 'docs', 'intro.md')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+
+    expect(await dispatchResourceDragEvent(window, 'dragenter', introPath)).toBe(
+      true
+    )
+    expect(await dispatchResourceDragEvent(window, 'dragover', introPath)).toBe(
+      true
+    )
+    await expect(
+      window.getByRole('status', { name: /drop files or folders to open/i })
+    ).toBeVisible()
+
+    await window.keyboard.press('Escape')
+    await expect(
+      window.getByRole('status', { name: /drop files or folders to open/i })
+    ).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('opens a dropped workspace Markdown file in the current window', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const introPath = join(workspacePath, 'docs', 'intro.md')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await dispatchResourceDragEvent(window, 'dragenter', introPath)
+    await dispatchResourceDragEvent(window, 'drop', introPath)
+
+    await expect(window).toHaveTitle(
+      `intro.md - ${await realpath(workspacePath)}`
+    )
+    await expect(
+      window.getByRole('button', { name: /docs folder/i })
+    ).toHaveAttribute('aria-expanded', 'true')
+    await expect(
+      window.getByRole('button', { name: /intro\.md Markdown file/i })
+    ).toHaveAttribute('aria-current', 'page')
+    await expect(window.locator('.bn-editor')).toContainText(
+      'Nested markdown file.'
+    )
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('opens dropped resources in the current empty window', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const fileParentPath = await mkdtemp(join(tmpdir(), 'mde-drop-file-'))
+  const filePath = join(fileParentPath, 'drop-file.md')
+
+  await writeFile(filePath, '# Dropped file')
+
+  const directoryLaunch = await launchElectronApp()
+
+  try {
+    await directoryLaunch.window
+      .getByRole('button', { name: /close workspace popup/i })
+      .click()
+    await dispatchResourceDragEvent(directoryLaunch.window, 'drop', workspacePath)
+
+    await expect(directoryLaunch.window).toHaveTitle(
+      await realpath(workspacePath)
+    )
+    await expect(
+      directoryLaunch.window.getByRole('button', {
+        name: /README\.md Markdown file/i
+      })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    expect(directoryLaunch.startupDiagnostics.errors).toEqual([])
+  } finally {
+    await directoryLaunch.app.close()
+  }
+
+  const fileLaunch = await launchElectronApp()
+
+  try {
+    await fileLaunch.window
+      .getByRole('button', { name: /close workspace popup/i })
+      .click()
+    await dispatchResourceDragEvent(fileLaunch.window, 'drop', filePath)
+
+    await expect(fileLaunch.window).toHaveTitle(
+      `drop-file.md - ${await realpath(fileParentPath)}`
+    )
+    await expect(fileLaunch.window.locator('.bn-editor')).toContainText(
+      'Dropped file'
+    )
+    expect(fileLaunch.startupDiagnostics.errors).toEqual([])
+  } finally {
+    await fileLaunch.app.close()
+  }
+})
+
+test('opens an external dropped Markdown file in a new window', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const externalParentPath = await mkdtemp(join(tmpdir(), 'mde-external-drop-'))
+  const externalFilePath = join(externalParentPath, 'external.md')
+
+  await writeFile(externalFilePath, '# External drop')
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+
+    const newWindowPromise = app.waitForEvent('window')
+
+    await dispatchResourceDragEvent(window, 'drop', externalFilePath)
+
+    const newWindow = await newWindowPromise
+
+    await newWindow.waitForLoadState('domcontentloaded', { timeout: 20_000 })
+    await newWindow.locator('.app-shell').waitFor({
+      state: 'visible',
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
+    await expect(window).toHaveTitle(await realpath(workspacePath))
+    await expect(newWindow).toHaveTitle(
+      `external.md - ${await realpath(externalParentPath)}`
+    )
+    await expect(newWindow.locator('.bn-editor')).toContainText('External drop')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -2806,10 +2982,17 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
       [settingsButton, themeButton].map((button) =>
         button.evaluate((element) => {
           const rect = element.getBoundingClientRect()
+          const style = globalThis.getComputedStyle(element)
 
           return {
             centerY: Math.round(rect.top + rect.height / 2),
-            height: Math.round(rect.height)
+            height: Math.round(rect.height),
+            padding: {
+              bottom: style.paddingBottom,
+              left: style.paddingLeft,
+              right: style.paddingRight,
+              top: style.paddingTop
+            }
           }
         })
       )
@@ -2834,6 +3017,12 @@ test('edits and auto-saves markdown, then creates a new file', async () => {
     expect(new Set(toolbarButtonHeights).size).toBe(1)
     footerButtonMetrics.forEach((metric) => {
       expect(metric.height).toBe(toolbarButtonHeights[0])
+    })
+    expect(footerButtonMetrics[1].padding).toEqual({
+      bottom: '4px',
+      left: '4px',
+      right: '4px',
+      top: '4px'
     })
     expect(new Set(footerButtonMetrics.map((metric) => metric.centerY)).size)
       .toBe(1)

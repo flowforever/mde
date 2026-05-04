@@ -314,6 +314,17 @@ export const registerWorkspaceHandlers = ({
   )
 
   ipcMain.handle(
+    WORKSPACE_CHANNELS.inspectPath,
+    async (_event, resourcePath: unknown) => {
+      if (typeof resourcePath !== 'string') {
+        throw new Error('Launch path must be a string')
+      }
+
+      return workspaceService.inspectPath(resourcePath)
+    }
+  )
+
+  ipcMain.handle(
     WORKSPACE_CHANNELS.openPathInNewWindow,
     async (_event, resourcePath: unknown) => {
       if (typeof resourcePath !== 'string') {

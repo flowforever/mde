@@ -577,6 +577,10 @@ describe("App shell", () => {
       createFolder: vi.fn(),
       createMarkdownFile: vi.fn(),
       deleteEntry: vi.fn(),
+      inspectPath: vi.fn().mockResolvedValue({
+        kind: "markdown-file",
+        path: "/external/external.md",
+      }),
       listDirectory: vi.fn(),
       onLaunchPath: vi.fn(() => vi.fn()),
       openFile: vi.fn(),
@@ -1196,10 +1200,12 @@ describe("App shell", () => {
         "/workspace",
       );
     });
-    await user.click(screen.getByRole("button", { name: /expand docs/i }));
+    const docsRow = screen.getByRole("button", { name: /docs folder/i });
 
+    expect(docsRow).toHaveAttribute("aria-expanded", "true");
+    await user.click(docsRow);
     await waitFor(() => {
-      expect(editorApi.listDirectory).toHaveBeenCalledWith("docs");
+      expect(docsRow).toHaveAttribute("aria-expanded", "false");
     });
     editorApi.listDirectory.mockClear();
 

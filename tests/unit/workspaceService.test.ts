@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -29,6 +29,34 @@ describe('workspaceService', () => {
       ['file', 'README.md']
     ])
     expect(Object.isFrozen(workspace.tree)).toBe(true)
+  })
+
+  it('inspects dropped launch paths without opening them', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-inspect-workspace-'))
+    const markdownPath = join(rootPath, 'note.md')
+    const textPath = join(rootPath, 'note.txt')
+    const service = createWorkspaceService()
+
+    await mkdir(join(rootPath, 'docs'))
+    await writeFile(markdownPath, '# Note')
+    await writeFile(textPath, 'Plain text')
+
+    const canonicalRootPath = await realpath(rootPath)
+    const canonicalMarkdownPath = await realpath(markdownPath)
+    const canonicalTextPath = await realpath(textPath)
+
+    await expect(service.inspectPath(rootPath)).resolves.toMatchObject({
+      kind: 'directory',
+      path: canonicalRootPath
+    })
+    await expect(service.inspectPath(markdownPath)).resolves.toMatchObject({
+      kind: 'markdown-file',
+      path: canonicalMarkdownPath
+    })
+    await expect(service.inspectPath(textPath)).resolves.toMatchObject({
+      kind: 'unsupported-file',
+      path: canonicalTextPath
+    })
   })
 
   it('searches Markdown content across the workspace with bounded previews', async () => {

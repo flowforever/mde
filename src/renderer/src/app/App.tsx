@@ -17,6 +17,7 @@ import {
   AlignVerticalSpaceAround,
   ChevronLeft,
   ChevronRight,
+  FolderOpen,
   History,
   Pin,
   PinOff,
@@ -48,6 +49,11 @@ import type {
 } from "../../../shared/update";
 import packageJson from "../../../../package.json";
 import { appReducer, createInitialAppState } from "./appReducer";
+import {
+  createDropOpenPlan,
+  getDroppedResourcePath,
+  hasDroppedResourceTransfer,
+} from "./dropOpen";
 import {
   createAiDocumentKey,
   resolveCurrentAiDocumentKey,
@@ -336,58 +342,6 @@ interface ExplorerCopiedEntry {
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)));
 
-const normalizeNativePath = (filePath: string): string =>
-  filePath.replace(/\\/g, "/").replace(/\/+$/u, "");
-
-const getRelativeWorkspacePath = (
-  resourcePath: string,
-  workspaceRoot: string,
-): string | null => {
-  const normalizedResourcePath = normalizeNativePath(resourcePath);
-  const normalizedWorkspaceRoot = normalizeNativePath(workspaceRoot);
-
-  if (normalizedResourcePath === normalizedWorkspaceRoot) {
-    return "";
-  }
-
-  if (!normalizedResourcePath.startsWith(`${normalizedWorkspaceRoot}/`)) {
-    return null;
-  }
-
-  return normalizedResourcePath.slice(normalizedWorkspaceRoot.length + 1);
-};
-
-const getDroppedResourcePath = (
-  event: ReactDragEvent<HTMLElement>,
-): string | null => {
-  const [firstFile] = Array.from(event.dataTransfer.files);
-  const nativeFilePath = (
-    firstFile as (File & { readonly path?: string }) | undefined
-  )?.path;
-
-  if (nativeFilePath) {
-    return nativeFilePath;
-  }
-
-  const uriList = event.dataTransfer.getData("text/uri-list");
-  const firstUri = uriList
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0 && !line.startsWith("#"));
-
-  if (!firstUri?.startsWith("file://")) {
-    return null;
-  }
-
-  try {
-    const url = new URL(firstUri);
-
-    return decodeURIComponent(url.pathname);
-  } catch {
-    return null;
-  }
-};
-
 const removeAiDocumentEntry = <Value,>(
   entries: Readonly<Record<string, Value>>,
   documentKey: string,
@@ -471,6 +425,7 @@ export const App = (): React.JSX.Element => {
     readSystemThemeFamily,
   );
   const [isResizingExplorer, setIsResizingExplorer] = useState(false);
+  const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [hasResolvedInitialLaunchPath, setHasResolvedInitialLaunchPath] =
     useState(() => !window.editorApi);
   const [recentWorkspaces, setRecentWorkspaces] =
@@ -532,6 +487,7 @@ export const App = (): React.JSX.Element => {
   const editorSearchShellRef = useRef<HTMLDivElement | null>(null);
   const editorSearchInputRef = useRef<HTMLInputElement | null>(null);
   const hasConsumedInitialLaunchPathRef = useRef(false);
+  const dropTargetDepthRef = useRef(0);
   const appLanguagePack = useMemo(
     () => getAppLanguagePack(appLanguageId, customAppLanguagePacks),
     [appLanguageId, customAppLanguagePacks],
@@ -1272,32 +1228,60 @@ export const App = (): React.JSX.Element => {
 
   const openDroppedPath = useCallback(
     async (resourcePath: string): Promise<void> => {
-      const workspaceRoot = state.workspace?.rootPath ?? null;
-      const relativeWorkspacePath = workspaceRoot
-        ? getRelativeWorkspacePath(resourcePath, workspaceRoot)
+      const droppedPath = window.editorApi?.inspectPath
+        ? await window.editorApi.inspectPath(resourcePath)
         : null;
 
-      if (
-        workspaceRoot &&
-        relativeWorkspacePath?.toLowerCase().endsWith(".md")
-      ) {
-        await loadFile(relativeWorkspacePath, workspaceRoot);
-        return;
+      if (!droppedPath) {
+        throw new Error(text("errors.editorApiUnavailable"));
       }
 
-      if (workspaceRoot && relativeWorkspacePath !== null) {
-        await refreshWorkspaceTree(workspaceRoot);
-        return;
-      }
+      const plan = createDropOpenPlan({
+        currentWorkspace: state.workspace
+          ? {
+              rootPath: state.workspace.rootPath,
+              type: state.workspace.type,
+            }
+          : null,
+        droppedPath,
+      });
 
-      if (workspaceRoot && window.editorApi?.openPathInNewWindow) {
-        await window.editorApi.openPathInNewWindow(resourcePath);
-        return;
-      }
+      switch (plan.kind) {
+        case "load-workspace-file":
+          await refreshWorkspaceTree(
+            state.workspace?.rootPath,
+            plan.refreshDirectoryPaths,
+          );
+          await loadFile(plan.filePath, state.workspace?.rootPath);
+          return;
+        case "refresh-workspace-directory":
+          await refreshWorkspaceTree(
+            state.workspace?.rootPath,
+            plan.refreshDirectoryPaths,
+          );
+          dispatch({
+            entryPath: plan.directoryPath,
+            type: "explorer/entry-selected",
+          });
+          return;
+        case "refresh-workspace-root":
+          await refreshWorkspaceTree(state.workspace?.rootPath);
+          return;
+        case "open-new-window":
+          if (!window.editorApi?.openPathInNewWindow) {
+            throw new Error(text("errors.editorApiUnavailable"));
+          }
 
-      await openPath(resourcePath);
+          await window.editorApi.openPathInNewWindow(plan.resourcePath);
+          return;
+        case "open-current-window":
+          await openPath(plan.resourcePath);
+          return;
+        case "unsupported":
+          throw new Error(text("errors.openDroppedUnsupportedPath"));
+      }
     },
-    [loadFile, openPath, refreshWorkspaceTree, state.workspace?.rootPath],
+    [loadFile, openPath, refreshWorkspaceTree, state.workspace, text],
   );
 
   const openEditorLink = useCallback(
@@ -2293,27 +2277,53 @@ export const App = (): React.JSX.Element => {
     setIsResizingExplorer(true);
   };
 
-  const handleAppDragOver = (event: ReactDragEvent<HTMLElement>): void => {
-    const hasFileTransfer =
-      event.dataTransfer.files.length > 0 ||
-      Array.from(event.dataTransfer.types).includes("Files");
+  const clearDropTarget = useCallback((): void => {
+    dropTargetDepthRef.current = 0;
+    setIsDropTargetActive(false);
+  }, []);
 
-    if (!hasFileTransfer) {
+  const handleAppDragEnter = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!hasDroppedResourceTransfer(event.dataTransfer)) {
       return;
     }
 
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
+    dropTargetDepthRef.current += 1;
+    setIsDropTargetActive(true);
   };
 
-  const handleAppDrop = (event: ReactDragEvent<HTMLElement>): void => {
-    const resourcePath = getDroppedResourcePath(event);
-
-    if (!resourcePath) {
+  const handleAppDragOver = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!hasDroppedResourceTransfer(event.dataTransfer)) {
       return;
     }
 
     event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDropTargetActive(true);
+  };
+
+  const handleAppDragLeave = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!hasDroppedResourceTransfer(event.dataTransfer)) {
+      return;
+    }
+
+    dropTargetDepthRef.current = Math.max(0, dropTargetDepthRef.current - 1);
+    if (dropTargetDepthRef.current === 0) {
+      setIsDropTargetActive(false);
+    }
+  };
+
+  const handleAppDrop = (event: ReactDragEvent<HTMLElement>): void => {
+    const resourcePath = getDroppedResourcePath(event.dataTransfer);
+
+    if (!resourcePath) {
+      clearDropTarget();
+      return;
+    }
+
+    event.preventDefault();
+    clearDropTarget();
     void openDroppedPath(resourcePath).catch((error) => {
       dispatch({
         message: getErrorMessage(error, text("errors.openDroppedPathFailed")),
@@ -2321,6 +2331,22 @@ export const App = (): React.JSX.Element => {
       });
     });
   };
+
+  useEffect(() => {
+    const clearDropTargetOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        clearDropTarget();
+      }
+    };
+
+    window.addEventListener("blur", clearDropTarget);
+    window.addEventListener("keydown", clearDropTargetOnEscape);
+
+    return () => {
+      window.removeEventListener("blur", clearDropTarget);
+      window.removeEventListener("keydown", clearDropTargetOnEscape);
+    };
+  }, [clearDropTarget]);
 
   const resizeExplorerFromKeyboard = (
     event: ReactKeyboardEvent<HTMLDivElement>,
@@ -2890,6 +2916,8 @@ export const App = (): React.JSX.Element => {
       data-theme={resolvedTheme.id}
       data-theme-family={resolvedTheme.family}
       data-theme-mode={themePreference.mode}
+      onDragEnter={handleAppDragEnter}
+      onDragLeave={handleAppDragLeave}
       onDragOver={handleAppDragOver}
       onDrop={handleAppDrop}
       ref={appShellRef}
@@ -2989,6 +3017,21 @@ export const App = (): React.JSX.Element => {
         text={text}
         themePreference={themePreference}
       />
+      {isDropTargetActive ? (
+        <div
+          aria-label={text("dropTarget.ariaLabel")}
+          className="app-drop-target-overlay"
+          role="status"
+        >
+          <div className="app-drop-target-message">
+            <FolderOpen aria-hidden="true" focusable="false" size={28} />
+            <div>
+              <p>{text("dropTarget.title")}</p>
+              <span>{text("dropTarget.description")}</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {!isExplorerCollapsed ? (
         <div
           aria-label={text("editor.resizeExplorerSidebar")}

@@ -122,6 +122,10 @@ describe('workspaceService integration', () => {
       expect.any(Function)
     )
     expect(ipcMain.handle).toHaveBeenCalledWith(
+      WORKSPACE_CHANNELS.inspectPath,
+      expect.any(Function)
+    )
+    expect(ipcMain.handle).toHaveBeenCalledWith(
       WORKSPACE_CHANNELS.openExternalLink,
       expect.any(Function)
     )
@@ -391,13 +395,69 @@ describe('workspaceService integration', () => {
       workspaceService: createWorkspaceService()
     })
 
+    const openWorkspaceByPath = handlers.get(WORKSPACE_CHANNELS.openWorkspaceByPath)
     const openPathInNewWindow = handlers.get(
       WORKSPACE_CHANNELS.openPathInNewWindow
     )
+    const listDirectory = handlers.get(WORKSPACE_CHANNELS.listDirectory)
+
+    await openWorkspaceByPath?.(createIpcEvent(303), workspacePath)
 
     await openPathInNewWindow?.(createIpcEvent(303), workspacePath)
 
     expect(openedPaths).toEqual([workspacePath])
+    expect(((await listDirectory?.(createIpcEvent(303), '')) as TreeNode[])).toEqual([
+      {
+        name: 'new-window.md',
+        path: 'new-window.md',
+        type: 'file'
+      }
+    ])
+  })
+
+  it('inspects renderer-supplied paths through IPC without switching workspaces', async () => {
+    const activeWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-active-'))
+    const droppedWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-dropped-'))
+    const droppedMarkdownPath = join(droppedWorkspacePath, 'dropped.md')
+    const droppedTextPath = join(droppedWorkspacePath, 'dropped.txt')
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await writeFile(join(activeWorkspacePath, 'active.md'), '# Active')
+    await writeFile(droppedMarkdownPath, '# Dropped')
+    await writeFile(droppedTextPath, 'Dropped')
+
+    const session = registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      workspaceService: createWorkspaceService()
+    })
+
+    const event = createIpcEvent(707)
+    const openWorkspaceByPath = handlers.get(WORKSPACE_CHANNELS.openWorkspaceByPath)
+    const inspectPath = handlers.get(WORKSPACE_CHANNELS.inspectPath)
+
+    await openWorkspaceByPath?.(event, activeWorkspacePath)
+
+    await expect(inspectPath?.(event, droppedWorkspacePath)).resolves.toMatchObject({
+      kind: 'directory',
+      path: await realpath(droppedWorkspacePath)
+    })
+    await expect(inspectPath?.(event, droppedMarkdownPath)).resolves.toMatchObject({
+      kind: 'markdown-file',
+      path: await realpath(droppedMarkdownPath)
+    })
+    await expect(inspectPath?.(event, droppedTextPath)).resolves.toMatchObject({
+      kind: 'unsupported-file',
+      path: await realpath(droppedTextPath)
+    })
+    expect(session.getActiveWorkspaceRoot(event)).toBe(
+      await realpath(activeWorkspacePath)
+    )
   })
 
   it('opens remembered workspace files in a separate app window through IPC', async () => {

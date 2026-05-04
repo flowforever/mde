@@ -1,5 +1,6 @@
 export const WORKSPACE_CHANNELS = Object.freeze({
   consumeLaunchPath: "workspace:consume-launch-path",
+  inspectPath: "workspace:inspect-path",
   launchPath: "workspace:launch-path",
   listDirectory: "workspace:list-directory",
   openExternalLink: "workspace:open-external-link",

@@ -2,7 +2,7 @@ import { readdir, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, extname } from 'node:path'
 
 import type { TreeNode } from '../../shared/fileTree'
-import type { Workspace } from '../../shared/workspace'
+import type { Workspace, WorkspacePathInfo } from '../../shared/workspace'
 import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 
 const ignoredEntryNames = new Set([
@@ -16,6 +16,7 @@ const ignoredEntryNames = new Set([
 ])
 
 export interface WorkspaceService {
+  readonly inspectPath: (resourcePath: string) => Promise<WorkspacePathInfo>
   readonly openPath: (resourcePath: string) => Promise<Workspace>
   readonly openMarkdownFile: (filePath: string) => Promise<Workspace>
   readonly openWorkspace: (workspacePath: string) => Promise<Workspace>
@@ -100,6 +101,32 @@ export const createWorkspaceService = (): WorkspaceService => {
   }
 
   return {
+    async inspectPath(resourcePath) {
+      const canonicalPath = await realpath(resourcePath)
+      const resourceStats = await stat(canonicalPath)
+
+      if (resourceStats.isDirectory()) {
+        return Object.freeze({
+          kind: 'directory',
+          path: canonicalPath
+        })
+      }
+
+      if (!resourceStats.isFile()) {
+        return Object.freeze({
+          kind: 'other',
+          path: canonicalPath
+        })
+      }
+
+      return Object.freeze({
+        kind:
+          extname(canonicalPath).toLowerCase() === '.md'
+            ? 'markdown-file'
+            : 'unsupported-file',
+        path: canonicalPath
+      })
+    },
     async openPath(resourcePath) {
       const resourceStats = await stat(resourcePath)
 

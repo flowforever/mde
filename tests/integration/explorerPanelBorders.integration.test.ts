@@ -62,8 +62,11 @@ describe('explorer panel borders', () => {
     expect(settingsButtonBlock).not.toContain('height: 38px')
     expect(themeSelectorBlock).toContain('height: 32px')
     expect(themeSelectorBlock).toContain('min-height: 32px')
+    expect(themeSelectorBlock).toContain(
+      'grid-template-columns: 22px minmax(0, 1fr) auto 14px'
+    )
     expect(themeSelectorBlock).toContain('gap: 4px')
-    expect(themeSelectorBlock).toContain('padding: 3px')
+    expect(themeSelectorBlock).toContain('padding: 4px')
     expect(themeCopyBlock).toContain('align-items: baseline')
     expect(themeCopyBlock).toContain('gap: 6px')
     expect(themePrimaryTextBlock).toContain('flex: 0 0 auto')

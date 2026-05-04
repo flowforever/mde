@@ -63,6 +63,11 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       WORKSPACE_CHANNELS.openPath,
       resourcePath
     ) as Promise<Awaited<ReturnType<EditorApi['openPath']>>>,
+  inspectPath: (resourcePath) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.inspectPath,
+      resourcePath
+    ) as ReturnType<NonNullable<EditorApi['inspectPath']>>,
   openPathInNewWindow: (resourcePath) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openPathInNewWindow,

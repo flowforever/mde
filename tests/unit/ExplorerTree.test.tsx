@@ -1475,7 +1475,10 @@ describe("ExplorerTree", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /expand docs/i }));
+    expect(screen.getByRole("button", { name: /collapse docs/i }))
+      .toBeVisible();
+    expect(screen.getByRole("button", { name: /collapse nested/i }))
+      .toBeVisible();
     onRefreshTree.mockClear();
 
     await user.click(screen.getByRole("button", { name: /refresh explorer/i }));

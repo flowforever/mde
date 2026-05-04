@@ -22,6 +22,11 @@ export interface WorkspaceFileLaunchResource {
 
 export type WorkspaceLaunchResource = string | WorkspaceFileLaunchResource
 
+export interface WorkspacePathInfo {
+  readonly kind: 'directory' | 'markdown-file' | 'other' | 'unsupported-file'
+  readonly path: string
+}
+
 export interface FileContents {
   readonly path: string
   readonly contents: string
@@ -78,6 +83,7 @@ export interface EditorApi {
   readonly openExternalLink?: (url: string) => Promise<void>
   readonly openPath: (resourcePath: string) => Promise<Workspace>
   readonly openPathInNewWindow?: (resourcePath: string) => Promise<void>
+  readonly inspectPath?: (resourcePath: string) => Promise<WorkspacePathInfo>
   readonly openWorkspaceFileInNewWindow?: (
     workspaceRoot: string,
     filePath: string
