@@ -8,6 +8,13 @@
     "./styles.css": "./styles.css",
     "./testing": "./src/testing.ts"
   },
+  "dependencies": {
+    "@mde/editor-core": "workspace:*",
+    "@mde/editor-host": "workspace:*",
+    "lucide-react": "^1.12.0",
+    "mermaid": "^11.14.0",
+    "shiki": "^4.0.2"
+  },
   "peerDependencies": {
     "@blocknote/core": "^0.49.0",
     "@blocknote/mantine": "^0.49.0",
