@@ -32,7 +32,9 @@ import {
   X,
 } from "lucide-react";
 import {
+  createSearchRanges,
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
+  isEditorSearchMutationRelevant,
   type EditorText,
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
@@ -85,10 +87,6 @@ import {
   updateLinkDialogHref,
   updateLinkDialogNewDocumentName,
 } from "./editorLinkDialogState";
-import {
-  createSearchRanges,
-  isEditorSearchMutationRelevant,
-} from "./editorSearchRanges";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import {
   composeMarkdownWithFrontmatter,

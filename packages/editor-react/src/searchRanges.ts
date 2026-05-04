@@ -8,9 +8,7 @@ const SEARCH_EXCLUDED_DERIVED_CONTENT_SELECTOR = [
 const isEditorSearchNodeExcluded = (node: Node): boolean => {
   const element = node instanceof Element ? node : node.parentElement;
 
-  return Boolean(
-    element?.closest(SEARCH_EXCLUDED_DERIVED_CONTENT_SELECTOR),
-  );
+  return Boolean(element?.closest(SEARCH_EXCLUDED_DERIVED_CONTENT_SELECTOR));
 };
 
 export const isEditorSearchMutationRelevant = (

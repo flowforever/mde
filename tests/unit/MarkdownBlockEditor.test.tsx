@@ -16,7 +16,7 @@ import { MarkdownBlockEditor } from "../../apps/desktop/src/renderer/src/editor/
 import {
   createSearchRanges,
   isEditorSearchMutationRelevant,
-} from "../../apps/desktop/src/renderer/src/editor/editorSearchRanges";
+} from "@mde/editor-react";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,

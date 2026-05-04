@@ -55,6 +55,11 @@ export type EditorText = (
   params?: EditorTextParams
 ) => string
 
+export {
+  createSearchRanges,
+  isEditorSearchMutationRelevant
+} from './searchRanges'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string

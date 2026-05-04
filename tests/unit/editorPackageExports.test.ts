@@ -27,6 +27,9 @@ describe('shared editor package exports', () => {
     expect(require.resolve('@mde/editor-host/file-tree')).toMatch(
       /packages\/editor-host\/src\/fileTree\.ts$/u
     )
+    expect(require.resolve('@mde/editor-react')).toMatch(
+      /packages\/editor-react\/src\/index\.ts$/u
+    )
     expect(require.resolve('@mde/editor-react/testing')).toMatch(
       /packages\/editor-react\/src\/testing\.ts$/u
     )
