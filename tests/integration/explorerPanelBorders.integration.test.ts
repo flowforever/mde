@@ -75,4 +75,12 @@ describe('explorer panel borders', () => {
     expect(themeSecondaryTextBlock).toContain('min-width: 0')
     expect(themeSecondaryTextBlock).toContain('line-height: 15px')
   })
+
+  it('keeps settings navigation buttons padded evenly on every side', async () => {
+    const css = await readThemeCss()
+    const settingsNavButtonBlock = getCssBlock(css, '.settings-nav button')
+
+    expect(settingsNavButtonBlock).toContain('padding: 8px')
+    expect(settingsNavButtonBlock).not.toContain('padding: 0 9px')
+  })
 })

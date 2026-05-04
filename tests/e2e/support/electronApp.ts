@@ -6,11 +6,7 @@ import { promisify } from 'node:util'
 
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 
-import {
-  CAPTURE_STARTUP_DIAGNOSTICS_ENV,
-  DISABLE_SINGLE_INSTANCE_ENV,
-  E2E_USER_DATA_PATH_ENV
-} from '../../../src/shared/appIdentity'
+import { createElectronLaunchEnv } from './e2eLaunchEnv'
 
 const execFileAsync = promisify(execFile)
 const startupDiagnosticPattern = /preload|security|unable to load preload/i
@@ -41,13 +37,10 @@ export const launchElectronApp = async (
   const e2eUserDataPath = await mkdtemp(join(tmpdir(), 'mde-e2e-user-data-'))
   const app = await electron.launch({
     args: ['--lang=en-US', 'out/main/index.js', ...options.args ?? []],
-    env: {
-      ...process.env,
-      ...options.env,
-      [CAPTURE_STARTUP_DIAGNOSTICS_ENV]: '1',
-      [DISABLE_SINGLE_INSTANCE_ENV]: '1',
-      [E2E_USER_DATA_PATH_ENV]: e2eUserDataPath
-    }
+    env: createElectronLaunchEnv({
+      e2eUserDataPath,
+      overrideEnv: options.env
+    })
   })
 
   const childProcess = app.process()

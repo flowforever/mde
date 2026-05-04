@@ -23,9 +23,10 @@ npm run build
 ## User Manual
 
 The public user manual lives in [`user-manual/`](user-manual/) and is published through GitHub Pages.
+Manual screenshots are generated from the real Electron app in CI and uploaded as reviewable artifacts. Run the screenshot flow locally only when debugging screenshot changes.
 
 ```bash
-npm run docs:screenshots
+MDE_E2E_WINDOW_MODE=visible npm run docs:screenshots
 npm run docs:build
 npm run docs:dev
 ```
@@ -41,6 +42,8 @@ npm run test:coverage
 npm run test:e2e
 npm run test
 ```
+
+Electron E2E launches default to a hidden test window so local test runs do not steal focus. Use `MDE_E2E_WINDOW_MODE=visible npm run test:e2e` when you need to watch the app, or `MDE_E2E_WINDOW_MODE=inactive npm run test:e2e` when you want the window visible without requesting focus.
 
 ## v1 Limitation
 

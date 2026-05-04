@@ -8,6 +8,7 @@ import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
   E2E_USER_DATA_PATH_ENV,
+  E2E_WINDOW_MODE_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY,
   configureRuntimeIdentity,
   createPreloadPath,
@@ -22,12 +23,14 @@ describe('Electron window config', () => {
     )
     expect(DISABLE_SINGLE_INSTANCE_ENV).toBe('MDE_DISABLE_SINGLE_INSTANCE')
     expect(E2E_USER_DATA_PATH_ENV).toBe('MDE_E2E_USER_DATA_PATH')
+    expect(E2E_WINDOW_MODE_ENV).toBe('MDE_E2E_WINDOW_MODE')
     expect(STARTUP_DIAGNOSTICS_GLOBAL_KEY).toBe('__mdeStartupDiagnostics')
   })
 
   it('keeps renderer isolated from Node.js', () => {
     const options = createWindowOptions('/tmp/preload.js')
 
+    expect(options.show).toBe(false)
     expect(options.webPreferences?.contextIsolation).toBe(true)
     expect(options.webPreferences?.nodeIntegration).toBe(false)
     expect(options.webPreferences?.preload).toBe('/tmp/preload.js')

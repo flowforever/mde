@@ -1,15 +1,36 @@
-import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
+import { E2E_WINDOW_MODE_ENV } from '../../src/shared/appIdentity'
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
 
 const SCREENSHOT_TIMEOUT_MS = 300_000
 const AI_RESULT_TIMEOUT_MS = 90_000
 const OUTPUT_DIR = resolve('user-manual/public/screenshots/zh-CN')
+const SCREENSHOT_WIDTH = 1280
+const SCREENSHOT_HEIGHT = 820
+const EXPECTED_SCREENSHOTS = [
+  'ai-result.png',
+  'editor-main.png',
+  'editor-search.png',
+  'insert-link.png',
+  'mermaid-flowchart.png',
+  'quick-start-open-workspace.png',
+  'settings-theme.png',
+  'workspace-explorer.png',
+  'workspace-search.png'
+] as const
 
 test.setTimeout(SCREENSHOT_TIMEOUT_MS)
 
@@ -58,14 +79,51 @@ const normalizeManualWorkspaceLabels = async (window: Page): Promise<void> => {
   })
 }
 
+const readPngDimensions = (contents: Buffer): {
+  readonly height: number
+  readonly width: number
+} => {
+  expect(contents.subarray(0, 8)).toEqual(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  )
+
+  return {
+    height: contents.readUInt32BE(20),
+    width: contents.readUInt32BE(16)
+  }
+}
+
 const capture = async (window: Page, filename: string): Promise<void> => {
   await window.waitForLoadState('domcontentloaded')
   await window.waitForTimeout(500)
+  await expect(window.locator('.app-shell')).toBeVisible()
   await normalizeManualWorkspaceLabels(window)
-  await window.screenshot({
-    fullPage: true,
-    path: join(OUTPUT_DIR, filename)
+  expect(window.viewportSize()).toEqual({
+    height: SCREENSHOT_HEIGHT,
+    width: SCREENSHOT_WIDTH
   })
+
+  const screenshotPath = join(OUTPUT_DIR, filename)
+
+  await window.screenshot({
+    path: screenshotPath
+  })
+
+  const contents = await readFile(screenshotPath)
+
+  expect(readPngDimensions(contents)).toEqual({
+    height: SCREENSHOT_HEIGHT,
+    width: SCREENSHOT_WIDTH
+  })
+  expect(contents.byteLength).toBeGreaterThan(10_000)
+}
+
+const expectCompleteScreenshotSet = async (): Promise<void> => {
+  const screenshots = (await readdir(OUTPUT_DIR))
+    .filter((filename) => filename.endsWith('.png'))
+    .sort()
+
+  expect(screenshots).toEqual([...EXPECTED_SCREENSHOTS].sort())
 }
 
 const installFakeAiCli = async (): Promise<string> => {
@@ -117,6 +175,7 @@ test('generates zh-CN user manual screenshots', async () => {
   const { app, startupDiagnostics, window } = await launchElectronApp({
     args: [`--test-workspace=${workspacePath}`],
     env: {
+      [E2E_WINDOW_MODE_ENV]: 'visible',
       PATH: `${fakeBinPath}:${process.env.PATH ?? ''}`
     }
   })
@@ -197,6 +256,7 @@ test('generates zh-CN user manual screenshots', async () => {
       window.getByRole('radiogroup', { name: /主题配色|Theme colorways/i })
     ).toBeVisible()
     await capture(window, 'settings-theme.png')
+    await expectCompleteScreenshotSet()
 
     expect(startupDiagnostics.errors).toEqual([])
   } finally {

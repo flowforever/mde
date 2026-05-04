@@ -30,11 +30,13 @@ import {
 } from '../shared/appIdentity'
 import type { WorkspaceLaunchResource } from '../shared/workspace'
 import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
+import { applyReadyToShowWindowMode } from './e2eWindowMode'
 
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
   E2E_USER_DATA_PATH_ENV,
+  E2E_WINDOW_MODE_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
 
@@ -175,7 +177,7 @@ const createMainWindow = async (
   onWindowCreated(window)
 
   window.once('ready-to-show', () => {
-    window.show()
+    applyReadyToShowWindowMode(window)
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {

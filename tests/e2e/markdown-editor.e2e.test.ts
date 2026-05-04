@@ -409,6 +409,27 @@ test('selects and persists a manual theme from settings', async () => {
 
     await window.getByRole('button', { name: /change theme/i }).click()
     await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
+    await expect(window.getByRole('button', { name: /^Theme$/ })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    expect(
+      await window.getByRole('button', { name: /^Theme$/ }).evaluate((element) => {
+        const style = globalThis.getComputedStyle(element)
+
+        return {
+          bottom: style.paddingBottom,
+          left: style.paddingLeft,
+          right: style.paddingRight,
+          top: style.paddingTop
+        }
+      })
+    ).toEqual({
+      bottom: '8px',
+      left: '8px',
+      right: '8px',
+      top: '8px'
+    })
     await window
       .getByRole('switch', { name: /follow system appearance/i })
       .click()
