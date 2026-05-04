@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   extractMermaidBlocks,
   replaceMermaidBlockSource
-} from '../../apps/desktop/src/renderer/src/editor/flowchartMarkdown'
+} from '@mde/editor-core/flowcharts'
 
-describe('flowchartMarkdown', () => {
+describe('editor-core flowcharts', () => {
   it('extracts Mermaid fenced blocks from Markdown', () => {
     const blocks = extractMermaidBlocks(
       [

@@ -9,6 +9,9 @@ describe('shared editor package exports', () => {
     expect(require.resolve('@mde/editor-core/assets')).toMatch(
       /packages\/editor-core\/src\/assets\.ts$/u
     )
+    expect(require.resolve('@mde/editor-core/flowcharts')).toMatch(
+      /packages\/editor-core\/src\/flowcharts\.ts$/u
+    )
     expect(require.resolve('@mde/editor-core/frontmatter')).toMatch(
       /packages\/editor-core\/src\/frontmatter\.ts$/u
     )

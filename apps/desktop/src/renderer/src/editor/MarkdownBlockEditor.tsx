@@ -37,7 +37,7 @@ import {
 } from "@mde/editor-react";
 import type { MarkdownAssetResolver } from "@mde/editor-core/assets";
 
-import { replaceMermaidBlocksFromSource } from "./flowchartMarkdown";
+import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
 import { createEditorCodeHighlighter } from "./editorCodeHighlighter";
 import {

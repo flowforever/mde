@@ -22,7 +22,8 @@ import {
   type EditorText,
 } from "@mde/editor-react";
 
-import { extractMermaidBlocks, type MermaidBlock } from "./flowchartMarkdown";
+import { extractMermaidBlocks } from "@mde/editor-core/flowcharts";
+import type { MermaidBlockReference as MermaidBlock } from "@mde/editor-core/types";
 import {
   areSameInlineFlowchartTargets,
   getNextMissingInlineFlowchartTargets,
