@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 
 import { DEFAULT_AI_TRANSLATION_LANGUAGES } from "./aiLanguages";
 import type { AppText } from "../i18n/appLanguage";
+import { COMPONENT_IDS } from "../componentIds";
 
 export type AiActionBusyState =
   | "idle"
@@ -72,6 +73,7 @@ export const AiSummaryActionButton = ({
       aria-label={text("ai.summarizeMarkdown")}
       aria-busy={isSummarizing}
       className="editor-action-button"
+      data-component-id={COMPONENT_IDS.ai.summaryButton}
       disabled={isBusy}
       onClick={onSummarize}
       title={text("ai.summarizeMarkdown")}
@@ -117,6 +119,7 @@ export const AiTranslateActionMenu = ({
         aria-label={text("ai.translateMarkdown")}
         aria-busy={isTranslating}
         className="editor-action-button"
+        data-component-id={COMPONENT_IDS.editor.actionButton}
         disabled={isBusy}
         onClick={onToggleTranslateMenu}
         title={text("ai.translateMarkdown")}
@@ -131,12 +134,14 @@ export const AiTranslateActionMenu = ({
         <div
           aria-label={text("ai.translationLanguages")}
           className="editor-translate-menu"
+          data-component-id={COMPONENT_IDS.ai.translateMenu}
           role="menu"
         >
           <div className="editor-translate-menu-list">
             {DEFAULT_AI_TRANSLATION_LANGUAGES.map((language) => (
               <button
                 className="editor-translate-menu-item"
+                data-component-id={COMPONENT_IDS.ai.translationLanguageMenuItem}
                 key={language}
                 onClick={() => {
                   onTranslate(language);
@@ -151,6 +156,7 @@ export const AiTranslateActionMenu = ({
               <div className="editor-translate-custom-item" key={language}>
                 <button
                   className="editor-translate-menu-item"
+                  data-component-id={COMPONENT_IDS.ai.translationLanguageMenuItem}
                   onClick={() => {
                     onTranslate(language);
                   }}
@@ -182,6 +188,7 @@ export const AiTranslateActionMenu = ({
           >
             <input
               aria-label={text("ai.customTranslationLanguage")}
+              data-component-id={COMPONENT_IDS.ai.customTranslationLanguageField}
               onChange={(event) => {
                 onCustomLanguageInputChange(event.target.value);
               }}

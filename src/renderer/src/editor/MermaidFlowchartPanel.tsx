@@ -25,6 +25,7 @@ import {
   type InlineFlowchartTargets,
 } from "./flowchartInlineTargets";
 import type { AppText } from "../i18n/appLanguage";
+import { COMPONENT_IDS } from "../componentIds";
 
 interface MermaidFlowchartPanelProps {
   readonly colorScheme: "dark" | "light";
@@ -394,6 +395,7 @@ export const MermaidFlowchartPanel = ({
       <section
         aria-label={text("flowchart.label")}
         className="mermaid-flowchart-card"
+        data-component-id={COMPONENT_IDS.flowchart.previewCard}
         key={block.index}
       >
         <div className="mermaid-flowchart-preview-shell">
@@ -403,6 +405,7 @@ export const MermaidFlowchartPanel = ({
                 index: block.index + 1,
               })}
               className="mermaid-flowchart-preview"
+              data-component-id={COMPONENT_IDS.flowchart.previewButton}
               data-testid={`mermaid-flowchart-preview-${block.index}`}
               onClick={() => {
                 setActivePreviewIndex(block.index);
@@ -419,6 +422,7 @@ export const MermaidFlowchartPanel = ({
           ) : (
             <div
               className="mermaid-flowchart-preview"
+              data-component-id={COMPONENT_IDS.flowchart.errorState}
               data-testid={`mermaid-flowchart-preview-${block.index}`}
             >
               {rendered?.errorMessage ? (
@@ -474,6 +478,7 @@ export const MermaidFlowchartPanel = ({
           aria-label={text("flowchart.previewDialog")}
           aria-modal="true"
           className="mermaid-flowchart-dialog-backdrop"
+          data-component-id={COMPONENT_IDS.flowchart.previewDialog}
           data-view-mode={previewViewMode}
           role="dialog"
         >
@@ -481,9 +486,13 @@ export const MermaidFlowchartPanel = ({
             className="mermaid-flowchart-dialog"
             data-view-mode={previewViewMode}
           >
-            <div className="mermaid-flowchart-dialog-toolbar">
+            <div
+              className="mermaid-flowchart-dialog-toolbar"
+              data-component-id={COMPONENT_IDS.flowchart.dialogToolbar}
+            >
               <button
                 aria-label={text("flowchart.zoomOut")}
+                data-component-id={COMPONENT_IDS.flowchart.zoomOutButton}
                 onClick={() => {
                   updatePreviewScale(-PREVIEW_SCALE_STEP);
                 }}
@@ -494,6 +503,7 @@ export const MermaidFlowchartPanel = ({
               </button>
               <button
                 aria-label={text("flowchart.resetView")}
+                data-component-id={COMPONENT_IDS.flowchart.resetViewButton}
                 onClick={() => {
                   resetPreviewTransform();
                 }}
@@ -504,6 +514,7 @@ export const MermaidFlowchartPanel = ({
               </button>
               <button
                 aria-label={text("flowchart.zoomIn")}
+                data-component-id={COMPONENT_IDS.flowchart.zoomInButton}
                 onClick={() => {
                   updatePreviewScale(PREVIEW_SCALE_STEP);
                 }}
@@ -518,6 +529,7 @@ export const MermaidFlowchartPanel = ({
                     ? text("flowchart.useFullPagePreview")
                     : text("flowchart.useCenteredPreview")
                 }
+                data-component-id={COMPONENT_IDS.flowchart.previewLayoutToggle}
                 onClick={() => {
                   setPreviewViewMode((currentMode) =>
                     currentMode === "centered" ? "full" : "centered",
@@ -538,6 +550,9 @@ export const MermaidFlowchartPanel = ({
               </button>
               <button
                 aria-label={text("flowchart.closePreview")}
+                data-component-id={
+                  COMPONENT_IDS.flowchart.closeFlowchartPreviewButton
+                }
                 onClick={() => {
                   setActivePreviewIndex(null);
                   previewDragRef.current = null;
@@ -551,6 +566,7 @@ export const MermaidFlowchartPanel = ({
             </div>
             <div
               className="mermaid-flowchart-dialog-viewport"
+              data-component-id={COMPONENT_IDS.flowchart.viewport}
               data-dragging={isPreviewDragging}
               data-testid="mermaid-flowchart-dialog-viewport"
               onPointerCancel={endDialogPointerDrag}

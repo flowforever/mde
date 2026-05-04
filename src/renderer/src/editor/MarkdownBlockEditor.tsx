@@ -75,6 +75,7 @@ import {
 } from "./frontmatter";
 import type { TreeNode } from "../../../shared/fileTree";
 import type { AppText } from "../i18n/appLanguage";
+import { COMPONENT_IDS } from "../componentIds";
 
 interface MarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;
@@ -1033,16 +1034,26 @@ export const MarkdownBlockEditor = forwardRef<
   return (
     <div
       className="markdown-editor-shell"
+      data-component-id={COMPONENT_IDS.editor.markdownEditorShell}
       data-testid="markdown-block-editor"
       ref={shellRef}
     >
-      <div className="markdown-editor-titlebar">
+      <div
+        className="markdown-editor-titlebar"
+        data-component-id={COMPONENT_IDS.editor.titlebar}
+      >
         <div className="markdown-editor-file-state">
-          <span className="markdown-editor-path">{path}</span>
+          <span
+            className="markdown-editor-path"
+            data-component-id={COMPONENT_IDS.editor.documentPathLabel}
+          >
+            {path}
+          </span>
           {isSaving ? (
             <span
               aria-live="polite"
               className="markdown-editor-save-state"
+              data-component-id={COMPONENT_IDS.editor.saveStateIndicator}
               role="status"
             >
               {text("editor.saving")}
@@ -1051,6 +1062,7 @@ export const MarkdownBlockEditor = forwardRef<
             <span
               aria-live="polite"
               className="markdown-editor-dirty-state"
+              data-component-id={COMPONENT_IDS.editor.saveStateIndicator}
               role="status"
             >
               {text("editor.unsavedChanges")}
@@ -1062,6 +1074,7 @@ export const MarkdownBlockEditor = forwardRef<
             <>
               <button
                 className="markdown-editor-secondary-button"
+                data-component-id={COMPONENT_IDS.editor.exitHistoryPreviewButton}
                 onClick={onExitHistoryPreview}
                 type="button"
               >
@@ -1069,6 +1082,7 @@ export const MarkdownBlockEditor = forwardRef<
               </button>
               <button
                 className="markdown-editor-primary-button"
+                data-component-id={COMPONENT_IDS.editor.restoreThisVersionButton}
                 onClick={onRestoreHistoryPreview}
                 type="button"
               >
@@ -1083,6 +1097,7 @@ export const MarkdownBlockEditor = forwardRef<
         <section
           aria-live="polite"
           className="markdown-editor-history-preview-banner"
+          data-component-id={COMPONENT_IDS.editor.historyPreviewBanner}
           role="status"
         >
           <strong>{text("history.readOnlyPreview")}</strong>
@@ -1118,6 +1133,7 @@ export const MarkdownBlockEditor = forwardRef<
       ) : null}
       <div
         className="markdown-editor-content"
+        data-component-id={COMPONENT_IDS.editor.markdownEditingSurface}
         data-read-only={isReadOnly ? "true" : "false"}
         data-testid="markdown-editor-content"
         onInputCapture={markEditorInput}
@@ -1185,6 +1201,7 @@ export const MarkdownBlockEditor = forwardRef<
           aria-label={text("editor.linkDialogTitle")}
           aria-modal="true"
           className="editor-link-dialog-backdrop"
+          data-component-id={COMPONENT_IDS.link.pickerDialog}
           role="dialog"
         >
           <section className="editor-link-dialog">
@@ -1198,6 +1215,7 @@ export const MarkdownBlockEditor = forwardRef<
               <button
                 aria-label={text("editor.linkDialogClose")}
                 className="editor-link-icon-button"
+                data-component-id={COMPONENT_IDS.link.pickerCloseButton}
                 onClick={closeLinkDialog}
                 type="button"
               >
@@ -1210,6 +1228,7 @@ export const MarkdownBlockEditor = forwardRef<
                 className={
                   linkDialogState.mode === "insert" ? "is-active" : ""
                 }
+                data-component-id={COMPONENT_IDS.link.existingLinkTab}
                 onClick={() => {
                   setLinkDialogState({
                     ...linkDialogState,
@@ -1227,6 +1246,7 @@ export const MarkdownBlockEditor = forwardRef<
                 className={
                   linkDialogState.mode === "new-document" ? "is-active" : ""
                 }
+                data-component-id={COMPONENT_IDS.link.newDocumentTab}
                 onClick={() => {
                   setLinkDialogState({
                     ...linkDialogState,
@@ -1248,6 +1268,7 @@ export const MarkdownBlockEditor = forwardRef<
                   <input
                     aria-label={text("editor.linkTarget")}
                     autoFocus
+                    data-component-id={COMPONENT_IDS.link.targetField}
                     onChange={(event) => {
                       setLinkDialogState({
                         ...linkDialogState,
@@ -1263,6 +1284,7 @@ export const MarkdownBlockEditor = forwardRef<
                 <div
                   aria-label={text("editor.linkSuggestions")}
                   className="editor-link-suggestion-list"
+                  data-component-id={COMPONENT_IDS.link.suggestionsList}
                   role="listbox"
                 >
                   {linkSuggestions.length > 0 ? (
@@ -1276,6 +1298,7 @@ export const MarkdownBlockEditor = forwardRef<
                             ? "editor-link-suggestion is-active"
                             : "editor-link-suggestion"
                         }
+                        data-component-id={COMPONENT_IDS.link.suggestionRow}
                         key={suggestion.path}
                         onClick={() => {
                           insertEditorLink(
@@ -1308,6 +1331,7 @@ export const MarkdownBlockEditor = forwardRef<
                 <div
                   aria-label={text("editor.linkDirectoryTree")}
                   className="editor-link-directory-tree"
+                  data-component-id={COMPONENT_IDS.link.directoryTree}
                   role="tree"
                 >
                   {directoryOptions.map((directory) => (
@@ -1327,6 +1351,7 @@ export const MarkdownBlockEditor = forwardRef<
                           ? "editor-link-directory is-active"
                           : "editor-link-directory"
                       }
+                      data-component-id={COMPONENT_IDS.link.directoryRow}
                       key={directory.path || "__root__"}
                       onClick={() => {
                         const expandedDirectoryPaths = new Set(
@@ -1384,6 +1409,7 @@ export const MarkdownBlockEditor = forwardRef<
                   <span>{text("editor.linkNewDocumentName")}</span>
                   <input
                     aria-label={text("editor.linkNewDocumentName")}
+                    data-component-id={COMPONENT_IDS.link.newDocumentNameField}
                     onChange={(event) => {
                       setLinkDialogState({
                         ...linkDialogState,
@@ -1400,7 +1426,11 @@ export const MarkdownBlockEditor = forwardRef<
                     value={linkDialogState.newDocumentName}
                   />
                 </label>
-                <button className="editor-link-primary-button" type="submit">
+                <button
+                  className="editor-link-primary-button"
+                  data-component-id={COMPONENT_IDS.link.createAndInsertButton}
+                  type="submit"
+                >
                   {text("editor.linkCreateAndInsert")}
                 </button>
               </form>

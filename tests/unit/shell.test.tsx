@@ -10,6 +10,8 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
+
 interface MockMarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;
   readonly colorScheme: "dark" | "light";
@@ -1417,12 +1419,23 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: /open settings/i }));
     await user.click(screen.getByRole("button", { name: /check update/i }));
 
-    expect(screen.getByRole("dialog", { name: /settings/i })).toBeVisible();
+    const settingsDialog = screen.getByRole("dialog", { name: /settings/i });
+    const checkUpdatesButton = screen.getByRole("button", {
+      name: /check for updates/i,
+    });
+
+    expect(settingsDialog).toBeVisible();
+    expect(settingsDialog).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.settings.dialog,
+    );
+    expect(checkUpdatesButton).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.settings.checkUpdatesButton,
+    );
     expect(screen.getByText(/current version/i)).toBeVisible();
 
-    await user.click(
-      screen.getByRole("button", { name: /check for updates/i }),
-    );
+    await user.click(checkUpdatesButton);
 
     await waitFor(() => {
       expect(updateApi.checkForUpdates).toHaveBeenCalledTimes(1);
@@ -2083,6 +2096,19 @@ describe("App shell", () => {
       name: /search current markdown/i,
     });
 
+    expect(searchButton).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.editor.actionButton,
+    );
+    expect(editorSearchBox).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.search.editorSearchField,
+    );
+    expect(
+      document.querySelector(
+        `[data-component-id="${COMPONENT_IDS.search.editorSearchBar}"]`,
+      ),
+    ).toBeInTheDocument();
     expect(editorSearchBox).toHaveAttribute("type", "text");
 
     await user.type(editorSearchBox, "Original{Enter}");

@@ -18,6 +18,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
+import { COMPONENT_IDS } from '../../src/renderer/src/componentIds'
 import { getAppThemeRows, type AppThemeId } from '../../src/renderer/src/theme/appThemes'
 
 const E2E_TEST_TIMEOUT_MS = 120_000
@@ -1471,6 +1472,36 @@ test('loads README markdown into the block editor surface', async () => {
     await expect(editor).toBeVisible()
     await expect(editor).toContainText('Fixture Workspace')
     await expect(editor).toContainText('Root markdown file.')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('exposes internal component ids on key app regions', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    await expect(
+      window.locator(`[data-component-id="${COMPONENT_IDS.app.shell}"]`)
+    ).toBeVisible()
+    await expect(
+      window.locator(`[data-component-id="${COMPONENT_IDS.explorer.pane}"]`)
+    ).toBeVisible()
+    await expect(
+      window.locator(`[data-component-id="${COMPONENT_IDS.editor.pane}"]`)
+    ).toBeVisible()
+    await expect(
+      window.locator(
+        `[data-component-id="${COMPONENT_IDS.explorer.newMarkdownFileButton}"]`
+      )
+    ).toBeVisible()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

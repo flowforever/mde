@@ -86,6 +86,7 @@ import {
   rememberSearchHistoryItem,
   writeSearchHistory,
 } from "../search/searchHistory";
+import { COMPONENT_IDS } from "../componentIds";
 
 interface ExplorerPaneProps {
   readonly aiSettings?: AiCliSettings;
@@ -1580,6 +1581,7 @@ export const ExplorerPane = ({
           aria-checked={isFollowingSystemTheme}
           aria-label={text("settings.followSystemAppearance")}
           className="theme-system-switch"
+          data-component-id={COMPONENT_IDS.settings.themeModeToggle}
           onClick={() => {
             onToggleSystemTheme(!isFollowingSystemTheme);
           }}
@@ -1594,6 +1596,7 @@ export const ExplorerPane = ({
       <div
         aria-label={text("settings.themeColorways")}
         className="theme-colorway-grid"
+        data-component-id={COMPONENT_IDS.settings.themeColorwayGroup}
         data-column-count={themeDialogColumns.length}
         role="radiogroup"
       >
@@ -1622,6 +1625,7 @@ export const ExplorerPane = ({
                   ]
                     .filter(Boolean)
                     .join(" ")}
+                  data-component-id={COMPONENT_IDS.settings.themeColorwayOption}
                   data-theme-column={column.id}
                   data-theme-id={theme.id}
                   data-theme-row={row.id}
@@ -1670,6 +1674,7 @@ export const ExplorerPane = ({
             <span>{text("settings.aiCli")}</span>
             <select
               aria-label={text("settings.aiCli")}
+              data-component-id={COMPONENT_IDS.settings.aiCliSelector}
               onChange={(event) => {
                 selectAiTool(event.target.value as AiToolId);
               }}
@@ -1686,6 +1691,7 @@ export const ExplorerPane = ({
             <span>{text("settings.defaultModelName")}</span>
             <input
               aria-label={text("settings.defaultModelName")}
+              data-component-id={COMPONENT_IDS.settings.defaultModelField}
               onChange={(event) => {
                 updateSelectedAiModelName(event.target.value);
               }}
@@ -1717,6 +1723,7 @@ export const ExplorerPane = ({
         <span>{text("settings.language")}</span>
         <select
           aria-label={text("settings.language")}
+          data-component-id={COMPONENT_IDS.settings.languageSelector}
           onChange={(event) => {
             setLanguagePreferenceMessage(null);
             setLanguagePreferenceErrorMessage(null);
@@ -1750,6 +1757,7 @@ export const ExplorerPane = ({
             <span>{text("settings.customLanguageName")}</span>
             <input
               aria-label={text("settings.customLanguageName")}
+              data-component-id={COMPONENT_IDS.settings.customLanguagePackField}
               onChange={(event) => {
                 setCustomAppLanguageInput(event.target.value);
               }}
@@ -1760,6 +1768,7 @@ export const ExplorerPane = ({
           </label>
           <button
             className="settings-primary-button"
+            data-component-id={COMPONENT_IDS.settings.generateLanguagePackButton}
             disabled={
               isGeneratingAppLanguage ||
               customAppLanguageInput.trim().length === 0
@@ -1837,6 +1846,7 @@ export const ExplorerPane = ({
       <button
         aria-label={text("settings.checkForUpdates")}
         className="settings-primary-button"
+        data-component-id={COMPONENT_IDS.settings.checkUpdatesButton}
         disabled={isCheckingForUpdates}
         onClick={() => {
           void checkForUpdates();
@@ -1889,6 +1899,7 @@ export const ExplorerPane = ({
           aria-label={text("settings.title")}
           aria-modal="true"
           className="workspace-dialog settings-dialog"
+          data-component-id={COMPONENT_IDS.settings.dialog}
           onClick={(event) => {
             event.stopPropagation();
           }}
@@ -1924,9 +1935,14 @@ export const ExplorerPane = ({
             </button>
           </div>
           <div className="settings-dialog-layout">
-            <nav className="settings-nav" aria-label={text("settings.nav")}>
+            <nav
+              className="settings-nav"
+              aria-label={text("settings.nav")}
+              data-component-id={COMPONENT_IDS.settings.nav}
+            >
               <button
                 aria-current={activeSettingsPanel === "ai" ? "page" : undefined}
+                data-component-id={COMPONENT_IDS.settings.navItem}
                 onClick={() => {
                   setActiveSettingsPanel("ai");
                 }}
@@ -1939,6 +1955,7 @@ export const ExplorerPane = ({
                 aria-current={
                   activeSettingsPanel === "preferences" ? "page" : undefined
                 }
+                data-component-id={COMPONENT_IDS.settings.navItem}
                 onClick={() => {
                   setActiveSettingsPanel("preferences");
                 }}
@@ -1951,6 +1968,7 @@ export const ExplorerPane = ({
                 aria-current={
                   activeSettingsPanel === "theme" ? "page" : undefined
                 }
+                data-component-id={COMPONENT_IDS.settings.navItem}
                 onClick={() => {
                   setActiveSettingsPanel("theme");
                 }}
@@ -1963,6 +1981,7 @@ export const ExplorerPane = ({
                 aria-current={
                   activeSettingsPanel === "updates" ? "page" : undefined
                 }
+                data-component-id={COMPONENT_IDS.settings.navItem}
                 onClick={() => {
                   setActiveSettingsPanel("updates");
                 }}
@@ -1985,6 +2004,7 @@ export const ExplorerPane = ({
                 ),
               })}
               className="settings-panel"
+              data-component-id={COMPONENT_IDS.settings.panel}
             >
               {renderSettingsPanel()}
             </section>
@@ -2000,6 +2020,7 @@ export const ExplorerPane = ({
       <button
         aria-label={text("settings.open")}
         className="explorer-icon-button explorer-footer-settings-button"
+        data-component-id={COMPONENT_IDS.settings.button}
         onClick={() => {
           openSettingsDialog("ai");
         }}
@@ -2011,6 +2032,7 @@ export const ExplorerPane = ({
       <button
         aria-label={text("settings.changeTheme")}
         className="theme-selector-button"
+        data-component-id={COMPONENT_IDS.settings.themeSelectorButton}
         onClick={() => {
           openSettingsDialog("theme");
         }}
@@ -2039,6 +2061,7 @@ export const ExplorerPane = ({
       <aside
         className="explorer-pane is-collapsed"
         aria-label={text("explorer.header")}
+        data-component-id={COMPONENT_IDS.explorer.pane}
       >
         <button
           aria-label={text("explorer.expandSidebar")}
@@ -2052,6 +2075,7 @@ export const ExplorerPane = ({
         <button
           aria-label={text("settings.open")}
           className="explorer-icon-button explorer-collapsed-theme-button"
+          data-component-id={COMPONENT_IDS.settings.button}
           onClick={() => {
             openSettingsDialog("theme");
           }}
@@ -2066,9 +2090,18 @@ export const ExplorerPane = ({
   }
 
   return (
-    <aside className="explorer-pane" aria-label={text("explorer.header")}>
+    <aside
+      className="explorer-pane"
+      aria-label={text("explorer.header")}
+      data-component-id={COMPONENT_IDS.explorer.pane}
+    >
       <div className="explorer-header-row">
-        <div className="explorer-header">{text("explorer.header")}</div>
+        <div
+          className="explorer-header"
+          data-component-id={COMPONENT_IDS.explorer.header}
+        >
+          {text("explorer.header")}
+        </div>
         <button
           aria-label={text("explorer.collapseSidebar")}
           className="explorer-icon-button explorer-sidebar-toggle"
@@ -2084,6 +2117,7 @@ export const ExplorerPane = ({
         aria-haspopup="dialog"
         aria-label={workspaceTriggerAriaLabel}
         className="workspace-manager-button workspace-item-button"
+        data-component-id={COMPONENT_IDS.workspace.managerTrigger}
         disabled={state.isOpeningWorkspace}
         onClick={toggleWorkspaceDialog}
         type="button"
@@ -2100,6 +2134,7 @@ export const ExplorerPane = ({
             aria-label={text("workspace.manager")}
             aria-modal="true"
             className="workspace-dialog"
+            data-component-id={COMPONENT_IDS.workspace.managerDialog}
             onClick={(event) => {
               event.stopPropagation();
             }}
@@ -2138,9 +2173,10 @@ export const ExplorerPane = ({
             </div>
             <div className="workspace-dialog-content">
               <div className="workspace-primary-actions">
-                <button
-                  className="workspace-item-button workspace-action-button"
-                  onClick={() => {
+                  <button
+                    className="workspace-item-button workspace-action-button"
+                    data-component-id={COMPONENT_IDS.workspace.openWorkspaceAction}
+                    onClick={() => {
                     closeWorkspaceDialog();
                     onOpenWorkspace();
                   }}
@@ -2158,9 +2194,10 @@ export const ExplorerPane = ({
                     <span>{text("workspace.actionOpenWorkspaceSubtitle")}</span>
                   </span>
                 </button>
-                <button
-                  className="workspace-item-button workspace-action-button"
-                  onClick={() => {
+                  <button
+                    className="workspace-item-button workspace-action-button"
+                    data-component-id={COMPONENT_IDS.workspace.openMarkdownFileAction}
+                    onClick={() => {
                     closeWorkspaceDialog();
                     onOpenFile();
                   }}
@@ -2184,6 +2221,9 @@ export const ExplorerPane = ({
                     {text("workspace.searchResources")}
                   </span>
                   <input
+                    data-component-id={
+                      COMPONENT_IDS.workspace.recentResourceSearchField
+                    }
                     onChange={(event) => {
                       setWorkspaceSearchQuery(event.target.value);
                     }}
@@ -2198,6 +2238,7 @@ export const ExplorerPane = ({
                 <div
                   aria-label={text("workspace.recentResources")}
                   className="workspace-resource-list"
+                  data-component-id={COMPONENT_IDS.workspace.recentResourceList}
                 >
                   {filteredRecentWorkspaces.length > 0 ? (
                     filteredRecentWorkspaces.map((workspace) => {
@@ -2211,6 +2252,7 @@ export const ExplorerPane = ({
                       return (
                         <div
                           className="workspace-resource-row"
+                          data-component-id={COMPONENT_IDS.workspace.recentResourceRow}
                           key={`${resourceType}:${resourcePath}`}
                         >
                           <button
@@ -2249,6 +2291,9 @@ export const ExplorerPane = ({
                                 },
                               )}
                               className="explorer-icon-button workspace-resource-action workspace-resource-open-window"
+                              data-component-id={
+                                COMPONENT_IDS.workspace.openResourceInNewWindowButton
+                              }
                               onClick={() => {
                                 onOpenWorkspaceInNewWindow(workspace);
                               }}
@@ -2274,6 +2319,9 @@ export const ExplorerPane = ({
                                 },
                               )}
                               className="explorer-icon-button workspace-resource-action workspace-resource-delete"
+                              data-component-id={
+                                COMPONENT_IDS.workspace.forgetRecentResourceButton
+                              }
                               onClick={() => {
                                 onForgetWorkspace(workspace);
                               }}
@@ -2321,10 +2369,12 @@ export const ExplorerPane = ({
           <div
             className="explorer-toolbar"
             aria-label={text("explorer.toolbar")}
+            data-component-id={COMPONENT_IDS.explorer.toolbar}
           >
             <button
               aria-label={text("explorer.searchWorkspaceContents")}
               className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.workspaceSearchButton}
               disabled={!state.workspace}
               onClick={openGlobalSearch}
               title={globalSearchButtonTitle}
@@ -2335,6 +2385,7 @@ export const ExplorerPane = ({
             <button
               aria-label={text("explorer.newMarkdownFile")}
               className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.newMarkdownFileButton}
               onClick={() => {
                 beginAction(
                   "create-file",
@@ -2350,6 +2401,7 @@ export const ExplorerPane = ({
             <button
               aria-label={text("explorer.newFolder")}
               className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.newFolderButton}
               onClick={() => {
                 beginAction(
                   "create-folder",
@@ -2365,6 +2417,9 @@ export const ExplorerPane = ({
             <button
               aria-label={text("history.recoverDeletedDocuments")}
               className="explorer-icon-button"
+              data-component-id={
+                COMPONENT_IDS.explorer.recoverDeletedDocumentsButton
+              }
               onClick={toggleDeletedDocumentsPanel}
               title={text("history.recoverDeletedDocuments")}
               type="button"
@@ -2379,6 +2434,7 @@ export const ExplorerPane = ({
               }
               aria-pressed={shouldShowHiddenEntries}
               className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.showHiddenEntriesButton}
               disabled={!hasHiddenEntries}
               onClick={() => {
                 setShowingHiddenEntriesWorkspaceRoot((currentWorkspaceRoot) =>
@@ -2401,6 +2457,7 @@ export const ExplorerPane = ({
             <button
               aria-label={text("explorer.refresh")}
               className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.refreshButton}
               onClick={() => {
                 refreshDirectoryPaths(expandedDirectoryPaths, true);
               }}
@@ -2413,6 +2470,7 @@ export const ExplorerPane = ({
           {deleteConfirmation && state.selectedEntryPath ? (
             <div
               className="explorer-delete-confirmation"
+              data-component-id={COMPONENT_IDS.explorer.deleteConfirmationPopover}
               style={
                 {
                   "--delete-confirmation-x": `${deleteConfirmation.x}px`,
@@ -2475,6 +2533,7 @@ export const ExplorerPane = ({
                 <div
                   aria-label={`${contextMenu.entry.name} actions`}
                   className="explorer-context-menu"
+                  data-component-id={COMPONENT_IDS.explorer.contextMenu}
                   role="menu"
                   style={
                     {
@@ -2489,6 +2548,7 @@ export const ExplorerPane = ({
                   {contextMenu.entry.type === "directory" ? (
                     <>
                       <button
+                        data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                         onClick={beginContextCreateFile}
                         role="menuitem"
                         type="button"
@@ -2501,6 +2561,7 @@ export const ExplorerPane = ({
                         <span>{text("explorer.newMarkdownFile")}</span>
                       </button>
                       <button
+                        data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                         onClick={beginContextCreateFolder}
                         role="menuitem"
                         type="button"
@@ -2515,6 +2576,7 @@ export const ExplorerPane = ({
                     </>
                   ) : null}
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={copyContextEntry}
                     role="menuitem"
                     type="button"
@@ -2523,6 +2585,7 @@ export const ExplorerPane = ({
                     <span>{text("explorer.copyEntry")}</span>
                   </button>
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={pasteIntoContextEntry}
                     role="menuitem"
                     type="button"
@@ -2535,6 +2598,7 @@ export const ExplorerPane = ({
                     <span>{text("explorer.pasteEntry")}</span>
                   </button>
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={() => {
                       copyContextEntryPath("relative");
                     }}
@@ -2545,6 +2609,7 @@ export const ExplorerPane = ({
                     <span>{text("explorer.copyRelativePath")}</span>
                   </button>
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={() => {
                       copyContextEntryPath("absolute");
                     }}
@@ -2555,6 +2620,7 @@ export const ExplorerPane = ({
                     <span>{text("explorer.copyAbsolutePath")}</span>
                   </button>
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={beginContextRename}
                     role="menuitem"
                     type="button"
@@ -2563,6 +2629,7 @@ export const ExplorerPane = ({
                     <span>{text("common.rename")}</span>
                   </button>
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={
                       isContextEntryHidden ? showContextEntry : hideContextEntry
                     }
@@ -2581,6 +2648,7 @@ export const ExplorerPane = ({
                     </span>
                   </button>
                   <button
+                    data-component-id={COMPONENT_IDS.explorer.contextMenuItem}
                     onClick={beginContextDelete}
                     role="menuitem"
                     type="button"
@@ -2599,6 +2667,7 @@ export const ExplorerPane = ({
                 aria-valuemin={RECENT_FILES_PANEL_HEIGHT_MIN}
                 aria-valuenow={recentFilesPanelState.height}
                 className="explorer-panel-resize-handle"
+                data-component-id={COMPONENT_IDS.explorer.recentFilesResizeHandle}
                 onKeyDown={resizeRecentFilesFromKeyboard}
                 onPointerDown={beginRecentFilesResize}
                 role="separator"
@@ -2613,6 +2682,7 @@ export const ExplorerPane = ({
               ]
                 .filter(Boolean)
                 .join(" ")}
+              data-component-id={COMPONENT_IDS.explorer.recentFilesPanel}
               style={recentFilesSectionStyle}
             >
               <button
@@ -2645,6 +2715,7 @@ export const ExplorerPane = ({
                           path: filePath,
                         })}
                         className="explorer-recent-file-button"
+                        data-component-id={COMPONENT_IDS.explorer.recentFileRow}
                         key={filePath}
                         onClick={() => {
                           onOpenRecentFile(filePath);
@@ -2672,6 +2743,7 @@ export const ExplorerPane = ({
               <section
                 aria-label={text("history.deletedDocuments")}
                 className="explorer-deleted-documents-section"
+                data-component-id={COMPONENT_IDS.explorer.deletedDocumentsPanel}
               >
                 <button
                   aria-expanded={isDeletedDocumentsExpanded}
@@ -2706,6 +2778,9 @@ export const ExplorerPane = ({
                             path: entry.path,
                           })}
                           className="explorer-deleted-document-button"
+                          data-component-id={
+                            COMPONENT_IDS.explorer.deletedDocumentRow
+                          }
                           key={entry.documentId}
                           onClick={() => {
                             onSelectDeletedDocumentHistoryEntry(entry);
@@ -2747,6 +2822,7 @@ export const ExplorerPane = ({
           <section
             aria-label={text("globalSearch.title")}
             className="global-search-dialog"
+            data-component-id={COMPONENT_IDS.search.workspaceSearchDialog}
             role="dialog"
           >
             <div
@@ -2765,8 +2841,8 @@ export const ExplorerPane = ({
               }}
             >
               <form
-                aria-label={text("explorer.searchWorkspaceContents")}
-                className="global-search-form"
+                  aria-label={text("explorer.searchWorkspaceContents")}
+                  className="global-search-form"
                 onSubmit={(event) => {
                   event.preventDefault();
                   rememberGlobalSearchQuery(globalSearchQuery);
@@ -2776,6 +2852,7 @@ export const ExplorerPane = ({
                 <Search aria-hidden="true" focusable="false" size={18} />
                 <input
                   aria-label={text("explorer.searchWorkspaceContents")}
+                  data-component-id={COMPONENT_IDS.search.workspaceSearchField}
                   onChange={(event) => {
                     const nextQuery = event.target.value;
 
@@ -2818,6 +2895,9 @@ export const ExplorerPane = ({
                 <div
                   aria-label={text("globalSearch.history")}
                   className="global-search-history global-search-history-tags"
+                  data-component-id={
+                    COMPONENT_IDS.search.workspaceSearchHistoryTags
+                  }
                   role="listbox"
                 >
                   <div className="global-search-history-kicker">
@@ -2834,8 +2914,9 @@ export const ExplorerPane = ({
                         aria-label={text("globalSearch.useHistoryItem", {
                           query: historyItem,
                         })}
-                        className="global-search-history-tag"
-                        key={historyItem}
+                      className="global-search-history-tag"
+                      data-component-id={COMPONENT_IDS.search.historyTag}
+                      key={historyItem}
                         onClick={() => {
                           setGlobalSearchQuery(historyItem);
                           setGlobalSearchResult(null);
@@ -2880,6 +2961,9 @@ export const ExplorerPane = ({
                         path: result.path,
                       })}
                       className="global-search-result"
+                      data-component-id={
+                        COMPONENT_IDS.search.workspaceSearchResultRow
+                      }
                       key={`${result.path}:${match.lineNumber}:${match.columnNumber}`}
                       onClick={() => {
                         rememberGlobalSearchQuery(globalSearchResult.query);
@@ -2902,7 +2986,7 @@ export const ExplorerPane = ({
                           ? ` · ${text("globalSearch.metadataMatch")}`
                           : ""}
                       </span>
-                      <span>
+                      <span data-component-id={COMPONENT_IDS.search.resultSnippet}>
                         {renderHighlightedSearchText(
                           match.preview,
                           globalSearchResult.query,

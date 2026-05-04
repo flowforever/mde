@@ -3,6 +3,7 @@ import type {
   UpdateDownloadProgress,
 } from "../../../shared/update";
 import type { AppText } from "../i18n/appLanguage";
+import { COMPONENT_IDS } from "../componentIds";
 
 export type UpdateDialogStatus =
   | "available"
@@ -97,6 +98,7 @@ export const UpdateDialog = ({
         aria-label={text("updates.mdeUpdate")}
         aria-modal="true"
         className="update-dialog"
+        data-component-id={COMPONENT_IDS.updates.dialog}
         role="dialog"
       >
         <div className="update-dialog-header">
@@ -146,6 +148,11 @@ export const UpdateDialog = ({
           {primaryLabel ? (
             <button
               className="update-dialog-primary"
+              data-component-id={
+                update.installMode === "open-dmg"
+                  ? COMPONENT_IDS.updates.downloadAndInstallButton
+                  : COMPONENT_IDS.updates.restartToUpdateButton
+              }
               disabled={isPrimaryDisabled}
               onClick={onInstall}
               type="button"

@@ -149,6 +149,7 @@ import {
   type AppText,
   type AppTextKey,
 } from "../i18n/appLanguage";
+import { COMPONENT_IDS } from "../componentIds";
 
 declare global {
   interface Window {
@@ -2554,6 +2555,7 @@ export const App = (): React.JSX.Element => {
                 aria-haspopup="menu"
                 aria-label={editorLineSpacingLabel}
                 className="editor-action-button"
+                data-component-id={COMPONENT_IDS.editor.actionButton}
                 onClick={() => {
                   setIsEditorLineSpacingMenuOpen(
                     (currentValue) => !currentValue,
@@ -2609,6 +2611,7 @@ export const App = (): React.JSX.Element => {
         <button
           aria-label={editorViewToggleLabel}
           className="editor-action-button"
+          data-component-id={COMPONENT_IDS.editor.actionButton}
           onClick={() => {
             setEditorViewMode((currentMode) => {
               const nextMode =
@@ -2642,6 +2645,7 @@ export const App = (): React.JSX.Element => {
               aria-label={text("history.versionHistory")}
               aria-pressed={Boolean(state.isDocumentHistoryPanelVisible)}
               className="editor-action-button"
+              data-component-id={COMPONENT_IDS.editor.actionButton}
               onClick={() => {
                 void toggleVersionHistory();
               }}
@@ -2696,6 +2700,7 @@ export const App = (): React.JSX.Element => {
           element: (
             <div
               className="editor-search-shell"
+              data-component-id={COMPONENT_IDS.search.editorSearchBar}
               onBlur={(event) => {
                 const nextFocusedElement = event.relatedTarget;
 
@@ -2724,6 +2729,7 @@ export const App = (): React.JSX.Element => {
                   <Search aria-hidden="true" size={15} />
                   <input
                     aria-label={text("editor.markdownSearch")}
+                    data-component-id={COMPONENT_IDS.search.editorSearchField}
                     onChange={(event) => {
                       applyEditorSearchQuery(event.target.value);
                       setIsEditorSearchHistoryOpen(true);
@@ -2765,11 +2771,13 @@ export const App = (): React.JSX.Element => {
                 <div
                   aria-label={text("editor.searchHistory")}
                   className="search-history-popover editor-search-history"
+                  data-component-id={COMPONENT_IDS.search.editorSearchHistoryList}
                   role="listbox"
                 >
                   {pinnedEditorSearchQueries.map((pinnedQuery) => (
                     <div
                       className="search-history-row search-history-pinned-row"
+                      data-component-id={COMPONENT_IDS.search.pinnedSearchKeyword}
                       key={`pinned:${pinnedQuery}`}
                     >
                       <button
@@ -2794,6 +2802,7 @@ export const App = (): React.JSX.Element => {
                           query: pinnedQuery,
                         })}
                         className="search-history-pin-button is-active"
+                        data-component-id={COMPONENT_IDS.search.pinSearchButton}
                         onClick={() => {
                           deletePinnedEditorSearchQuery(pinnedQuery);
                           editorSearchInputRef.current?.focus();
@@ -2817,7 +2826,11 @@ export const App = (): React.JSX.Element => {
                     );
 
                     return (
-                      <div className="search-history-row" key={historyItem}>
+                      <div
+                        className="search-history-row"
+                        data-component-id={COMPONENT_IDS.search.historyTag}
+                        key={historyItem}
+                      >
                         <button
                           aria-label={text("editor.useSearchHistoryItem", {
                             query: historyItem,
@@ -2843,6 +2856,7 @@ export const App = (): React.JSX.Element => {
                             { query: historyItem },
                           )}
                           className={`search-history-pin-button${isPinned ? " is-active" : ""}`}
+                          data-component-id={COMPONENT_IDS.search.pinSearchButton}
                           onClick={() => {
                             togglePinnedEditorSearchQuery(historyItem);
                             editorSearchInputRef.current?.focus();
@@ -2873,6 +2887,7 @@ export const App = (): React.JSX.Element => {
                 aria-label={text("editor.markdownSearch")}
                 aria-pressed={isEditorSearchOpen}
                 className="editor-action-button"
+                data-component-id={COMPONENT_IDS.editor.actionButton}
                 onClick={() => {
                   openEditorSearch();
                 }}
@@ -2913,6 +2928,7 @@ export const App = (): React.JSX.Element => {
         .filter(Boolean)
         .join(" ")}
       data-panel-family={resolvedTheme.panelFamily}
+      data-component-id={COMPONENT_IDS.app.shell}
       data-theme={resolvedTheme.id}
       data-theme-family={resolvedTheme.family}
       data-theme-mode={themePreference.mode}
@@ -3021,6 +3037,7 @@ export const App = (): React.JSX.Element => {
         <div
           aria-label={text("dropTarget.ariaLabel")}
           className="app-drop-target-overlay"
+          data-component-id={COMPONENT_IDS.app.dropTargetOverlay}
           role="status"
         >
           <div className="app-drop-target-message">
@@ -3040,6 +3057,7 @@ export const App = (): React.JSX.Element => {
           aria-valuemin={EXPLORER_WIDTH_MIN}
           aria-valuenow={explorerWidth}
           className="explorer-resize-handle"
+          data-component-id={COMPONENT_IDS.explorer.resizeHandle}
           onKeyDown={resizeExplorerFromKeyboard}
           onPointerDown={beginExplorerResize}
           role="separator"
@@ -3055,16 +3073,19 @@ export const App = (): React.JSX.Element => {
           .filter(Boolean)
           .join(" ")}
         aria-label={text("editor.label")}
+        data-component-id={COMPONENT_IDS.editor.pane}
       >
         <div
           aria-label={text("editor.actions")}
           className="editor-action-bar"
+          data-component-id={COMPONENT_IDS.editor.actionsToolbar}
           role="toolbar"
         >
           {shouldShowEditorActionOverflowToggle ? (
             <button
               aria-label={editorActionOverflowLabel}
               className="editor-action-button"
+              data-component-id={COMPONENT_IDS.editor.collapsedActionsMenu}
               onClick={
                 isEditorActionsExpanded
                   ? collapseEditorActions
@@ -3175,7 +3196,10 @@ export const App = (): React.JSX.Element => {
             workspaceRoot={state.workspace?.rootPath ?? ""}
           />
         ) : (
-          <div className="editor-empty-state">
+          <div
+            className="editor-empty-state"
+            data-component-id={COMPONENT_IDS.editor.emptyState}
+          >
             <p className="editor-kicker">MDE</p>
             <h1>{state.selectedFilePath ?? text("editor.emptyTitle")}</h1>
             {state.isLoadingFile ? <p>{text("common.loadingFile")}</p> : null}

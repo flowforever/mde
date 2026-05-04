@@ -4,6 +4,7 @@ import { type FormEvent, useCallback, useState } from "react";
 import type { AiGenerationResult } from "../../../shared/ai";
 import { MarkdownBlockEditor } from "../editor/MarkdownBlockEditor";
 import type { AppText } from "../i18n/appLanguage";
+import { COMPONENT_IDS } from "../componentIds";
 
 interface AiResultPanelProps {
   readonly colorScheme: "dark" | "light";
@@ -52,8 +53,15 @@ export const AiResultPanel = ({
   const ignoreReadOnlySaveRequest = useCallback(() => undefined, []);
 
   return (
-    <section aria-label={text("ai.aiResult")} className="ai-result-panel">
-      <header className="ai-result-header">
+    <section
+      aria-label={text("ai.aiResult")}
+      className="ai-result-panel"
+      data-component-id={COMPONENT_IDS.ai.resultPanel}
+    >
+      <header
+        className="ai-result-header"
+        data-component-id={COMPONENT_IDS.ai.resultHeader}
+      >
         <div className="ai-result-heading">
           <span>{resultTitle}</span>
           <span>
@@ -65,6 +73,7 @@ export const AiResultPanel = ({
         <button
           aria-label={text("ai.closeResult")}
           className="ai-result-close-button"
+          data-component-id={COMPONENT_IDS.ai.resultCloseButton}
           onClick={onClose}
           title={text("ai.closeResult")}
           type="button"
@@ -72,7 +81,10 @@ export const AiResultPanel = ({
           <X aria-hidden="true" size={15} strokeWidth={2} />
         </button>
       </header>
-      <p className="ai-result-path">
+      <p
+        className="ai-result-path"
+        data-component-id={COMPONENT_IDS.ai.resultPathLabel}
+      >
         {text("ai.savedTo", { path: result.path })}
       </p>
       <div className="ai-result-editor-scroll">
@@ -97,10 +109,12 @@ export const AiResultPanel = ({
         <form
           aria-label={text("ai.refineSummary")}
           className="ai-summary-refine-bar"
+          data-component-id={COMPONENT_IDS.ai.refineSummaryBar}
           onSubmit={submitSummaryInstruction}
         >
           <input
             aria-label={text("ai.refineSummaryInstruction")}
+            data-component-id={COMPONENT_IDS.ai.refineSummaryField}
             onChange={(event) => {
               setSummaryInstruction(event.target.value);
             }}
@@ -108,7 +122,11 @@ export const AiResultPanel = ({
             type="text"
             value={summaryInstruction}
           />
-          <button disabled={isRegeneratingSummary} type="submit">
+          <button
+            data-component-id={COMPONENT_IDS.ai.regenerateSummaryButton}
+            disabled={isRegeneratingSummary}
+            type="submit"
+          >
             {isRegeneratingSummary ? (
               <>
                 <LoaderCircle

@@ -3,6 +3,7 @@ import { useMemo, useState, type JSX } from 'react'
 
 import type { MarkdownFrontmatterBlock } from './frontmatter'
 import type { AppText } from '../i18n/appLanguage'
+import { COMPONENT_IDS } from '../componentIds'
 
 interface FrontmatterPanelProps {
   readonly frontmatter: MarkdownFrontmatterBlock
@@ -43,11 +44,13 @@ export const FrontmatterPanel = ({
       className={`frontmatter-panel${
         frontmatter.isValid ? '' : ' frontmatter-panel-warning'
       }`}
+      data-component-id={COMPONENT_IDS.editor.frontmatterPanel}
     >
       <button
         aria-expanded={isExpanded}
         aria-label={summaryLabel}
         className="frontmatter-summary-button"
+        data-component-id={COMPONENT_IDS.editor.frontmatterSummary}
         onClick={() => {
           setIsExpanded((currentValue) => !currentValue)
         }}
@@ -76,6 +79,7 @@ export const FrontmatterPanel = ({
           <div className="frontmatter-mode-actions">
             <button
               className="frontmatter-mode-button"
+              data-component-id={COMPONENT_IDS.editor.frontmatterModeButton}
               onClick={() => {
                 setViewMode('source')
                 setDraftRaw(frontmatter.raw)
@@ -86,6 +90,7 @@ export const FrontmatterPanel = ({
             </button>
             <button
               className="frontmatter-mode-button"
+              data-component-id={COMPONENT_IDS.editor.frontmatterModeButton}
               onClick={() => {
                 setViewMode('fields')
               }}
@@ -99,6 +104,7 @@ export const FrontmatterPanel = ({
               <pre
                 aria-label={text('editor.frontmatterRawYaml')}
                 className="frontmatter-raw"
+                data-component-id={COMPONENT_IDS.editor.frontmatterRawYamlField}
               >
                 {frontmatter.raw}
               </pre>
@@ -106,6 +112,7 @@ export const FrontmatterPanel = ({
               <div className="frontmatter-editor">
                 <textarea
                   aria-label={text('editor.frontmatterRawYaml')}
+                  data-component-id={COMPONENT_IDS.editor.frontmatterRawYamlField}
                   onChange={(event) => {
                     setDraftRaw(event.currentTarget.value)
                   }}

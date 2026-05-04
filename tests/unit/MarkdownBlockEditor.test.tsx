@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import type { FormEventHandler, KeyboardEventHandler, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
 import { MarkdownBlockEditor } from "../../src/renderer/src/editor/MarkdownBlockEditor";
 import {
   createSearchRanges,
@@ -1650,6 +1651,14 @@ describe("MarkdownBlockEditor accessibility", () => {
     await user.click(screen.getByRole("button", { name: /open link picker/i }));
     await user.click(screen.getByRole("tab", { name: /new document/i }));
 
+    expect(screen.getByRole("dialog", { name: /insert link/i })).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.link.pickerDialog,
+    );
+    expect(screen.getByRole("tab", { name: /new document/i })).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.link.newDocumentTab,
+    );
     const directoryTree = screen.getByRole("tree", { name: /directory tree/i });
     const docsDirectory = within(directoryTree).getByRole("treeitem", {
       name: /^docs$/,
@@ -1658,6 +1667,14 @@ describe("MarkdownBlockEditor accessibility", () => {
       name: /^nested$/,
     });
 
+    expect(directoryTree).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.link.directoryTree,
+    );
+    expect(nestedDirectory).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.link.directoryRow,
+    );
     expect(docsDirectory).toHaveAttribute("aria-expanded", "true");
     expect(nestedDirectory).toHaveAttribute("aria-selected", "true");
     expect(

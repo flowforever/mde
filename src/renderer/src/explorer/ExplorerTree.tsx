@@ -8,6 +8,7 @@ import type {
 
 import type { TreeNode } from "../../../shared/fileTree";
 import type { ExplorerInlineEditor, ExplorerTreeProps } from "./explorerTypes";
+import { COMPONENT_IDS } from "../componentIds";
 
 interface ExplorerTreeNodeProps extends ExplorerTreeProps {
   readonly depth: number;
@@ -94,6 +95,7 @@ const ExplorerInlineEditorRow = ({
   return (
     <form
       className="explorer-tree-row explorer-inline-entry-form"
+      data-component-id={COMPONENT_IDS.explorer.inlineNameField}
       onSubmit={submitInlineEditor}
       style={rowStyle}
     >
@@ -197,6 +199,7 @@ const ExplorerTreeNode = ({
                 { name: node.name },
               )}
               className="explorer-disclosure-button"
+              data-component-id={COMPONENT_IDS.explorer.directoryDisclosureButton}
               onClick={toggleExpanded}
               type="button"
             >
@@ -211,6 +214,7 @@ const ExplorerTreeNode = ({
                   ? "explorer-row-button is-active"
                   : "explorer-row-button"
               }
+              data-component-id={COMPONENT_IDS.explorer.treeRow}
               onContextMenu={openContextMenu}
               onClick={() => {
                 if (!isExpanded) {
@@ -289,6 +293,7 @@ const ExplorerTreeNode = ({
                 ? "explorer-row-button is-active"
                 : "explorer-row-button"
             }
+            data-component-id={COMPONENT_IDS.explorer.treeRow}
             onContextMenu={openContextMenu}
             onClick={() => {
               onSelectEntry(node.path);
@@ -350,7 +355,10 @@ export const ExplorerTree = ({
   };
 
   return (
-    <ul className="explorer-tree explorer-tree-root">
+    <ul
+      className="explorer-tree explorer-tree-root"
+      data-component-id={COMPONENT_IDS.explorer.tree}
+    >
       {inlineEditor &&
       inlineEditor.type !== "rename" &&
       inlineEditor.targetDirectoryPath === null ? (

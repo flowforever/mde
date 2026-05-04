@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AiActionMenu } from "../../src/renderer/src/ai/AiActionMenu";
+import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
@@ -87,5 +88,38 @@ describe("AiActionMenu", () => {
     expect(summaryButton).toHaveAttribute("aria-busy", "false");
     expect(translateButton).toHaveAttribute("aria-busy", "false");
     expect(screen.queryByTestId("ai-action-spinner")).not.toBeInTheDocument();
+  });
+
+  it("marks AI action controls with internal component ids", () => {
+    const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+
+    render(
+      <AiActionMenu
+        busyState="idle"
+        customLanguageInput=""
+        customLanguages={["Klingon"]}
+        isTranslateMenuOpen
+        onAddCustomLanguage={vi.fn()}
+        onCustomLanguageInputChange={vi.fn()}
+        onForgetCustomLanguage={vi.fn()}
+        onSummarize={vi.fn()}
+        onToggleTranslateMenu={vi.fn()}
+        onTranslate={vi.fn()}
+        text={text}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /summarize markdown/i })).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.ai.summaryButton,
+    );
+    expect(screen.getByRole("menu")).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.ai.translateMenu,
+    );
+    expect(screen.getByRole("textbox", { name: /custom translation language/i })).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.ai.customTranslationLanguageField,
+    );
   });
 });

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ExplorerTree } from "../../src/renderer/src/explorer/ExplorerTree";
 import { ExplorerPane } from "../../src/renderer/src/explorer/ExplorerPane";
+import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
 import type { AppState } from "../../src/renderer/src/app/appTypes";
 import type { TreeNode } from "../../src/shared/fileTree";
 import type { RecentWorkspace } from "../../src/renderer/src/workspaces/recentWorkspaces";
@@ -116,6 +117,32 @@ describe("ExplorerTree", () => {
     expect(
       screen.getByRole("button", { name: /deep\.md Markdown file/i }),
     ).toBeInTheDocument();
+  });
+
+  it("marks tree, disclosure, and rows with internal component ids", () => {
+    render(
+      <ExplorerTree
+        nodes={tree}
+        onSelectEntry={vi.fn()}
+        onSelectFile={vi.fn()}
+        selectedEntryPath={null}
+        text={text}
+        selectedFilePath={null}
+      />,
+    );
+
+    expect(screen.getByRole("list")).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.explorer.tree,
+    );
+    expect(screen.getByRole("button", { name: /expand docs/i })).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.explorer.directoryDisclosureButton,
+    );
+    expect(screen.getByRole("button", { name: /docs folder/i })).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.explorer.treeRow,
+    );
   });
 
   it("toggles a directory from the visible row button with expanded state", async () => {
