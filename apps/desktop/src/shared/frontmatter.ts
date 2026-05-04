@@ -1,1 +1,1 @@
-export * from '../../../../packages/editor-core/src/frontmatter'
+export * from '@mde/editor-core/frontmatter'

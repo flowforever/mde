@@ -1,1 +1,1 @@
-export * from '../../../../packages/editor-core/src/search'
+export * from '@mde/editor-core/search'

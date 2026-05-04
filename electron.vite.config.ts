@@ -3,54 +3,60 @@ import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
-const packageAliases = {
-  '@mde/editor-core': resolve(__dirname, 'packages/editor-core/src/index.ts'),
-  '@mde/editor-core/assets': resolve(
-    __dirname,
-    'packages/editor-core/src/assets.ts'
-  ),
-  '@mde/editor-core/flowcharts': resolve(
-    __dirname,
-    'packages/editor-core/src/flowcharts.ts'
-  ),
-  '@mde/editor-core/frontmatter': resolve(
-    __dirname,
-    'packages/editor-core/src/frontmatter.ts'
-  ),
-  '@mde/editor-core/links': resolve(
-    __dirname,
-    'packages/editor-core/src/links.ts'
-  ),
-  '@mde/editor-core/markdown': resolve(
-    __dirname,
-    'packages/editor-core/src/markdown.ts'
-  ),
-  '@mde/editor-core/search': resolve(
-    __dirname,
-    'packages/editor-core/src/search.ts'
-  ),
-  '@mde/editor-core/types': resolve(
-    __dirname,
-    'packages/editor-core/src/types.ts'
-  ),
-  '@mde/editor-host': resolve(__dirname, 'packages/editor-host/src/index.ts'),
-  '@mde/editor-host/bridge': resolve(
-    __dirname,
-    'packages/editor-host/src/bridge.ts'
-  ),
-  '@mde/editor-host/fake': resolve(
-    __dirname,
-    'packages/editor-host/src/fake.ts'
-  ),
-  '@mde/editor-host/file-tree': resolve(
-    __dirname,
-    'packages/editor-host/src/fileTree.ts'
-  ),
-  '@mde/editor-host/types': resolve(
-    __dirname,
-    'packages/editor-host/src/types.ts'
-  )
-}
+const packageAliases = [
+  {
+    find: /^@mde\/editor-core$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/index.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/assets$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/assets.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/flowcharts$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/flowcharts.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/frontmatter$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/frontmatter.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/links$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/links.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/markdown$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/markdown.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/search$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/search.ts')
+  },
+  {
+    find: /^@mde\/editor-core\/types$/,
+    replacement: resolve(__dirname, 'packages/editor-core/src/types.ts')
+  },
+  {
+    find: /^@mde\/editor-host$/,
+    replacement: resolve(__dirname, 'packages/editor-host/src/index.ts')
+  },
+  {
+    find: /^@mde\/editor-host\/bridge$/,
+    replacement: resolve(__dirname, 'packages/editor-host/src/bridge.ts')
+  },
+  {
+    find: /^@mde\/editor-host\/fake$/,
+    replacement: resolve(__dirname, 'packages/editor-host/src/fake.ts')
+  },
+  {
+    find: /^@mde\/editor-host\/file-tree$/,
+    replacement: resolve(__dirname, 'packages/editor-host/src/fileTree.ts')
+  },
+  {
+    find: /^@mde\/editor-host\/types$/,
+    replacement: resolve(__dirname, 'packages/editor-host/src/types.ts')
+  }
+]
 
 export default defineConfig({
   main: {

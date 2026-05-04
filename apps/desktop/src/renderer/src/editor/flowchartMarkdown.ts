@@ -2,5 +2,5 @@ export {
   extractMermaidBlocks,
   replaceMermaidBlockSource,
   replaceMermaidBlocksFromSource
-} from '../../../../../../packages/editor-core/src/flowcharts'
-export type { MermaidBlockReference as MermaidBlock } from '../../../../../../packages/editor-core/src/types'
+} from '@mde/editor-core/flowcharts'
+export type { MermaidBlockReference as MermaidBlock } from '@mde/editor-core/types'

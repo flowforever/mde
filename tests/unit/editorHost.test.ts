@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   createEditorHostBridgeMessage,
   createEditorHostBridgeResponse
-} from '../../packages/editor-host/src/bridge'
-import { createFakeEditorHost } from '../../packages/editor-host/src/fake'
+} from '@mde/editor-host/bridge'
+import { createFakeEditorHost } from '@mde/editor-host/fake'
 
 describe('editor host contract', () => {
   it('creates JSON-serializable bridge envelopes with request correlation ids', () => {

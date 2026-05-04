@@ -1,1 +1,1 @@
-export * from '../../../../packages/editor-host/src/fileTree'
+export * from '@mde/editor-host/file-tree'
