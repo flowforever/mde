@@ -12,6 +12,7 @@ import type { FormEventHandler, KeyboardEventHandler, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { COMPONENT_IDS } from "../../apps/desktop/src/renderer/src/componentIds";
+import { createVisibleEditorLinkTree } from "../../apps/desktop/src/renderer/src/editor/editorLinkDirectories";
 import { MarkdownBlockEditor } from "../../apps/desktop/src/renderer/src/editor/MarkdownBlockEditor";
 import {
   createSearchRanges,
@@ -1594,6 +1595,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     render(
       <MarkdownBlockEditor
         colorScheme="light"
+        createVisibleLinkWorkspaceTree={createVisibleEditorLinkTree}
         draftMarkdown="# Current"
         errorMessage={null}
         isDirty={false}

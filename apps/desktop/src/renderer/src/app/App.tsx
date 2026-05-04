@@ -70,6 +70,7 @@ import {
   type MarkdownBlockEditorHandle,
 } from "../editor/MarkdownBlockEditor";
 import { createDesktopMarkdownAssetResolver } from "../editor/desktopMarkdownAssetResolver";
+import { createVisibleEditorLinkTree } from "../editor/editorLinkDirectories";
 import { collectMarkdownFilePaths } from "@mde/editor-core/links";
 import { resolveEditorLinkTarget } from "../editor/editorLinks";
 import { getNextSearchMatchIndex } from "@mde/editor-core/search";
@@ -3143,8 +3144,9 @@ export const App = (): React.JSX.Element => {
                 ? `${state.workspace?.rootPath ?? ""}:history:${historyPreview.version.id}`
                 : `${state.workspace?.rootPath ?? ""}:${state.loadedFile?.path ?? ""}`
             }
-            draftMarkdown={editorMarkdown}
             colorScheme={resolvedTheme.family}
+            createVisibleLinkWorkspaceTree={createVisibleEditorLinkTree}
+            draftMarkdown={editorMarkdown}
             errorMessage={state.fileErrorMessage}
             historyPreview={historyPreviewDisplay}
             isDirty={historyPreview ? false : state.isDirty}

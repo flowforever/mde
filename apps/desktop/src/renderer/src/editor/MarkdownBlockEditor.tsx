@@ -75,16 +75,25 @@ import {
 } from "@mde/editor-core/links";
 
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
-import { createVisibleEditorLinkTree } from "./editorLinkDirectories";
 import {
   composeMarkdownWithFrontmatter,
   splitMarkdownFrontmatter,
 } from "@mde/editor-core/frontmatter";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 
+type CreateVisibleLinkWorkspaceTree = (
+  nodes: readonly TreeNode[],
+  workspaceRoot: string,
+) => readonly TreeNode[];
+
+const defaultCreateVisibleLinkWorkspaceTree: CreateVisibleLinkWorkspaceTree = (
+  nodes,
+) => nodes;
+
 interface MarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;
   readonly colorScheme: "dark" | "light";
+  readonly createVisibleLinkWorkspaceTree?: CreateVisibleLinkWorkspaceTree;
   readonly draftMarkdown: string;
   readonly errorMessage: string | null;
   readonly historyPreview?: {
@@ -214,6 +223,7 @@ export const MarkdownBlockEditor = forwardRef<
   {
     activeSearchMatchIndex = -1,
     colorScheme,
+    createVisibleLinkWorkspaceTree = defaultCreateVisibleLinkWorkspaceTree,
     errorMessage,
     draftMarkdown,
     historyPreview = null,
@@ -475,7 +485,7 @@ export const MarkdownBlockEditor = forwardRef<
   }, [closeLinkDialog, linkDialogState]);
 
   const openLinkDialog = useCallback((): void => {
-    const visibleWorkspaceTree = createVisibleEditorLinkTree(
+    const visibleWorkspaceTree = createVisibleLinkWorkspaceTree(
       workspaceTree,
       workspaceRoot,
     );
@@ -487,7 +497,13 @@ export const MarkdownBlockEditor = forwardRef<
         visibleWorkspaceTree,
       }),
     );
-  }, [path, text, workspaceRoot, workspaceTree]);
+  }, [
+    createVisibleLinkWorkspaceTree,
+    path,
+    text,
+    workspaceRoot,
+    workspaceTree,
+  ]);
 
   const applyFrontmatterChange = useCallback(
     (raw: string): void => {
