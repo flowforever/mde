@@ -7,7 +7,7 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
   type MarkdownBlockEditorAdapter
-} from '../../apps/desktop/src/renderer/src/editor/markdownTransforms'
+} from '@mde/editor-react'
 import { createDesktopMarkdownAssetResolver } from '../../apps/desktop/src/renderer/src/editor/desktopMarkdownAssetResolver'
 
 describe('markdownTransforms', () => {

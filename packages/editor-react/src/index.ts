@@ -131,6 +131,16 @@ export {
 } from './linkDialogState'
 export type { LinkDialogState } from './linkDialogState'
 
+export {
+  exportBlocksToMarkdown,
+  importMarkdownToBlocks,
+  MARKDOWN_BLANK_LINE_MARKER,
+  PASSTHROUGH_MARKDOWN_ASSET_RESOLVER,
+  prepareMarkdownForEditor,
+  prepareMarkdownForStorage
+} from './markdownTransforms'
+export type { MarkdownBlockEditorAdapter } from './markdownTransforms'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string

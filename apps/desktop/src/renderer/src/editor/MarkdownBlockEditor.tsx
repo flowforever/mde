@@ -40,10 +40,15 @@ import {
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   ensureMarkdownExtension,
   getEditorLinkEntryName,
+  exportBlocksToMarkdown,
+  importMarkdownToBlocks,
   isEditorSearchMutationRelevant,
   joinWorkspacePath,
+  PASSTHROUGH_MARKDOWN_ASSET_RESOLVER,
   moveLinkDialogSuggestionSelection,
   normalizeImportedCodeBlockLanguages,
+  prepareMarkdownForEditor,
+  prepareMarkdownForStorage,
   replaceEditorDocumentWithoutUndoHistory,
   selectLinkDialogDirectory,
   setLinkDialogError,
@@ -70,13 +75,6 @@ import {
 import { replaceMermaidBlocksFromSource } from "@mde/editor-core/flowcharts";
 import { MermaidFlowchartPanel } from "./MermaidFlowchartPanel";
 import { createVisibleEditorLinkTree } from "./editorLinkDirectories";
-import {
-  exportBlocksToMarkdown,
-  importMarkdownToBlocks,
-  PASSTHROUGH_MARKDOWN_ASSET_RESOLVER,
-  prepareMarkdownForEditor,
-  prepareMarkdownForStorage,
-} from "./markdownTransforms";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import {
   composeMarkdownWithFrontmatter,

@@ -6,7 +6,7 @@ import {
   exportBlocksToMarkdown,
   prepareMarkdownForEditor,
   prepareMarkdownForStorage
-} from '../../apps/desktop/src/renderer/src/editor/markdownTransforms'
+} from '@mde/editor-react'
 
 describe('editor blank line round trips', () => {
   let previousDocument: typeof globalThis.document | undefined

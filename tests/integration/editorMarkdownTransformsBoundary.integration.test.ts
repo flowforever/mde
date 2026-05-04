@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const markdownTransformsPath = join(
   process.cwd(),
-  'apps/desktop/src/renderer/src/editor/markdownTransforms.ts'
+  'packages/editor-react/src/markdownTransforms.ts'
 )
 
 describe('editor markdown transforms boundary', () => {
