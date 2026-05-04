@@ -144,6 +144,25 @@ describe('markdownTransforms', () => {
     )
   })
 
+  it('accepts an injected asset resolver for non-desktop preview URLs', () => {
+    const result = prepareMarkdownForEditor(
+      '![Screenshot](asset://logical-id)',
+      {
+        markdownFilePath: 'docs/README.md',
+        workspaceRoot: '/Users/test/workspace'
+      },
+      {
+        toEditorUrl: (reference) =>
+          reference.rawTarget === 'asset://logical-id'
+            ? 'host-display://logical-id'
+            : null,
+        toStoragePath: () => null
+      }
+    )
+
+    expect(result).toBe('![Screenshot](host-display://logical-id)')
+  })
+
   it('preserves intentional blank lines outside fenced code during editor storage round trips', () => {
     const storedMarkdown = [
       'First paragraph',
@@ -198,5 +217,24 @@ describe('markdownTransforms', () => {
     )
 
     expect(result).toBe('![Screenshot](.mde/assets/screenshot.png)')
+  })
+
+  it('accepts an injected asset resolver for non-desktop storage paths', () => {
+    const result = prepareMarkdownForStorage(
+      '![Screenshot](host-display://logical-id)',
+      {
+        markdownFilePath: 'docs/README.md',
+        workspaceRoot: '/Users/test/workspace'
+      },
+      {
+        toEditorUrl: () => null,
+        toStoragePath: (reference) =>
+          reference.rawTarget === 'host-display://logical-id'
+            ? 'assets/screenshot.png'
+            : null
+      }
+    )
+
+    expect(result).toBe('![Screenshot](assets/screenshot.png)')
   })
 })

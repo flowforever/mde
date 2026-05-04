@@ -54,7 +54,6 @@ import {
 } from "./editorLinks";
 import {
   collectExpandedLinkDirectoryOptions,
-  createInitialLinkDirectoryState,
   createVisibleEditorLinkTree,
   type LinkDirectoryOption,
 } from "./editorLinkDirectories";
@@ -64,6 +63,24 @@ import {
   prepareMarkdownForEditor,
   prepareMarkdownForStorage,
 } from "./markdownTransforms";
+import {
+  chooseMarkdownContentsToSave,
+  shouldClearLocalChangesAfterUnchangedSave,
+  shouldRetryUnchangedSave,
+} from "./editorSaveLifecycle";
+import {
+  createInitialLinkDialogState,
+  ensureMarkdownExtension,
+  getEditorLinkEntryName,
+  joinWorkspacePath,
+  moveLinkDialogSuggestionSelection,
+  selectLinkDialogDirectory,
+  setLinkDialogError,
+  setLinkDialogMode,
+  type LinkDialogState,
+  updateLinkDialogHref,
+  updateLinkDialogNewDocumentName,
+} from "./editorLinkDialogState";
 import {
   createSearchRanges,
   isEditorSearchMutationRelevant,
@@ -131,17 +148,6 @@ interface HighlightRuntime {
   readonly Highlight?: new (...ranges: Range[]) => unknown;
 }
 
-interface LinkDialogState {
-  readonly errorMessage: string | null;
-  readonly expandedDirectoryPaths: ReadonlySet<string>;
-  readonly hrefInput: string;
-  readonly mode: "insert" | "new-document";
-  readonly newDocumentDirectoryPath: string;
-  readonly newDocumentName: string;
-  readonly selectedSuggestionIndex: number;
-  readonly visibleWorkspaceTree: readonly TreeNode[];
-}
-
 const SEARCH_MATCH_HIGHLIGHT_NAME = "mde-editor-search-match";
 const SEARCH_ACTIVE_HIGHLIGHT_NAME = "mde-editor-search-active";
 const SEARCH_PIN_HIGHLIGHT_NAMES = [
@@ -201,42 +207,6 @@ const editorSchema = BlockNoteSchema.create({
     codeBlock: createEditorCodeBlockSpec(),
   },
 });
-
-const joinWorkspacePath = (parentPath: string, entryName: string): string =>
-  parentPath ? `${parentPath}/${entryName}` : entryName;
-
-const ensureMarkdownExtension = (filePath: string): string =>
-  filePath.toLocaleLowerCase().endsWith(".md") ? filePath : `${filePath}.md`;
-
-const getEntryName = (entryPath: string): string => {
-  const separatorIndex = entryPath.lastIndexOf("/");
-
-  return separatorIndex === -1
-    ? entryPath
-    : entryPath.slice(separatorIndex + 1);
-};
-
-const createInitialLinkDialogState = (
-  currentFilePath: string,
-  text: AppText,
-  visibleWorkspaceTree: readonly TreeNode[],
-): LinkDialogState => {
-  const initialDirectoryState = createInitialLinkDirectoryState(
-    visibleWorkspaceTree,
-    currentFilePath,
-  );
-
-  return {
-    errorMessage: null,
-    expandedDirectoryPaths: initialDirectoryState.expandedDirectoryPaths,
-    hrefInput: "",
-    mode: "insert",
-    newDocumentDirectoryPath: initialDirectoryState.selectedDirectoryPath,
-    newDocumentName: text("editor.linkNewDocumentDefaultName"),
-    selectedSuggestionIndex: 0,
-    visibleWorkspaceTree,
-  };
-};
 
 const clearSearchHighlights = (): void => {
   const registry = (globalThis as HighlightRuntime).CSS?.highlights;
@@ -431,21 +401,22 @@ export const MarkdownBlockEditor = forwardRef<
     try {
       const contents = await serializeMarkdown();
       const latestDraftMarkdown = latestDraftMarkdownRef.current;
-      const shouldPreserveNonEmptyDraft =
-        contents.trim().length === 0 &&
-        latestDraftMarkdown.trim().length > 0 &&
-        markdown.trim().length > 0 &&
-        lastSerializedEditorMarkdownRef.current === latestDraftMarkdown;
-      const contentsToSave =
-        shouldPreserveNonEmptyDraft ||
-        (contents === markdown && latestDraftMarkdown !== markdown)
-          ? latestDraftMarkdown
-          : contents;
+      const contentsToSave = chooseMarkdownContentsToSave({
+        currentMarkdown: markdown,
+        lastSerializedEditorMarkdown: lastSerializedEditorMarkdownRef.current,
+        latestDraftMarkdown,
+        serializedMarkdown: contents,
+      });
 
       if (contentsToSave === markdown) {
         if (
-          options.preserveLocalChangesWhenUnchanged &&
-          (options.retryUnchangedCount ?? 0) > 0
+          shouldRetryUnchangedSave({
+            contentsToSave,
+            currentMarkdown: markdown,
+            preserveLocalChangesWhenUnchanged:
+              options.preserveLocalChangesWhenUnchanged,
+            retryUnchangedCount: options.retryUnchangedCount,
+          })
         ) {
           window.setTimeout(() => {
             void saveMarkdown({
@@ -456,7 +427,12 @@ export const MarkdownBlockEditor = forwardRef<
           return;
         }
 
-        if (!options.preserveLocalChangesWhenUnchanged) {
+        if (
+          shouldClearLocalChangesAfterUnchangedSave({
+            preserveLocalChangesWhenUnchanged:
+              options.preserveLocalChangesWhenUnchanged,
+          })
+        ) {
           hasLocalChangesRef.current = false;
         }
         return;
@@ -518,7 +494,11 @@ export const MarkdownBlockEditor = forwardRef<
     );
 
     setLinkDialogState(
-      createInitialLinkDialogState(path, text, visibleWorkspaceTree),
+      createInitialLinkDialogState({
+        currentFilePath: path,
+        defaultNewDocumentName: text("editor.linkNewDocumentDefaultName"),
+        visibleWorkspaceTree,
+      }),
     );
   }, [path, text, workspaceRoot, workspaceTree]);
 
@@ -548,7 +528,7 @@ export const MarkdownBlockEditor = forwardRef<
       const linkText =
         selectedText.length > 0
           ? selectedText
-          : (displayText ?? getEntryName(normalizedHref));
+          : (displayText ?? getEditorLinkEntryName(normalizedHref));
 
       hasLocalChangesRef.current = true;
       editor.createLink(normalizedHref, linkText);
@@ -568,10 +548,12 @@ export const MarkdownBlockEditor = forwardRef<
     const trimmedName = linkDialogState.newDocumentName.trim();
 
     if (trimmedName.length === 0) {
-      setLinkDialogState({
-        ...linkDialogState,
-        errorMessage: text("editor.linkNewDocumentNameRequired"),
-      });
+      setLinkDialogState(
+        setLinkDialogError(
+          linkDialogState,
+          text("editor.linkNewDocumentNameRequired"),
+        ),
+      );
       return;
     }
 
@@ -584,15 +566,14 @@ export const MarkdownBlockEditor = forwardRef<
       );
       const relativeHref = createRelativeMarkdownLink(path, targetFilePath);
 
-      insertEditorLink(relativeHref, getEntryName(targetFilePath));
+      insertEditorLink(relativeHref, getEditorLinkEntryName(targetFilePath));
     } catch (error) {
-      setLinkDialogState({
-        ...linkDialogState,
-        errorMessage: getErrorMessage(
-          error,
-          text("errors.createMarkdownFileFailed"),
+      setLinkDialogState(
+        setLinkDialogError(
+          linkDialogState,
+          getErrorMessage(error, text("errors.createMarkdownFileFailed")),
         ),
-      });
+      );
     }
   }, [insertEditorLink, linkDialogState, onCreateLinkedMarkdown, path, text]);
 
@@ -613,7 +594,7 @@ export const MarkdownBlockEditor = forwardRef<
     if (selectedSuggestion) {
       insertEditorLink(
         selectedSuggestion.relativePath,
-        getEntryName(selectedSuggestion.path),
+        getEditorLinkEntryName(selectedSuggestion.path),
       );
       return;
     }
@@ -640,29 +621,25 @@ export const MarkdownBlockEditor = forwardRef<
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setLinkDialogState({
-          ...linkDialogState,
-          selectedSuggestionIndex:
-            linkSuggestions.length === 0
-              ? 0
-              : (linkDialogState.selectedSuggestionIndex + 1) %
-                linkSuggestions.length,
-        });
+        setLinkDialogState(
+          moveLinkDialogSuggestionSelection(
+            linkDialogState,
+            1,
+            linkSuggestions.length,
+          ),
+        );
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setLinkDialogState({
-          ...linkDialogState,
-          selectedSuggestionIndex:
-            linkSuggestions.length === 0
-              ? 0
-              : (linkDialogState.selectedSuggestionIndex -
-                  1 +
-                  linkSuggestions.length) %
-                linkSuggestions.length,
-        });
+        setLinkDialogState(
+          moveLinkDialogSuggestionSelection(
+            linkDialogState,
+            -1,
+            linkSuggestions.length,
+          ),
+        );
         return;
       }
 
@@ -1230,11 +1207,7 @@ export const MarkdownBlockEditor = forwardRef<
                 }
                 data-component-id={COMPONENT_IDS.link.existingLinkTab}
                 onClick={() => {
-                  setLinkDialogState({
-                    ...linkDialogState,
-                    errorMessage: null,
-                    mode: "insert",
-                  });
+                  setLinkDialogState(setLinkDialogMode(linkDialogState, "insert"));
                 }}
                 role="tab"
                 type="button"
@@ -1248,11 +1221,9 @@ export const MarkdownBlockEditor = forwardRef<
                 }
                 data-component-id={COMPONENT_IDS.link.newDocumentTab}
                 onClick={() => {
-                  setLinkDialogState({
-                    ...linkDialogState,
-                    errorMessage: null,
-                    mode: "new-document",
-                  });
+                  setLinkDialogState(
+                    setLinkDialogMode(linkDialogState, "new-document"),
+                  );
                 }}
                 role="tab"
                 type="button"
@@ -1270,11 +1241,12 @@ export const MarkdownBlockEditor = forwardRef<
                     autoFocus
                     data-component-id={COMPONENT_IDS.link.targetField}
                     onChange={(event) => {
-                      setLinkDialogState({
-                        ...linkDialogState,
-                        hrefInput: event.target.value,
-                        selectedSuggestionIndex: 0,
-                      });
+                      setLinkDialogState(
+                        updateLinkDialogHref(
+                          linkDialogState,
+                          event.target.value,
+                        ),
+                      );
                     }}
                     onKeyDown={handleLinkInputKeyDown}
                     placeholder={text("editor.linkTargetPlaceholder")}
@@ -1303,7 +1275,7 @@ export const MarkdownBlockEditor = forwardRef<
                         onClick={() => {
                           insertEditorLink(
                             suggestion.relativePath,
-                            getEntryName(suggestion.path),
+                            getEditorLinkEntryName(suggestion.path),
                           );
                         }}
                         role="option"
@@ -1354,27 +1326,9 @@ export const MarkdownBlockEditor = forwardRef<
                       data-component-id={COMPONENT_IDS.link.directoryRow}
                       key={directory.path || "__root__"}
                       onClick={() => {
-                        const expandedDirectoryPaths = new Set(
-                          linkDialogState.expandedDirectoryPaths,
+                        setLinkDialogState(
+                          selectLinkDialogDirectory(linkDialogState, directory),
                         );
-
-                        if (
-                          directory.path.length > 0 &&
-                          directory.hasChildDirectories
-                        ) {
-                          if (directory.isExpanded) {
-                            expandedDirectoryPaths.delete(directory.path);
-                          } else {
-                            expandedDirectoryPaths.add(directory.path);
-                          }
-                        }
-
-                        setLinkDialogState({
-                          ...linkDialogState,
-                          errorMessage: null,
-                          expandedDirectoryPaths,
-                          newDocumentDirectoryPath: directory.path,
-                        });
                       }}
                       onDoubleClick={() => {
                         const input = document.querySelector<HTMLInputElement>(
@@ -1411,11 +1365,12 @@ export const MarkdownBlockEditor = forwardRef<
                     aria-label={text("editor.linkNewDocumentName")}
                     data-component-id={COMPONENT_IDS.link.newDocumentNameField}
                     onChange={(event) => {
-                      setLinkDialogState({
-                        ...linkDialogState,
-                        errorMessage: null,
-                        newDocumentName: event.target.value,
-                      });
+                      setLinkDialogState(
+                        updateLinkDialogNewDocumentName(
+                          linkDialogState,
+                          event.target.value,
+                        ),
+                      );
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
