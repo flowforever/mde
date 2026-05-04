@@ -36,7 +36,9 @@ import {
   createSearchRanges,
   EDITOR_COMPONENT_IDS as COMPONENT_IDS,
   isEditorSearchMutationRelevant,
+  replaceEditorDocumentWithoutUndoHistory,
   shouldClearLocalChangesAfterUnchangedSave,
+  shouldImportMarkdownIntoEditor,
   shouldRetryUnchangedSave,
   type EditorText,
 } from "@mde/editor-react";
@@ -56,10 +58,6 @@ import {
   SUPPORTED_CODE_LANGUAGES,
 } from "./editorCodeBlockLanguages";
 import type { EditorLineSpacing } from "./editorLineSpacing";
-import {
-  replaceEditorDocumentWithoutUndoHistory,
-  shouldImportMarkdownIntoEditor,
-} from "./editorHydration";
 import {
   collectExpandedLinkDirectoryOptions,
   createVisibleEditorLinkTree,

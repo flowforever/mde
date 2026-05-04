@@ -67,6 +67,12 @@ export {
 } from './saveLifecycle'
 export type { MarkdownSaveCandidate } from './saveLifecycle'
 
+export {
+  replaceEditorDocumentWithoutUndoHistory,
+  shouldImportMarkdownIntoEditor
+} from './hydration'
+export type { EditorHydrationAdapter } from './hydration'
+
 export interface EditorComponentIds {
   readonly editor: {
     readonly documentPathLabel: string
