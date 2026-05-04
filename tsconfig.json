@@ -17,6 +17,7 @@
       "@mde/editor-host": ["./packages/editor-host/src/index.ts"],
       "@mde/editor-host/*": ["./packages/editor-host/src/*"],
       "@mde/editor-react": ["./packages/editor-react/src/index.ts"],
+      "@mde/editor-react/styles.css": ["./packages/editor-react/styles.css"],
       "@mde/editor-react/*": ["./packages/editor-react/src/*"]
     },
     "resolveJsonModule": true,

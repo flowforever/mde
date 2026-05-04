@@ -60,6 +60,10 @@ const packageAliases = [
     replacement: resolve(__dirname, 'packages/editor-react/src/index.ts')
   },
   {
+    find: /^@mde\/editor-react\/styles\.css$/,
+    replacement: resolve(__dirname, 'packages/editor-react/styles.css')
+  },
+  {
     find: /^@mde\/editor-react\/testing$/,
     replacement: resolve(__dirname, 'packages/editor-react/src/testing.ts')
   }

@@ -1,2 +1,5 @@
-/* Skeleton stylesheet entrypoint. The editor CSS migrates here after the
-   desktop renderer stops owning the full editor component surface. */
+@import '@blocknote/core/fonts/inter.css';
+@import '@blocknote/mantine/style.css';
+
+/* MDE editor package stylesheet entrypoint. Custom editor CSS migrates here as
+   the desktop renderer stops owning the full editor component surface. */

@@ -17,8 +17,6 @@ import {
 } from "@blocknote/core";
 import { filterSuggestionItems } from "@blocknote/core/extensions";
 import { BlockNoteView } from "@blocknote/mantine";
-import "@blocknote/core/fonts/inter.css";
-import "@blocknote/mantine/style.css";
 import {
   getDefaultReactSlashMenuItems,
   SuggestionMenuController,

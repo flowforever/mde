@@ -55,6 +55,10 @@ const packageAliases = [
   {
     find: /^@mde\/editor-host\/types$/,
     replacement: resolve(__dirname, 'packages/editor-host/src/types.ts')
+  },
+  {
+    find: /^@mde\/editor-react\/styles\.css$/,
+    replacement: resolve(__dirname, 'packages/editor-react/styles.css')
   }
 ]
 
