@@ -350,6 +350,27 @@ describe('fileHandlers integration', () => {
     })
   })
 
+  it('lists Markdown file paths through the active workspace IPC handler', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-list-workspace-'))
+
+    await mkdir(join(workspacePath, 'docs'))
+    await mkdir(join(workspacePath, '.mde'))
+    await writeFile(join(workspacePath, 'README.md'), '# Root')
+    await writeFile(join(workspacePath, 'docs', 'guide.md'), '# Guide')
+    await writeFile(join(workspacePath, '.mde', 'internal.md'), '# Internal')
+    await writeFile(join(workspacePath, 'plain.txt'), 'Plain')
+    const { handlers } = registerHandlers(workspacePath)
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+    const result = await handlers
+      .get(FILE_CHANNELS.listMarkdownFiles)
+      ?.({}, workspace.rootPath)
+
+    expect(result).toEqual(['README.md', 'docs/guide.md'])
+  })
+
   it('marks frontmatter workspace search matches as metadata hits', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-search-workspace-'))
 

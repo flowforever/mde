@@ -377,9 +377,11 @@ export const MarkdownBlockEditor = forwardRef<
       }
 
       const visibleMarkdownFilePaths =
-        workspaceTree.length > 0
-          ? collectMarkdownFilePaths(linkDialogState.visibleWorkspaceTree)
-          : markdownFilePaths;
+        markdownFilePaths.length > 0
+          ? markdownFilePaths
+          : workspaceTree.length > 0
+            ? collectMarkdownFilePaths(linkDialogState.visibleWorkspaceTree)
+            : markdownFilePaths;
 
       return createMarkdownPathSuggestions(
         linkDialogState.hrefInput,

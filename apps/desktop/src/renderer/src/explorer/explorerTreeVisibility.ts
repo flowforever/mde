@@ -45,7 +45,11 @@ export const collectDefaultHiddenEntryPaths = (
       node.type === "directory"
         ? collectDefaultHiddenEntryPaths(node.children)
         : [];
-    const nodeEntryPaths = node.name.startsWith(".") ? [node.path] : [];
+    const nodeEntryPaths =
+      node.name.startsWith(".") ||
+      (node.type === "directory" && node.isDefaultHidden)
+        ? [node.path]
+        : [];
 
     return [...entryPaths, ...nodeEntryPaths, ...childEntryPaths];
   }, []);

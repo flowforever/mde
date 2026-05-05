@@ -74,6 +74,7 @@ export interface MarkdownFileService {
     workspacePath: string,
     query: string
   ) => Promise<WorkspaceSearchResult>
+  readonly listMarkdownFiles: (workspacePath: string) => Promise<readonly string[]>
   readonly createMarkdownFile: (
     workspacePath: string,
     filePath: string,
@@ -524,6 +525,35 @@ const compareWorkspacePaths = (leftPath: string, rightPath: string): number => {
   const rightDepth = rightPath.split('/').length
 
   return leftDepth - rightDepth || leftPath.localeCompare(rightPath)
+}
+
+const collectMarkdownPaths = async (
+  workspacePath: string,
+  directoryPath: string
+): Promise<readonly string[]> => {
+  const absoluteDirectoryPath = resolveWorkspacePath(workspacePath, directoryPath)
+  const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
+  const nestedPaths = await Promise.all(
+    entries.map(async (entry): Promise<readonly string[]> => {
+      if (ignoredEntryNames.has(entry.name) || entry.name === '.mde') {
+        return []
+      }
+
+      const entryPath = joinWorkspacePath(directoryPath, entry.name)
+
+      if (entry.isDirectory()) {
+        return collectMarkdownPaths(workspacePath, entryPath)
+      }
+
+      if (entry.isFile() && isMarkdownPath(entry.name)) {
+        return [entryPath]
+      }
+
+      return []
+    })
+  )
+
+  return nestedPaths.flat()
 }
 
 const assertNoSymlinkPathComponents = async (
@@ -1245,36 +1275,8 @@ export const createMarkdownFileService = ({
       })
     }
 
-    const collectMarkdownPaths = async (
-      directoryPath: string
-    ): Promise<readonly string[]> => {
-      const absoluteDirectoryPath = resolveWorkspacePath(workspacePath, directoryPath)
-      const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
-      const nestedPaths = await Promise.all(
-        entries.map(async (entry): Promise<readonly string[]> => {
-          if (ignoredEntryNames.has(entry.name) || entry.name === '.mde') {
-            return []
-          }
-
-          const entryPath = joinWorkspacePath(directoryPath, entry.name)
-
-          if (entry.isDirectory()) {
-            return collectMarkdownPaths(entryPath)
-          }
-
-          if (entry.isFile() && isMarkdownPath(entry.name)) {
-            return [entryPath]
-          }
-
-          return []
-        })
-      )
-
-      return nestedPaths.flat()
-    }
-
     const results: WorkspaceSearchResult['results'][number][] = []
-    const markdownPaths = Array.from(await collectMarkdownPaths('')).sort(
+    const markdownPaths = Array.from(await collectMarkdownPaths(workspacePath, '')).sort(
       compareWorkspacePaths
     )
     let limited = false
@@ -1317,6 +1319,13 @@ export const createMarkdownFileService = ({
       query: normalizedQuery,
       results: Object.freeze(results)
     })
+  },
+  async listMarkdownFiles(workspacePath) {
+    return Object.freeze(
+      Array.from(await collectMarkdownPaths(workspacePath, '')).sort(
+        compareWorkspacePaths
+      )
+    )
   },
   async writeMarkdownFile(workspacePath, filePath, contents) {
     const absoluteFilePath = await resolveMutableMarkdownFile(workspacePath, filePath)

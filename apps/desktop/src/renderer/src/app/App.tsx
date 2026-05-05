@@ -152,6 +152,7 @@ import {
   type AppTextKey,
 } from "../i18n/appLanguage";
 import { COMPONENT_IDS } from "../componentIds";
+import { getAncestorDirectoryPaths } from "../explorer/explorerTreeVisibility";
 
 declare global {
   interface Window {
@@ -290,6 +291,14 @@ const sortDirectoryPaths = (
         getDirectoryDepth(leftPath) - getDirectoryDepth(rightPath) ||
         leftPath.localeCompare(rightPath),
     );
+
+const includeAncestorDirectoryPaths = (
+  directoryPaths: readonly string[],
+): readonly string[] =>
+  directoryPaths.flatMap((directoryPath) => [
+    ...getAncestorDirectoryPaths(directoryPath),
+    directoryPath,
+  ]);
 
 const getParentPath = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf("/");
@@ -448,6 +457,9 @@ export const App = (): React.JSX.Element => {
   const [workspaceFileHistory, setWorkspaceFileHistory] = useState(
     readWorkspaceFileHistory,
   );
+  const [workspaceMarkdownFilePaths, setWorkspaceMarkdownFilePaths] = useState<
+    readonly string[]
+  >([]);
   const [copiedExplorerEntry, setCopiedExplorerEntry] =
     useState<ExplorerCopiedEntry | null>(null);
   const [aiTools, setAiTools] = useState<readonly AiTool[]>([]);
@@ -502,6 +514,7 @@ export const App = (): React.JSX.Element => {
   const editorSearchShellRef = useRef<HTMLDivElement | null>(null);
   const editorSearchInputRef = useRef<HTMLInputElement | null>(null);
   const hasConsumedInitialLaunchPathRef = useRef(false);
+  const workspaceMarkdownFilePathsRootRef = useRef<string | null>(null);
   const dropTargetDepthRef = useRef(0);
   const appLanguagePack = useMemo(
     () => getAppLanguagePack(appLanguageId, customAppLanguagePacks),
@@ -691,6 +704,29 @@ export const App = (): React.JSX.Element => {
     [state.workspace?.rootPath, text],
   );
 
+  const syncWorkspaceMarkdownFilePaths = useCallback(
+    (workspaceRoot: string, tree: readonly TreeNode[]): void => {
+      workspaceMarkdownFilePathsRootRef.current = workspaceRoot;
+      setWorkspaceMarkdownFilePaths(collectMarkdownFilePaths(tree));
+
+      if (!window.editorApi?.listMarkdownFiles) {
+        return;
+      }
+
+      void window.editorApi
+        .listMarkdownFiles(workspaceRoot)
+        .then((filePaths) => {
+          if (workspaceMarkdownFilePathsRootRef.current !== workspaceRoot) {
+            return;
+          }
+
+          setWorkspaceMarkdownFilePaths(filePaths);
+        })
+        .catch(() => undefined);
+    },
+    [],
+  );
+
   const clearAiDocumentResult = useCallback((documentKey: string): void => {
     setAiResult((currentResult) =>
       currentResult?.documentKey === documentKey ? null : currentResult,
@@ -789,10 +825,16 @@ export const App = (): React.JSX.Element => {
     (workspace: Workspace): void => {
       clearAiResultState();
       closeEditorSearch();
+      syncWorkspaceMarkdownFilePaths(workspace.rootPath, workspace.tree);
       dispatch({ type: "workspace/opened", workspace });
       rememberOpenedWorkspace(workspace);
     },
-    [clearAiResultState, closeEditorSearch, rememberOpenedWorkspace],
+    [
+      clearAiResultState,
+      closeEditorSearch,
+      rememberOpenedWorkspace,
+      syncWorkspaceMarkdownFilePaths,
+    ],
   );
 
   const loadFile = useCallback(
@@ -856,16 +898,50 @@ export const App = (): React.JSX.Element => {
         workspace.rootPath,
       );
 
-      if (
-        !lastOpenedFilePath ||
-        !findFileNodeByPath(workspace.tree, lastOpenedFilePath)
-      ) {
+      if (!lastOpenedFilePath) {
+        return;
+      }
+
+      let tree = workspace.tree;
+
+      if (!findFileNodeByPath(tree, lastOpenedFilePath)) {
+        if (!window.editorApi) {
+          return;
+        }
+
+        try {
+          for (const directoryPath of getAncestorDirectoryPaths(
+            lastOpenedFilePath,
+          )) {
+            if (!hasDirectoryNode(tree, directoryPath)) {
+              return;
+            }
+
+            tree = replaceDirectoryChildren(
+              tree,
+              directoryPath,
+              await window.editorApi.listDirectory(directoryPath),
+            );
+          }
+        } catch {
+          return;
+        }
+
+        dispatch({
+          tree,
+          type: "workspace/tree-refreshed",
+          workspaceRoot: workspace.rootPath,
+        });
+        syncWorkspaceMarkdownFilePaths(workspace.rootPath, tree);
+      }
+
+      if (!findFileNodeByPath(tree, lastOpenedFilePath)) {
         return;
       }
 
       await loadFile(lastOpenedFilePath, workspace.rootPath);
     },
-    [loadFile, workspaceFileHistory],
+    [loadFile, syncWorkspaceMarkdownFilePaths, workspaceFileHistory],
   );
 
   const updateExplorerWidthFromPointer = useCallback(
@@ -1267,7 +1343,9 @@ export const App = (): React.JSX.Element => {
 
         let tree = await window.editorApi.listDirectory("");
 
-        for (const directoryPath of sortDirectoryPaths(directoryPaths)) {
+        for (const directoryPath of sortDirectoryPaths(
+          includeAncestorDirectoryPaths(directoryPaths),
+        )) {
           if (!hasDirectoryNode(tree, directoryPath)) {
             continue;
           }
@@ -1284,6 +1362,7 @@ export const App = (): React.JSX.Element => {
           type: "workspace/tree-refreshed",
           workspaceRoot: scopedWorkspaceRoot,
         });
+        syncWorkspaceMarkdownFilePaths(scopedWorkspaceRoot, tree);
       } catch (error) {
         dispatch({
           message: getErrorMessage(
@@ -1295,7 +1374,7 @@ export const App = (): React.JSX.Element => {
         });
       }
     },
-    [state.workspace?.rootPath, text],
+    [state.workspace?.rootPath, syncWorkspaceMarkdownFilePaths, text],
   );
 
   const openDroppedPath = useCallback(
@@ -1977,7 +2056,7 @@ export const App = (): React.JSX.Element => {
       }
 
       await window.editorApi.createMarkdownFile(filePath, workspaceRoot);
-      await refreshWorkspaceTree(workspaceRoot);
+      await refreshWorkspaceTree(workspaceRoot, [getParentPath(filePath)]);
       await loadFile(filePath, workspaceRoot);
     } catch (error) {
       dispatch({
@@ -2005,7 +2084,7 @@ export const App = (): React.JSX.Element => {
       }
 
       await window.editorApi.createMarkdownFile(filePath, workspaceRoot);
-      await refreshWorkspaceTree(workspaceRoot);
+      await refreshWorkspaceTree(workspaceRoot, [getParentPath(filePath)]);
 
       return filePath;
     },
@@ -2025,7 +2104,7 @@ export const App = (): React.JSX.Element => {
       }
 
       await window.editorApi.createFolder(folderPath, workspaceRoot);
-      await refreshWorkspaceTree(workspaceRoot);
+      await refreshWorkspaceTree(workspaceRoot, [getParentPath(folderPath)]);
     } catch (error) {
       dispatch({
         message: getErrorMessage(error, text("errors.createFolderFailed")),
@@ -2164,7 +2243,7 @@ export const App = (): React.JSX.Element => {
             );
         const [firstCopiedEntry] = copiedEntries;
 
-        await refreshWorkspaceTree(workspaceRoot);
+        await refreshWorkspaceTree(workspaceRoot, [targetDirectoryPath]);
 
         if (!firstCopiedEntry) {
           return;
@@ -3467,9 +3546,7 @@ export const App = (): React.JSX.Element => {
             isSaving={historyPreview ? false : state.isSavingFile}
             lineSpacing={editorLineSpacing}
             markdownFilePaths={
-              state.workspace
-                ? collectMarkdownFilePaths(state.workspace.tree)
-                : []
+              state.workspace ? workspaceMarkdownFilePaths : []
             }
             markdown={editorMarkdown}
             markdownAssetResolver={editorMarkdownAssetResolver}

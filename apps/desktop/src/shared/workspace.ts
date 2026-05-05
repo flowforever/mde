@@ -108,6 +108,9 @@ export interface EditorApi {
   readonly listDeletedDocumentHistory?: (
     workspaceRoot: string
   ) => Promise<readonly DeletedDocumentHistoryEntry[]>
+  readonly listMarkdownFiles?: (
+    workspaceRoot: string
+  ) => Promise<readonly string[]>
   readonly readDocumentHistoryVersion?: (
     versionId: string,
     workspaceRoot: string

@@ -57,7 +57,59 @@ const freezeNodes = (nodes: readonly TreeNode[]): readonly TreeNode[] =>
   )
 
 export const createWorkspaceService = (): WorkspaceService => {
-  const readTree = async (
+  const getDirectoryMarkdownStatus = async (
+    workspacePath: string,
+    directoryPath: string
+  ): Promise<{
+    readonly hasEntries: boolean
+    readonly hasMarkdownFile: boolean
+  }> => {
+    const absoluteDirectoryPath = resolveWorkspacePath(workspacePath, directoryPath)
+
+    try {
+      const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
+      const visibleEntries = entries.filter(
+        (entry) => !ignoredEntryNames.has(entry.name)
+      )
+
+      for (const entry of visibleEntries) {
+        if (entry.isFile() && isMarkdownFile(entry.name)) {
+          return {
+            hasEntries: true,
+            hasMarkdownFile: true
+          }
+        }
+      }
+
+      for (const entry of visibleEntries) {
+        if (!entry.isDirectory()) {
+          continue
+        }
+
+        const nodePath = directoryPath ? `${directoryPath}/${entry.name}` : entry.name
+        const childStatus = await getDirectoryMarkdownStatus(workspacePath, nodePath)
+
+        if (childStatus.hasMarkdownFile) {
+          return {
+            hasEntries: true,
+            hasMarkdownFile: true
+          }
+        }
+      }
+
+      return {
+        hasEntries: visibleEntries.length > 0,
+        hasMarkdownFile: false
+      }
+    } catch {
+      return {
+        hasEntries: true,
+        hasMarkdownFile: false
+      }
+    }
+  }
+
+  const readDirectory = async (
     workspacePath: string,
     directoryPath: string
   ): Promise<readonly TreeNode[]> => {
@@ -73,8 +125,16 @@ export const createWorkspaceService = (): WorkspaceService => {
         const absoluteNodePath = resolveWorkspacePath(workspacePath, nodePath)
 
         if (entry.isDirectory()) {
+          const markdownStatus = await getDirectoryMarkdownStatus(
+            workspacePath,
+            nodePath
+          )
+
           return {
-            children: await readTree(workspacePath, nodePath),
+            children: [],
+            ...(markdownStatus.hasEntries && !markdownStatus.hasMarkdownFile
+              ? { isDefaultHidden: true }
+              : {}),
             name: entry.name,
             path: nodePath,
             type: 'directory'
@@ -183,12 +243,12 @@ export const createWorkspaceService = (): WorkspaceService => {
       return Object.freeze({
         name: basename(canonicalWorkspacePath),
         rootPath: canonicalWorkspacePath,
-        tree: await readTree(canonicalWorkspacePath, ''),
+        tree: await readDirectory(canonicalWorkspacePath, ''),
         type: 'workspace'
       })
     },
     listDirectory(workspacePath, directoryPath) {
-      return readTree(workspacePath, directoryPath)
+      return readDirectory(workspacePath, directoryPath)
     }
   }
 }

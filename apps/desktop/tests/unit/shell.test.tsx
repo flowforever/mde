@@ -1201,7 +1201,7 @@ describe("App shell", () => {
     ];
     const rootTree: readonly TreeNode[] = [
       {
-        children: docsChildren,
+        children: [],
         name: "docs",
         path: "docs",
         type: "directory",
