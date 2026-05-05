@@ -90,26 +90,6 @@ describe("ExplorerTree", () => {
       type: "file",
     },
   ]);
-  const treeWithDefaultHiddenDirectory: readonly TreeNode[] = Object.freeze([
-    {
-      children: Object.freeze<TreeNode[]>([]),
-      isDefaultHidden: true,
-      name: "assets",
-      path: "assets",
-      type: "directory",
-    },
-    {
-      children: Object.freeze<TreeNode[]>([]),
-      name: "docs",
-      path: "docs",
-      type: "directory",
-    },
-    {
-      name: "README.md",
-      path: "README.md",
-      type: "file",
-    },
-  ]);
 
   it("renders nested folders and files after expansion", async () => {
     const user = userEvent.setup();
@@ -543,55 +523,6 @@ describe("ExplorerTree", () => {
     expect(
       screen.queryByRole("button", { name: /^deleted documents/i }),
     ).not.toBeInTheDocument();
-  });
-
-  it("hides directories without Markdown descendants until hidden entries are shown", async () => {
-    const user = userEvent.setup();
-    const state: AppState = {
-      draftMarkdown: null,
-      errorMessage: null,
-      fileErrorMessage: null,
-      isDirty: false,
-      isLoadingFile: false,
-      isOpeningWorkspace: false,
-      isSavingFile: false,
-      loadedFile: null,
-      loadingWorkspaceRoot: null,
-      selectedEntryPath: null,
-      selectedFilePath: null,
-      workspace: {
-        name: "workspace",
-        rootPath: "/workspace-default-hidden",
-        tree: treeWithDefaultHiddenDirectory,
-      },
-    };
-
-    render(
-      <ExplorerPane
-        onCreateFile={vi.fn()}
-        onCreateFolder={vi.fn()}
-        onDeleteEntry={vi.fn()}
-        onOpenWorkspace={vi.fn()}
-        onRefreshTree={vi.fn()}
-        onRenameEntry={vi.fn()}
-        onSelectEntry={vi.fn()}
-        onSelectFile={vi.fn()}
-        text={text}
-        state={state}
-      />,
-    );
-
-    expect(
-      screen.queryByRole("button", { name: /assets folder/i }),
-    ).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: /show hidden entries/i }),
-    );
-
-    expect(
-      screen.getByRole("button", { name: /assets folder/i }),
-    ).toBeVisible();
   });
 
   it("labels explorer rows with entry type and active state", () => {

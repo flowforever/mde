@@ -1,11 +1,4 @@
-import {
-  mkdir,
-  mkdtemp,
-  realpath,
-  rm,
-  symlink,
-  writeFile
-} from 'node:fs/promises'
+import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
@@ -25,87 +18,26 @@ const createIpcEvent = (senderId: number) => ({
   }
 })
 
+const flattenTree = (nodes: readonly TreeNode[]): string[] =>
+  nodes.flatMap((node) =>
+    node.type === 'directory'
+      ? [node.path, ...flattenTree(node.children)]
+      : [node.path]
+  )
+
 describe('workspaceService integration', () => {
-  it('loads the fixture workspace root lazily', async () => {
+  it('loads the fixture workspace tree', async () => {
     const workspace = await createWorkspaceService().openWorkspace(
       fixtureWorkspacePath
     )
 
-    expect(workspace.tree).toEqual([
-      {
-        children: [],
-        name: 'docs',
-        path: 'docs',
-        type: 'directory'
-      },
-      {
-        name: 'README.md',
-        path: 'README.md',
-        type: 'file'
-      }
-    ])
-  })
-
-  it('marks directories without Markdown descendants as default hidden while loading children lazily', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-lazy-tree-'))
-    const service = createWorkspaceService()
-
-    await mkdir(join(workspacePath, 'docs', 'nested'), { recursive: true })
-    await mkdir(join(workspacePath, 'assets'), { recursive: true })
-    await mkdir(join(workspacePath, 'drafts'), { recursive: true })
-    await writeFile(join(workspacePath, 'README.md'), '# Root')
-    await writeFile(join(workspacePath, 'docs', 'intro.md'), '# Intro')
-    await writeFile(join(workspacePath, 'docs', 'nested', 'deep.md'), '# Deep')
-    await writeFile(join(workspacePath, 'assets', 'logo.png'), 'png')
-
-    const workspace = await service.openWorkspace(workspacePath)
-
-    expect(workspace.tree).toEqual([
-      {
-        children: [],
-        isDefaultHidden: true,
-        name: 'assets',
-        path: 'assets',
-        type: 'directory'
-      },
-      {
-        children: [],
-        name: 'docs',
-        path: 'docs',
-        type: 'directory'
-      },
-      {
-        children: [],
-        name: 'drafts',
-        path: 'drafts',
-        type: 'directory'
-      },
-      {
-        name: 'README.md',
-        path: 'README.md',
-        type: 'file'
-      }
-    ])
-    expect(await service.listDirectory(workspace.rootPath, 'docs')).toEqual([
-      {
-        children: [],
-        name: 'nested',
-        path: 'docs/nested',
-        type: 'directory'
-      },
-      {
-        name: 'intro.md',
-        path: 'docs/intro.md',
-        type: 'file'
-      }
-    ])
-    expect(await service.listDirectory(workspace.rootPath, 'docs/nested')).toEqual([
-      {
-        name: 'deep.md',
-        path: 'docs/nested/deep.md',
-        type: 'file'
-      }
-    ])
+    expect(flattenTree(workspace.tree)).toEqual(
+      expect.arrayContaining([
+        'README.md',
+        'docs/intro.md',
+        'docs/nested/deep.md'
+      ])
+    )
   })
 
   it('opens a standalone Markdown file as a file workspace', async () => {

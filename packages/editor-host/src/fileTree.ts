@@ -9,7 +9,6 @@ export interface BaseTreeNode {
 export interface DirectoryTreeNode extends BaseTreeNode {
   readonly type: 'directory'
   readonly children: readonly TreeNode[]
-  readonly isDefaultHidden?: boolean
 }
 
 export interface FileTreeNode extends BaseTreeNode {

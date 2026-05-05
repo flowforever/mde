@@ -31,11 +31,6 @@ export const createEditorApi = (
       WORKSPACE_CHANNELS.listDirectory,
       directoryPath
     ) as Promise<readonly TreeNode[]>,
-  listMarkdownFiles: (workspaceRoot) =>
-    ipcRenderer.invoke(
-      FILE_CHANNELS.listMarkdownFiles,
-      workspaceRoot
-    ) as ReturnType<NonNullable<EditorApi['listMarkdownFiles']>>,
   onLaunchPath: (callback) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

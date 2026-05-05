@@ -22,7 +22,6 @@ export const FILE_CHANNELS = Object.freeze({
   deleteEntry: "file:delete-entry",
   listDeletedDocumentHistory: "file:list-deleted-document-history",
   listDocumentHistory: "file:list-document-history",
-  listMarkdownFiles: "file:list-markdown-files",
   pasteClipboardEntries: "file:paste-clipboard-entries",
   pasteExternalEntries: "file:paste-external-entries",
   readClipboardText: "file:read-clipboard-text",

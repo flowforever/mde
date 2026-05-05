@@ -197,18 +197,6 @@ export const registerFileHandlers = ({
   )
 
   ipcMain.handle(
-    FILE_CHANNELS.listMarkdownFiles,
-    async (event, workspaceRoot) =>
-      markdownFileService.listMarkdownFiles(
-        getRequiredWorkspaceRoot(
-          event,
-          getActiveWorkspaceRoot,
-          assertStringInput(workspaceRoot, 'Workspace root')
-        )
-      )
-  )
-
-  ipcMain.handle(
     FILE_CHANNELS.listDocumentHistory,
     async (event, filePath, workspaceRoot) =>
       documentHistoryService.listDocumentHistory(

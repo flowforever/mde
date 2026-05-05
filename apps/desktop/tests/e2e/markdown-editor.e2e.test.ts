@@ -1155,10 +1155,8 @@ test('opens a workspace and expands the docs folder', async () => {
   const workspacePath = await createFixtureWorkspace()
 
   await mkdir(join(workspacePath, '.vscode'), { recursive: true })
-  await mkdir(join(workspacePath, 'assets'), { recursive: true })
   await writeFile(join(workspacePath, '.vscode', 'settings.md'), '# Settings')
   await writeFile(join(workspacePath, '.draft.md'), '# Draft')
-  await writeFile(join(workspacePath, 'assets', 'logo.png'), 'png')
 
   const { app, startupDiagnostics, window } = await launchElectronApp({
     args: [`--test-workspace=${workspacePath}`]
@@ -1180,9 +1178,6 @@ test('opens a workspace and expands the docs folder', async () => {
     await expect(
       window.getByRole('button', { name: /\.draft\.md Markdown file/i })
     ).toBeHidden()
-    await expect(
-      window.getByRole('button', { name: /assets folder/i })
-    ).toBeHidden()
 
     await window.getByRole('button', { name: /show hidden entries/i }).click()
 
@@ -1191,9 +1186,6 @@ test('opens a workspace and expands the docs folder', async () => {
     ).toBeVisible()
     await expect(
       window.getByRole('button', { name: /\.draft\.md Markdown file/i })
-    ).toBeVisible()
-    await expect(
-      window.getByRole('button', { name: /assets folder/i })
     ).toBeVisible()
     await window.getByRole('button', { name: /hide hidden entries/i }).click()
 
