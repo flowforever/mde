@@ -6,7 +6,7 @@ description: Use when Codex should run an autonomous loop over READY local task 
 
 ## Overview
 
-Run a continuous autonomous task loop for MDE: pick one local READY task or GitHub issue marked `WILL-DO`, confirm it can be completed without human participation, develop it, verify it, release it when appropriate, archive the task, then reload this skill and continue. The loop does not stop just because no candidate is currently available.
+Run a continuous autonomous task loop for MDE: pick one local READY task or GitHub issue marked `WILL-DO`, confirm it can be completed without human participation, develop it, verify it, release it when appropriate, archive the task, then pull the latest branch state, reload this skill, and continue. The loop does not stop just because no candidate is currently available.
 
 ## Selection Rules
 
@@ -32,13 +32,17 @@ Run a continuous autonomous task loop for MDE: pick one local READY task or GitH
 
 * Process exactly one autonomous task per loop.
 
-* If no local READY task or GitHub `WILL-DO` issue exists, wait 5 minutes, then search again. Repeat this wait-and-search cycle indefinitely until a candidate appears or the user explicitly stops the loop.
+* If no local READY task or GitHub `WILL-DO` issue exists, wait 15 minutes, then search again. Repeat this wait-and-search cycle indefinitely until a candidate appears or the user explicitly stops the loop.
+
+* Never treat an empty candidate search as completion. If no task is detected, the loop must keep running.
 
 * Skip ambiguous documents instead of inferring readiness from body text.
 
 * Skip documents that already contain an unresolved auto-pick "Needs human input" or "Not autonomous" status note unless the user has edited the document or explicitly cleared the blocker.
 
 * Skip GitHub issues that already contain an unresolved auto-pick "Needs human input" or "Not autonomous" comment unless the user has added a newer `WILL-DO` comment or explicitly cleared the blocker.
+
+* Skip GitHub issues that already contain an unresolved auto-pick "In progress" status comment by another actor unless the same actor has added a newer completion, release, blocked, or handoff comment.
 
 ## Autonomy Gate
 
@@ -84,15 +88,31 @@ Stop for human input only when a concrete blocker remains after the autonomy inv
 
 If the task is not fully autonomous after this investigation, do not mark development as started. Add a brief status note or issue comment explaining what you checked, the concrete blocker, and the exact human input needed; keep the task outside `done` and leave GitHub issues open, then select another candidate if one exists.
 
+## GitHub Issue Coordination
+
+For GitHub issues, coordination happens immediately after the Autonomy Gate passes and before deeper task analysis, implementation, branch work, or long-running verification.
+
+When starting a GitHub issue:
+
+* Re-read the issue comments immediately before claiming it. If another unresolved auto-pick "In progress" status appeared, skip the issue and select another candidate.
+
+* Add a GitHub issue comment immediately stating that auto-pick has started work, who is handling it when GitHub identity is available, and that the issue is in progress to avoid duplicate handling.
+
+* If the repository exposes safe issue state surfaces such as assignee, label, or project status, update the relevant status to in-progress in the same claiming step when permissions allow.
+
+* If the in-progress comment or available status update fails, do not start development on that GitHub issue. Record the failure if possible, then select another candidate or wait and loop.
+
+* Do not rely on local notes, branch names, or unpushed work as the coordination signal for GitHub issues; the status must be visible on GitHub.
+
 ## Loop
 
-1. Reload `skills/auto-pick-tasks/SKILL.md` so the latest workflow rules apply.
+1. Pull the latest branch state from the configured remote, then reload `skills/auto-pick-tasks/SKILL.md` so the latest workflow rules apply.
 
 2. Select the highest-priority candidate: READY local bug, then READY local requirement, then GitHub `WILL-DO` issue.
 
-3. Apply the Autonomy Gate. If investigation confirms the task is not fully autonomous, record what was checked plus the needed human input, then return to step 2. If every visible candidate is blocked, wait 5 minutes and restart from step 1 instead of pausing.
+3. Apply the Autonomy Gate. If investigation confirms the task is not fully autonomous, record what was checked plus the needed human input, then return to step 2. If every visible candidate is blocked, wait 15 minutes and restart from step 1 instead of pausing.
 
-4. Update the selected task source with a status note showing that development has started: edit the local task document, or add a GitHub issue comment.
+4. Update the selected task source with a status note showing that development has started: edit the local task document, or for GitHub issues follow the GitHub Issue Coordination rules before any further work.
 
 5. Analyze the task, dependencies, risks, and expected verification.
 
@@ -110,7 +130,7 @@ If the task is not fully autonomous after this investigation, do not mark develo
 
 12. Return to step 1.
 
-If any loop finds no selectable candidate, do not send a final status response solely because the queue is empty. Wait 5 minutes and restart from step 1. Brief progress updates are fine while waiting; the agent should keep the turn alive and keep polling.
+If any loop finds no selectable candidate, do not send a final status response solely because the queue is empty. Wait 15 minutes and restart from step 1. Brief progress updates are fine while waiting; the agent must keep the turn alive and keep polling.
 
 ## Release and Archive Rules
 
@@ -138,7 +158,7 @@ Do not pause or end the turn only because:
 
 * Verification fails for one candidate and the failure has been recorded.
 
-In these cases, record the relevant status note when there is a task or issue to annotate, wait 5 minutes, reload this skill, and search again.
+In these cases, record the relevant status note when there is a task or issue to annotate, wait 15 minutes, pull the latest branch state, reload this skill, and search again.
 
 Only stop the continuous loop when:
 
@@ -153,10 +173,10 @@ Only stop the continuous loop when:
 | Situation                          | Action                                                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | READY local task found             | Apply the Autonomy Gate before marking it in development                                             |
-| GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; then apply the Autonomy Gate                   |
+| GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; then apply the Autonomy Gate and claim it on GitHub before work |
 | Multiple candidates found          | Prefer `docs/bugs/`, then `docs/requirements/`, then GitHub; complete one task before taking another |
 | Candidate appears ambiguous        | Investigate repository context and make reasonable conservative assumptions                          |
 | Candidate still needs human input  | Do not start it; record checks, blocker, and select another candidate; if none remain, wait and loop |
-| No candidate found                 | Wait 5 minutes and check again indefinitely                                                          |
+| No candidate found                 | Wait 15 minutes and check again indefinitely; do not stop the loop                                   |
 | Release fails                      | Keep the task outside `done`; fix if possible, otherwise record the blocker and continue the loop    |
-| Skill file changes                 | Reload it before the next loop                                                                       |
+| Skill file changes                 | Pull the latest branch state, then reload it before the next loop                                    |
