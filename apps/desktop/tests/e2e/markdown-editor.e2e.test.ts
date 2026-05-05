@@ -3709,9 +3709,33 @@ test('keeps the editing position after idle autosave', async () => {
         async () =>
           window.evaluate(() => {
             const selection = globalThis.getSelection()
-            const selectedNodeText = selection?.anchorNode?.textContent ?? ''
+            const anchorNode = selection?.anchorNode ?? null
+            const anchorElement =
+              anchorNode?.nodeType === Node.ELEMENT_NODE
+                ? (anchorNode as Element)
+                : (anchorNode?.parentElement ?? null)
+            const editableElement = anchorElement?.closest<HTMLElement>(
+              '[contenteditable="true"]'
+            )
 
-            return selectedNodeText.includes('Autosave middle A')
+            if (
+              !selection?.isCollapsed ||
+              !anchorNode?.isConnected ||
+              !editableElement?.contains(anchorNode)
+            ) {
+              return false
+            }
+
+            editableElement.focus({ preventScroll: true })
+
+            const selectedNodeText = selection.anchorNode?.textContent ?? ''
+            const activeElement = document.activeElement
+
+            return (
+              selectedNodeText.includes('Autosave middle A') &&
+              (activeElement === editableElement ||
+                editableElement.contains(activeElement))
+            )
           }),
         { timeout: 10_000 }
       )
