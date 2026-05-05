@@ -671,7 +671,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
     await waitFor(() => {
-      expect(onSaveRequest).toHaveBeenCalledWith("");
+      expect(onSaveRequest).toHaveBeenCalledWith("", "blur-autosave");
     });
   });
 
@@ -725,7 +725,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
     await waitFor(() => {
-      expect(onSaveRequest).toHaveBeenCalledWith("");
+      expect(onSaveRequest).toHaveBeenCalledWith("", "blur-autosave");
     });
   });
 
@@ -785,6 +785,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     await waitFor(() => {
       expect(onSaveRequest).toHaveBeenCalledWith(
         ["# Saved", "", "Blur draft"].join("\n"),
+        "blur-autosave",
       );
     });
   });
@@ -850,7 +851,7 @@ describe("MarkdownBlockEditor accessibility", () => {
         window.setTimeout(resolve, 250);
       });
     });
-    expect(onSaveRequest).not.toHaveBeenCalledWith("");
+    expect(onSaveRequest).not.toHaveBeenCalledWith("", "blur-autosave");
   });
 
   it("saves editor input on blur before the BlockNote change callback settles", async () => {
@@ -888,6 +889,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     await waitFor(() => {
       expect(onSaveRequest).toHaveBeenCalledWith(
         ["# Saved", "", "Blur input"].join("\n"),
+        "blur-autosave",
       );
     });
   });
@@ -947,6 +949,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     await waitFor(() => {
       expect(onSaveRequest).toHaveBeenCalledWith(
         ["# Saved", "", "Late dirty draft"].join("\n"),
+        "blur-autosave",
       );
     });
   });
@@ -1003,7 +1006,7 @@ describe("MarkdownBlockEditor accessibility", () => {
     );
 
     await waitFor(() => {
-      expect(onSaveRequest).toHaveBeenCalledWith("");
+      expect(onSaveRequest).toHaveBeenCalledWith("", "blur-autosave");
     });
   });
 
@@ -1369,7 +1372,10 @@ describe("MarkdownBlockEditor accessibility", () => {
     await user.click(screen.getByRole("button", { name: /outside editor/i }));
 
     await waitFor(() => {
-      expect(onSaveRequest).toHaveBeenCalledWith(editedMarkdown);
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        editedMarkdown,
+        "blur-autosave",
+      );
     });
 
     rerender(
@@ -1736,7 +1742,10 @@ describe("MarkdownBlockEditor accessibility", () => {
     );
 
     await waitFor(() => {
-      expect(onSaveRequest).toHaveBeenCalledWith("[intro.md](docs/intro.md)");
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        "[intro.md](docs/intro.md)",
+        "manual",
+      );
     });
   });
 
@@ -1835,7 +1844,10 @@ describe("MarkdownBlockEditor accessibility", () => {
 
     await waitFor(() => {
       expect(onCreateLinkedMarkdown).toHaveBeenCalledWith("docs/new-note.md");
-      expect(onSaveRequest).toHaveBeenCalledWith("[new-note.md](new-note.md)");
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        "[new-note.md](new-note.md)",
+        "manual",
+      );
     });
   });
 

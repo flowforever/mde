@@ -75,7 +75,8 @@ import { resolveEditorLinkTarget } from "../editorHost/editorLinks";
 import { getNextSearchMatchIndex } from "@mde/editor-core/search";
 import type {
   EditorDocumentRef,
-  EditorHostResult
+  EditorHostResult,
+  EditorSaveReason,
 } from "@mde/editor-host/types";
 import {
   EDITOR_SEARCH_HISTORY_STORAGE_KEY,
@@ -1877,57 +1878,6 @@ export const App = (): React.JSX.Element => {
   );
 
   useEffect(() => {
-    const loadedFilePath = state.loadedFile?.path;
-    const workspaceRoot = state.workspace?.rootPath;
-
-    if (
-      !state.isDirty ||
-      state.isSavingFile ||
-      !loadedFilePath ||
-      !workspaceRoot
-    ) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void saveCurrentFile(state.draftMarkdown ?? undefined, {
-        source: "autosave",
-      });
-    }, AUTO_SAVE_IDLE_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [
-    saveCurrentFile,
-    state.draftMarkdown,
-    state.isDirty,
-    state.isSavingFile,
-    state.loadedFile?.path,
-    state.workspace?.rootPath,
-  ]);
-
-  useEffect(() => {
-    const saveOnShortcut = (event: KeyboardEvent): void => {
-      if (
-        !(event.metaKey || event.ctrlKey) ||
-        event.key.toLowerCase() !== "s"
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      void saveCurrentFile();
-    };
-
-    window.addEventListener("keydown", saveOnShortcut);
-
-    return () => {
-      window.removeEventListener("keydown", saveOnShortcut);
-    };
-  }, [saveCurrentFile]);
-
-  useEffect(() => {
     const openSearchOnShortcut = (event: KeyboardEvent): void => {
       if (
         !(event.metaKey || event.ctrlKey) ||
@@ -2543,12 +2493,19 @@ export const App = (): React.JSX.Element => {
   const editorWorkspaceTreeRef = useRef<readonly TreeNode[]>(
     state.workspace?.tree ?? [],
   );
+  const editorDraftMarkdownRef = useRef(state.draftMarkdown);
+  const editorLoadedFileContentsRef = useRef(state.loadedFile?.contents);
   const saveCurrentFileRef = useRef(saveCurrentFile);
 
   useEffect(() => {
     editorWorkspaceRootRef.current = state.workspace?.rootPath ?? "";
     editorWorkspaceTreeRef.current = state.workspace?.tree ?? [];
   }, [state.workspace?.rootPath, state.workspace?.tree]);
+
+  useEffect(() => {
+    editorDraftMarkdownRef.current = state.draftMarkdown;
+    editorLoadedFileContentsRef.current = state.loadedFile?.contents;
+  }, [state.draftMarkdown, state.loadedFile?.contents]);
 
   useEffect(() => {
     saveCurrentFileRef.current = saveCurrentFile;
@@ -2565,8 +2522,10 @@ export const App = (): React.JSX.Element => {
           tree: editorWorkspaceTreeRef.current,
         }),
         openLink: ({ href }) => openEditorLink(href),
-        saveDocument: async ({ markdown }) => {
-          await saveCurrentFileRef.current(markdown);
+        saveDocument: async ({ markdown, reason }) => {
+          await saveCurrentFileRef.current(markdown, {
+            source: reason === "idle-autosave" ? "autosave" : "manual",
+          });
         },
         uploadImage: async ({ bytes, fileName, mimeType }) => ({
           src: await uploadImageAsset(
@@ -2581,17 +2540,79 @@ export const App = (): React.JSX.Element => {
     ],
   );
   const saveMarkdownWithEditorHost = useCallback(
-    async (contents: string): Promise<void> => {
+    async (
+      contents?: string,
+      reason: EditorSaveReason = "manual",
+    ): Promise<void> => {
+      const markdown =
+        contents ??
+        editorDraftMarkdownRef.current ??
+        (await editorRef.current?.getMarkdown()) ??
+        editorLoadedFileContentsRef.current ??
+        "";
       const result = await createCurrentDesktopEditorHost().saveDocument({
         document: editorDocumentRef,
-        markdown: contents,
-        reason: "manual",
+        markdown,
+        reason,
       });
 
       requireEditorHostResultValue(result, text("errors.saveFileFailed"));
     },
     [createCurrentDesktopEditorHost, editorDocumentRef, text],
   );
+
+  useEffect(() => {
+    const saveOnShortcut = (event: KeyboardEvent): void => {
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      void saveMarkdownWithEditorHost(undefined, "manual");
+    };
+
+    window.addEventListener("keydown", saveOnShortcut);
+
+    return () => {
+      window.removeEventListener("keydown", saveOnShortcut);
+    };
+  }, [saveMarkdownWithEditorHost]);
+
+  useEffect(() => {
+    const loadedFilePath = state.loadedFile?.path;
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (
+      !state.isDirty ||
+      state.isSavingFile ||
+      !loadedFilePath ||
+      !workspaceRoot
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveMarkdownWithEditorHost(
+        state.draftMarkdown ?? undefined,
+        "idle-autosave",
+      );
+    }, AUTO_SAVE_IDLE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    saveMarkdownWithEditorHost,
+    state.draftMarkdown,
+    state.isDirty,
+    state.isSavingFile,
+    state.loadedFile?.path,
+    state.workspace?.rootPath,
+  ]);
+
   const uploadImageWithEditorHost = useCallback(
     async (file: File): Promise<string> => {
       const result = await createCurrentDesktopEditorHost().uploadImage?.({

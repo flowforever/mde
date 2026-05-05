@@ -94,6 +94,7 @@ import {
   splitMarkdownFrontmatter,
 } from "@mde/editor-core/frontmatter";
 import type { TreeNode } from "@mde/editor-host/file-tree";
+import type { EditorSaveReason } from "@mde/editor-host/types";
 
 export type CreateVisibleLinkWorkspaceTree = (
   nodes: readonly TreeNode[],
@@ -128,7 +129,10 @@ export interface MarkdownBlockEditorProps {
   readonly onOpenLink?: (href: string) => void;
   readonly onMarkdownChange: (contents: string) => void;
   readonly onRestoreHistoryPreview?: () => void;
-  readonly onSaveRequest: (contents: string) => void | Promise<void>;
+  readonly onSaveRequest: (
+    contents: string,
+    reason: EditorSaveReason,
+  ) => void | Promise<void>;
   readonly onSearchStateChange?: (state: {
     readonly activeMatchIndex: number;
     readonly matchCount: number;
@@ -158,6 +162,12 @@ interface HighlightRuntime {
     readonly highlights?: HighlightRegistry;
   };
   readonly Highlight?: new (...ranges: Range[]) => unknown;
+}
+
+interface SaveMarkdownOptions {
+  readonly preserveLocalChangesWhenUnchanged?: boolean;
+  readonly reason?: EditorSaveReason;
+  readonly retryUnchangedCount?: number;
 }
 
 const SEARCH_MATCH_HIGHLIGHT_NAME = "mde-editor-search-match";
@@ -295,7 +305,7 @@ export const MarkdownBlockEditor = forwardRef<
   );
   const isHydratingRef = useRef(false);
   const hasLocalChangesRef = useRef(false);
-  const pendingSaveAfterCurrentRef = useRef(false);
+  const pendingSaveAfterCurrentRef = useRef<EditorSaveReason | null>(null);
   const pendingBlurSaveTimeoutRef = useRef<number | null>(null);
   const latestDraftMarkdownRef = useRef(draftMarkdown);
   const lastSerializedEditorMarkdownRef = useRef<string | null>(null);
@@ -396,16 +406,17 @@ export const MarkdownBlockEditor = forwardRef<
     return composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown);
   }, [draftMarkdownDocument, editor, markdownAssetResolver]);
 
-  const saveMarkdown = useCallback(async (options: {
-    readonly preserveLocalChangesWhenUnchanged?: boolean;
-    readonly retryUnchangedCount?: number;
-  } = {}): Promise<void> => {
+  const saveMarkdown = useCallback(async (
+    options: SaveMarkdownOptions = {},
+  ): Promise<void> => {
+    const reason = options.reason ?? "manual";
+
     if (isReadOnly || !hasLocalChangesRef.current) {
       return;
     }
 
     if (isSaving) {
-      pendingSaveAfterCurrentRef.current = true;
+      pendingSaveAfterCurrentRef.current = reason;
       return;
     }
 
@@ -432,6 +443,7 @@ export const MarkdownBlockEditor = forwardRef<
           window.setTimeout(() => {
             void saveMarkdown({
               preserveLocalChangesWhenUnchanged: true,
+              reason,
               retryUnchangedCount: (options.retryUnchangedCount ?? 0) - 1,
             });
           }, BLUR_SAVE_RETRY_DELAY_MS);
@@ -450,9 +462,9 @@ export const MarkdownBlockEditor = forwardRef<
       }
 
       setSerializationErrorMessage(null);
-      await onSaveRequest(contentsToSave);
+      await onSaveRequest(contentsToSave, reason);
       lastSerializedEditorMarkdownRef.current = contentsToSave;
-      pendingSaveAfterCurrentRef.current = false;
+      pendingSaveAfterCurrentRef.current = null;
       hasLocalChangesRef.current = false;
     } catch (error) {
       setSerializationErrorMessage(
@@ -466,8 +478,10 @@ export const MarkdownBlockEditor = forwardRef<
       return;
     }
 
-    pendingSaveAfterCurrentRef.current = false;
-    void saveMarkdown();
+    const reason = pendingSaveAfterCurrentRef.current;
+
+    pendingSaveAfterCurrentRef.current = null;
+    void saveMarkdown({ reason });
   }, [isSaving, saveMarkdown]);
 
   const closeLinkDialog = useCallback((): void => {
@@ -551,7 +565,7 @@ export const MarkdownBlockEditor = forwardRef<
       editor.createLink(normalizedHref, linkText);
       closeLinkDialog();
       window.setTimeout(() => {
-        void saveMarkdown();
+        void saveMarkdown({ reason: "manual" });
       }, 0);
     },
     [closeLinkDialog, editor, saveMarkdown],
@@ -735,7 +749,7 @@ export const MarkdownBlockEditor = forwardRef<
     }
 
     activeDocumentIdentityRef.current = documentIdentity;
-    pendingSaveAfterCurrentRef.current = false;
+    pendingSaveAfterCurrentRef.current = null;
     hasLocalChangesRef.current = false;
     lastSerializedEditorMarkdownRef.current = null;
   }, [documentIdentity]);
@@ -791,7 +805,7 @@ export const MarkdownBlockEditor = forwardRef<
       return;
     }
 
-    pendingSaveAfterCurrentRef.current = false;
+    pendingSaveAfterCurrentRef.current = null;
     hasLocalChangesRef.current = false;
   }, [draftMarkdown, isDirty, markdown]);
 
@@ -922,6 +936,7 @@ export const MarkdownBlockEditor = forwardRef<
         pendingBlurSaveTimeoutRef.current = null;
         void saveMarkdown({
           preserveLocalChangesWhenUnchanged: true,
+          reason: "blur-autosave",
           retryUnchangedCount: BLUR_SAVE_UNCHANGED_RETRY_LIMIT,
         });
       }, BLUR_SAVE_SETTLE_DELAY_MS);
@@ -1017,7 +1032,7 @@ export const MarkdownBlockEditor = forwardRef<
     }
 
     const timeoutId = window.setTimeout(() => {
-      void saveMarkdown();
+      void saveMarkdown({ reason: "blur-autosave" });
     }, 0);
 
     return () => {
