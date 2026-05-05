@@ -84,6 +84,7 @@ export interface EditorApi {
   readonly openPath: (resourcePath: string) => Promise<Workspace>
   readonly openPathInNewWindow?: (resourcePath: string) => Promise<void>
   readonly inspectPath?: (resourcePath: string) => Promise<WorkspacePathInfo>
+  readonly getDroppedFilePath?: (file: File) => string
   readonly openWorkspaceFileInNewWindow?: (
     workspaceRoot: string,
     filePath: string

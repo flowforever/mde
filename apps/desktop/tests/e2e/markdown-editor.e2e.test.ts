@@ -180,16 +180,17 @@ const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
 const dispatchResourceDragEvent = async (
   window: Page,
   type: 'dragenter' | 'dragover' | 'dragleave' | 'drop',
-  resourcePath: string
+  resourcePath: string,
+  targetSelector = '.app-shell'
 ): Promise<boolean> => {
   const canonicalResourcePath = await realpath(resourcePath)
 
   return window.evaluate(
-    ({ eventType, uri }) => {
-      const shell = document.querySelector('.app-shell')
+    ({ eventType, targetSelector, uri }) => {
+      const shell = document.querySelector(targetSelector)
 
       if (!shell) {
-        throw new Error('Missing app shell')
+        throw new Error(`Missing drop target: ${targetSelector}`)
       }
 
       const dataTransfer = new DataTransfer()
@@ -206,6 +207,7 @@ const dispatchResourceDragEvent = async (
     },
     {
       eventType: type,
+      targetSelector,
       uri: pathToFileURL(canonicalResourcePath).toString()
     }
   )
@@ -214,7 +216,8 @@ const dispatchResourceDragEvent = async (
 const dropResourceAndWaitForNewWindow = async (
   app: ElectronApplication,
   window: Page,
-  resourcePath: string
+  resourcePath: string,
+  targetSelector = '.app-shell'
 ): Promise<Page> => {
   let lastError: Error | null = null
 
@@ -229,7 +232,7 @@ const dropResourceAndWaitForNewWindow = async (
         return null
       })
 
-    await dispatchResourceDragEvent(window, 'drop', resourcePath)
+    await dispatchResourceDragEvent(window, 'drop', resourcePath, targetSelector)
 
     const newWindow = await newWindowPromise
 
@@ -1401,6 +1404,55 @@ test('opens an external dropped Markdown file in a new window', async () => {
       `external.md - ${await realpath(externalParentPath)}`
     )
     await expect(newWindow.locator('.bn-editor')).toContainText('External drop')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('opens an external dropped folder from the editor in a new window', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const externalWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-external-folder-drop-'))
+
+  await writeFile(join(externalWorkspacePath, 'external-folder.md'), '# Folder drop')
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    const workspaceTitle = await realpath(workspacePath)
+    const currentFileTitle = `README.md - ${workspaceTitle}`
+
+    await expect(window).toHaveTitle(workspaceTitle)
+    await window
+      .getByRole('button', { name: /README\.md Markdown file/i })
+      .click()
+    await expect(window).toHaveTitle(currentFileTitle)
+    await expect(window.locator('.bn-editor')).toBeVisible({
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
+
+    const newWindow = await dropResourceAndWaitForNewWindow(
+      app,
+      window,
+      externalWorkspacePath,
+      '.bn-editor'
+    )
+
+    await newWindow.waitForLoadState('domcontentloaded', { timeout: 20_000 })
+    await newWindow.locator('.app-shell').waitFor({
+      state: 'visible',
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
+    await expect(window).toHaveTitle(currentFileTitle)
+    await expect(newWindow).toHaveTitle(await realpath(externalWorkspacePath))
+    await expect(
+      newWindow.getByRole('button', {
+        name: /external-folder\.md Markdown file/i
+      })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

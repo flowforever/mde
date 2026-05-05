@@ -41,7 +41,12 @@ const mockEditorState = vi.hoisted(() => ({
 vi.mock("@mde/editor-react", async (importOriginal) => {
   const actual = await importOriginal();
   const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
-    <section aria-label="Mock editor">
+    <section
+      aria-label="Mock editor"
+      onDrop={(event) => {
+        event.stopPropagation();
+      }}
+    >
       <span>{props.path}</span>
       <span>{props.markdown}</span>
       <span data-testid="mock-editor-color-scheme">{props.colorScheme}</span>
@@ -643,6 +648,74 @@ describe("App shell", () => {
     expect(editorApi.openPath).not.toHaveBeenCalledWith(
       "/external/external.md",
     );
+  });
+
+  it("captures dropped files inside the editor and resolves paths through preload", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi
+        .fn()
+        .mockResolvedValueOnce("/workspaces/current/README.md")
+        .mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      getDroppedFilePath: vi.fn().mockReturnValue("/external/external.md"),
+      inspectPath: vi.fn().mockResolvedValue({
+        kind: "markdown-file",
+        path: "/external/external.md",
+      }),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspaces/current/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspaces/current",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openPathInNewWindow: vi.fn().mockResolvedValue(undefined),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Current",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+    const droppedFile = new File(["# External"], "external.md", {
+      type: "text/markdown",
+    });
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    const editorRegion = await screen.findByRole("region", {
+      name: /mock editor/i,
+    });
+
+    fireEvent.drop(editorRegion, {
+      dataTransfer: {
+        files: [droppedFile],
+        getData: vi.fn().mockReturnValue(""),
+      },
+    });
+
+    await waitFor(() => {
+      expect(editorApi.getDroppedFilePath).toHaveBeenCalledWith(droppedFile);
+      expect(editorApi.openPathInNewWindow).toHaveBeenCalledWith(
+        "/external/external.md",
+      );
+    });
+    expect(editorApi.openPath).toHaveBeenCalledTimes(1);
   });
 
   it("opens same-workspace editor links in the current window", async () => {

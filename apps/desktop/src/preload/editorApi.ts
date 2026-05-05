@@ -16,7 +16,12 @@ type IpcRenderer = Pick<
   'invoke' | 'on' | 'removeListener'
 >
 
-export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
+type WebUtils = Pick<typeof Electron.webUtils, 'getPathForFile'>
+
+export const createEditorApi = (
+  ipcRenderer: IpcRenderer,
+  webUtils: WebUtils
+): EditorApi => ({
   consumeLaunchPath: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.consumeLaunchPath) as Promise<
       WorkspaceLaunchResource | null
@@ -68,6 +73,7 @@ export const createEditorApi = (ipcRenderer: IpcRenderer): EditorApi => ({
       WORKSPACE_CHANNELS.inspectPath,
       resourcePath
     ) as ReturnType<NonNullable<EditorApi['inspectPath']>>,
+  getDroppedFilePath: (file) => webUtils.getPathForFile(file),
   openPathInNewWindow: (resourcePath) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openPathInNewWindow,

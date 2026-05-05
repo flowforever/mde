@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createDropOpenPlan,
@@ -12,7 +12,7 @@ const createDataTransfer = ({
   types = [],
   uriList = "",
 }: {
-  readonly files?: readonly { readonly path?: string }[];
+  readonly files?: readonly { readonly name?: string; readonly path?: string }[];
   readonly types?: readonly string[];
   readonly uriList?: string;
 }) => ({
@@ -59,6 +59,38 @@ describe("dropOpen", () => {
         }),
       ),
     ).toBe("/workspace/docs/a.md");
+  });
+
+  it("falls back to the Electron preload dropped-file resolver", () => {
+    const droppedFile = { name: "external.md" };
+    const resolveDroppedFilePath = vi.fn().mockReturnValue("/external/external.md");
+
+    expect(
+      getDroppedResourcePath(
+        createDataTransfer({
+          files: [droppedFile],
+          types: ["Files"],
+        }),
+        resolveDroppedFilePath,
+      ),
+    ).toBe("/external/external.md");
+    expect(resolveDroppedFilePath).toHaveBeenCalledWith(droppedFile);
+  });
+
+  it("uses the Electron preload resolver when the native file path is blank", () => {
+    const droppedFile = { name: "external.md", path: "" };
+    const resolveDroppedFilePath = vi.fn().mockReturnValue("/external/external.md");
+
+    expect(
+      getDroppedResourcePath(
+        createDataTransfer({
+          files: [droppedFile],
+          types: ["Files"],
+        }),
+        resolveDroppedFilePath,
+      ),
+    ).toBe("/external/external.md");
+    expect(resolveDroppedFilePath).toHaveBeenCalledWith(droppedFile);
   });
 
   it("reads the first usable file URI from text/uri-list", () => {

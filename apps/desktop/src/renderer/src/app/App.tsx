@@ -2246,31 +2246,40 @@ export const App = (): React.JSX.Element => {
   }, []);
 
   const handleAppDragEnter = (event: ReactDragEvent<HTMLElement>): void => {
-    if (!hasDroppedResourceTransfer(event.dataTransfer)) {
+    const dataTransfer = event.dataTransfer;
+
+    if (!dataTransfer || !hasDroppedResourceTransfer(dataTransfer)) {
       return;
     }
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
+    event.stopPropagation();
+    dataTransfer.dropEffect = "copy";
     dropTargetDepthRef.current += 1;
     setIsDropTargetActive(true);
   };
 
   const handleAppDragOver = (event: ReactDragEvent<HTMLElement>): void => {
-    if (!hasDroppedResourceTransfer(event.dataTransfer)) {
+    const dataTransfer = event.dataTransfer;
+
+    if (!dataTransfer || !hasDroppedResourceTransfer(dataTransfer)) {
       return;
     }
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
+    event.stopPropagation();
+    dataTransfer.dropEffect = "copy";
     setIsDropTargetActive(true);
   };
 
   const handleAppDragLeave = (event: ReactDragEvent<HTMLElement>): void => {
-    if (!hasDroppedResourceTransfer(event.dataTransfer)) {
+    const dataTransfer = event.dataTransfer;
+
+    if (!dataTransfer || !hasDroppedResourceTransfer(dataTransfer)) {
       return;
     }
 
+    event.stopPropagation();
     dropTargetDepthRef.current = Math.max(0, dropTargetDepthRef.current - 1);
     if (dropTargetDepthRef.current === 0) {
       setIsDropTargetActive(false);
@@ -2278,7 +2287,17 @@ export const App = (): React.JSX.Element => {
   };
 
   const handleAppDrop = (event: ReactDragEvent<HTMLElement>): void => {
-    const resourcePath = getDroppedResourcePath(event.dataTransfer);
+    const dataTransfer = event.dataTransfer;
+
+    if (!dataTransfer) {
+      clearDropTarget();
+      return;
+    }
+
+    const resourcePath = getDroppedResourcePath(
+      dataTransfer,
+      (file) => window.editorApi?.getDroppedFilePath?.(file as File) ?? "",
+    );
 
     if (!resourcePath) {
       clearDropTarget();
@@ -2286,6 +2305,7 @@ export const App = (): React.JSX.Element => {
     }
 
     event.preventDefault();
+    event.stopPropagation();
     clearDropTarget();
     void openDroppedPath(resourcePath).catch((error) => {
       dispatch({
@@ -3074,10 +3094,10 @@ export const App = (): React.JSX.Element => {
       data-theme={resolvedTheme.id}
       data-theme-family={resolvedTheme.family}
       data-theme-mode={themePreference.mode}
-      onDragEnter={handleAppDragEnter}
-      onDragLeave={handleAppDragLeave}
-      onDragOver={handleAppDragOver}
-      onDrop={handleAppDrop}
+      onDragEnterCapture={handleAppDragEnter}
+      onDragLeaveCapture={handleAppDragLeave}
+      onDragOverCapture={handleAppDragOver}
+      onDropCapture={handleAppDrop}
       ref={appShellRef}
       style={appShellStyle}
     >

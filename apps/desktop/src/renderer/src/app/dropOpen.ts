@@ -29,6 +29,8 @@ export interface DataTransferLike {
   readonly types: ArrayLike<string>;
 }
 
+export type DroppedFilePathResolver = (file: DataTransferFileLike) => string;
+
 const getParentPath = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf("/");
 
@@ -83,9 +85,17 @@ const decodeFileUriPath = (fileUri: string): string | null => {
 
 export const getDroppedResourcePath = (
   dataTransfer: DataTransferLike,
+  resolveDroppedFilePath?: DroppedFilePathResolver,
 ): string | null => {
-  const [firstFile] = Array.from(dataTransfer.files);
-  const nativeFilePath = firstFile?.path;
+  const nativeFilePath = Array.from(dataTransfer.files)
+    .map((file) => {
+      if (file.path && file.path.length > 0) {
+        return file.path;
+      }
+
+      return resolveDroppedFilePath?.(file);
+    })
+    .find((path) => path !== undefined && path.length > 0);
 
   if (nativeFilePath) {
     return nativeFilePath;
