@@ -66,4 +66,51 @@ describe('fake editor host integration', () => {
     expect(host.openedLinks).toEqual(['docs/intro.md'])
     expect(host.readDocument('docs/new.md')).toBe('')
   })
+
+  it('records save reasons at the host package boundary', async () => {
+    const host = createFakeEditorHost({
+      documents: {
+        'README.md': '# Root'
+      },
+      now: () => '2026-05-04T00:00:00.000Z'
+    })
+    const document = { path: 'README.md', workspaceRoot: '/workspace' }
+
+    await host.saveDocument({
+      document,
+      markdown: '# Manual',
+      reason: 'manual'
+    })
+    await host.saveDocument({
+      document,
+      markdown: '# Idle',
+      reason: 'idle-autosave'
+    })
+    await host.saveDocument({
+      document,
+      markdown: '# Blur',
+      reason: 'blur-autosave'
+    })
+
+    expect(host.saveEvents).toEqual([
+      {
+        document,
+        markdown: '# Manual',
+        reason: 'manual',
+        savedAt: '2026-05-04T00:00:00.000Z'
+      },
+      {
+        document,
+        markdown: '# Idle',
+        reason: 'idle-autosave',
+        savedAt: '2026-05-04T00:00:00.000Z'
+      },
+      {
+        document,
+        markdown: '# Blur',
+        reason: 'blur-autosave',
+        savedAt: '2026-05-04T00:00:00.000Z'
+      }
+    ])
+  })
 })
