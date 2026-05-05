@@ -68,10 +68,15 @@ import {
   writeEditorViewMode,
 } from "@mde/editor-react";
 import { createDesktopMarkdownAssetResolver } from "../editorHost/desktopMarkdownAssetResolver";
+import { createDesktopEditorHost } from "../editorHost/desktopEditorHost";
 import { createVisibleEditorLinkTree } from "../editorHost/editorLinkDirectories";
 import { collectMarkdownFilePaths } from "@mde/editor-core/links";
 import { resolveEditorLinkTarget } from "../editorHost/editorLinks";
 import { getNextSearchMatchIndex } from "@mde/editor-core/search";
+import type {
+  EditorDocumentRef,
+  EditorHostResult
+} from "@mde/editor-host/types";
 import {
   EDITOR_SEARCH_HISTORY_STORAGE_KEY,
   filterSearchHistory,
@@ -157,6 +162,17 @@ declare global {
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
+
+const requireEditorHostResultValue = <T,>(
+  result: EditorHostResult<T> | undefined,
+  fallback: string,
+): T => {
+  if (result?.ok) {
+    return result.value;
+  }
+
+  throw new Error(result?.error.message ?? fallback);
+};
 
 const getHistoryEventLabel = (
   event: DocumentHistoryEvent,
@@ -2516,6 +2532,107 @@ export const App = (): React.JSX.Element => {
       }),
     [editorFilePath, state.workspace?.rootPath],
   );
+  const editorDocumentRef = useMemo<EditorDocumentRef>(
+    () => ({
+      path: editorFilePath,
+      workspaceRoot: state.workspace?.rootPath ?? "",
+    }),
+    [editorFilePath, state.workspace?.rootPath],
+  );
+  const editorWorkspaceRootRef = useRef(state.workspace?.rootPath ?? "");
+  const editorWorkspaceTreeRef = useRef<readonly TreeNode[]>(
+    state.workspace?.tree ?? [],
+  );
+  const saveCurrentFileRef = useRef(saveCurrentFile);
+
+  useEffect(() => {
+    editorWorkspaceRootRef.current = state.workspace?.rootPath ?? "";
+    editorWorkspaceTreeRef.current = state.workspace?.tree ?? [];
+  }, [state.workspace?.rootPath, state.workspace?.tree]);
+
+  useEffect(() => {
+    saveCurrentFileRef.current = saveCurrentFile;
+  }, [saveCurrentFile]);
+
+  const createCurrentDesktopEditorHost = useCallback(
+    () =>
+      createDesktopEditorHost({
+        createLinkedDocument: async ({ requestedPath }) => ({
+          path: await createMarkdownFileFromEditorLink(requestedPath),
+        }),
+        getWorkspaceTree: () => ({
+          rootPath: editorWorkspaceRootRef.current,
+          tree: editorWorkspaceTreeRef.current,
+        }),
+        openLink: ({ href }) => openEditorLink(href),
+        saveDocument: async ({ markdown }) => {
+          await saveCurrentFileRef.current(markdown);
+        },
+        uploadImage: async ({ bytes, fileName, mimeType }) => ({
+          src: await uploadImageAsset(
+            new File([bytes], fileName, { type: mimeType }),
+          ),
+        }),
+      }),
+    [
+      createMarkdownFileFromEditorLink,
+      openEditorLink,
+      uploadImageAsset,
+    ],
+  );
+  const saveMarkdownWithEditorHost = useCallback(
+    async (contents: string): Promise<void> => {
+      const result = await createCurrentDesktopEditorHost().saveDocument({
+        document: editorDocumentRef,
+        markdown: contents,
+        reason: "manual",
+      });
+
+      requireEditorHostResultValue(result, text("errors.saveFileFailed"));
+    },
+    [createCurrentDesktopEditorHost, editorDocumentRef, text],
+  );
+  const uploadImageWithEditorHost = useCallback(
+    async (file: File): Promise<string> => {
+      const result = await createCurrentDesktopEditorHost().uploadImage?.({
+        bytes: await file.arrayBuffer(),
+        document: editorDocumentRef,
+        fileName: file.name,
+        mimeType: file.type,
+      });
+
+      return requireEditorHostResultValue(
+        result,
+        text("errors.openMarkdownBeforeImagePaste"),
+      ).src;
+    },
+    [createCurrentDesktopEditorHost, editorDocumentRef, text],
+  );
+  const createLinkedMarkdownWithEditorHost = useCallback(
+    async (filePath: string): Promise<string> => {
+      const result = await createCurrentDesktopEditorHost().createLinkedDocument?.({
+        document: editorDocumentRef,
+        requestedPath: filePath,
+      });
+
+      return requireEditorHostResultValue(
+        result,
+        text("errors.createMarkdownFileFailed"),
+      ).path;
+    },
+    [createCurrentDesktopEditorHost, editorDocumentRef, text],
+  );
+  const openLinkWithEditorHost = useCallback(
+    async (href: string): Promise<void> => {
+      const result = await createCurrentDesktopEditorHost().openLink?.({
+        document: editorDocumentRef,
+        href,
+      });
+
+      requireEditorHostResultValue(result, text("errors.openEditorLinkFailed"));
+    },
+    [createCurrentDesktopEditorHost, editorDocumentRef, text],
+  );
   const repairedImageAssetCount =
     !historyPreview && state.loadedFile?.repairedImageAssetCount
       ? state.loadedFile.repairedImageAssetCount
@@ -3158,11 +3275,11 @@ export const App = (): React.JSX.Element => {
             }
             markdown={editorMarkdown}
             markdownAssetResolver={editorMarkdownAssetResolver}
-            onCreateLinkedMarkdown={createMarkdownFileFromEditorLink}
+            onCreateLinkedMarkdown={createLinkedMarkdownWithEditorHost}
             onExitHistoryPreview={closeHistoryPreview}
-            onImageUpload={uploadImageAsset}
+            onImageUpload={uploadImageWithEditorHost}
             onOpenLink={(href) => {
-              void openEditorLink(href).catch((error) => {
+              void openLinkWithEditorHost(href).catch((error) => {
                 dispatch({
                   message: getErrorMessage(
                     error,
@@ -3190,7 +3307,7 @@ export const App = (): React.JSX.Element => {
             onRestoreHistoryPreview={() => {
               void restoreHistoryPreview();
             }}
-            onSaveRequest={saveCurrentFile}
+            onSaveRequest={saveMarkdownWithEditorHost}
             onSearchStateChange={setEditorSearchState}
             path={editorFilePath}
             pinnedSearchQueries={pinnedEditorSearchQueries}
