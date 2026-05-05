@@ -104,6 +104,24 @@ When starting a GitHub issue:
 
 * Do not rely on local notes, branch names, or unpushed work as the coordination signal for GitHub issues; the status must be visible on GitHub.
 
+## GitHub Issue MR Rules
+
+GitHub issues must be handled through a merge request / pull request flow. Do not implement a GitHub issue by committing directly to `master`, `main`, or another release branch.
+
+When processing a GitHub issue:
+
+* Create or switch to a dedicated working branch for the issue before changing files.
+
+* Include the GitHub issue number in the branch name, commit message, and MR/PR description when possible.
+
+* After implementation and verification, push the working branch and create a GitHub MR/PR targeting the repository's release branch.
+
+* Add a GitHub issue comment linking the MR/PR as soon as it is created.
+
+* If MR/PR creation fails, do not treat the issue as complete. Record the blocker on the issue when possible, keep the issue open, and continue the loop with another candidate or wait.
+
+* Do not close a GitHub issue or mark it released until the MR/PR has merged and any required production release has succeeded.
+
 ## Loop
 
 1. Pull the latest branch state from the configured remote, then reload `skills/auto-pick-tasks/SKILL.md` so the latest workflow rules apply.
@@ -118,17 +136,19 @@ When starting a GitHub issue:
 
 6. Use multiple subagents for independent analysis, implementation, and testing when the harness supports them. If subagents are unavailable, perform the same phases locally.
 
-7. Implement the task according to repository instructions, including TDD, i18n, security, and verification requirements.
+7. Implement the task according to repository instructions, including TDD, i18n, security, and verification requirements. For GitHub issues, follow the GitHub Issue MR Rules and do the work on a dedicated branch.
 
 8. Run the relevant lint, typecheck, unit, integration, and E2E checks for the changed surface.
 
-9. After the task is complete and verified, use `$release-new-version` in a fresh subagent when possible, or run the release workflow locally when subagents are unavailable.
+9. For GitHub issues, push the working branch, create the MR/PR, and comment the MR/PR link on the issue before any release or archive step.
 
-10. After the release succeeds, update the task source with release version, completion summary, and verification notes.
+10. After the task is complete and verified, and after any required GitHub issue MR/PR has merged, use `$release-new-version` in a fresh subagent when possible, or run the release workflow locally when subagents are unavailable.
 
-11. Archive the completed task: move local documents into the matching `done` directory; for GitHub issues, add a completion comment and close the issue when the issue is fully resolved.
+11. After the release succeeds, update the task source with release version, completion summary, verification notes, and the MR/PR link when one exists.
 
-12. Return to step 1.
+12. Archive the completed task: move local documents into the matching `done` directory; for GitHub issues, add a completion comment and close the issue only after the MR/PR has merged and the issue is fully resolved.
+
+13. Return to step 1.
 
 If any loop finds no selectable candidate, do not send a final status response solely because the queue is empty. Wait 15 minutes and restart from step 1. Brief progress updates are fine while waiting; the agent must keep the turn alive and keep polling.
 
@@ -137,6 +157,8 @@ If any loop finds no selectable candidate, do not send a final status response s
 * Do not move a task document to `done` before the production release succeeds.
 
 * Do not close a GitHub issue before the production release succeeds.
+
+* Do not close a GitHub issue before its required MR/PR has merged.
 
 * Do not create a release for documentation-only, test-only, formatting-only, local-only, experimental, or internal configuration changes unless the user explicitly asks for one.
 
@@ -173,7 +195,7 @@ Only stop the continuous loop when:
 | Situation                          | Action                                                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | READY local task found             | Apply the Autonomy Gate before marking it in development                                             |
-| GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; then apply the Autonomy Gate and claim it on GitHub before work |
+| GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; then apply the Autonomy Gate, claim it on GitHub, and process it through MR/PR |
 | Multiple candidates found          | Prefer `docs/bugs/`, then `docs/requirements/`, then GitHub; complete one task before taking another |
 | Candidate appears ambiguous        | Investigate repository context and make reasonable conservative assumptions                          |
 | Candidate still needs human input  | Do not start it; record checks, blocker, and select another candidate; if none remain, wait and loop |
