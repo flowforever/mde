@@ -1,12 +1,12 @@
 {
   "name": "mde",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "description": "A Notion-style Markdown editor with a VS Code-like explorer.",
   "productName": "MDE",
   "private": true,
   "packageManager": "pnpm@10.18.2",
   "type": "module",
-  "main": "out/main/index.js",
+  "main": "apps/desktop/out/main/index.js",
   "bin": {
     "mde": "./bin/mde.js"
   },

@@ -76,7 +76,7 @@ export default defineConfig({
     },
     plugins: [externalizeDepsPlugin({ exclude: internalWorkspacePackages })],
     build: {
-      outDir: resolve(workspaceRoot, 'out/main'),
+      outDir: resolve(__dirname, 'out/main'),
       rollupOptions: {
         input: resolve(__dirname, 'src/main/index.ts')
       }
@@ -88,7 +88,7 @@ export default defineConfig({
     },
     plugins: [externalizeDepsPlugin({ exclude: internalWorkspacePackages })],
     build: {
-      outDir: resolve(workspaceRoot, 'out/preload'),
+      outDir: resolve(__dirname, 'out/preload'),
       rollupOptions: {
         input: resolve(__dirname, 'src/preload/index.ts'),
         output: {
@@ -105,7 +105,7 @@ export default defineConfig({
     },
     plugins: [react()],
     build: {
-      outDir: resolve(workspaceRoot, 'out/renderer'),
+      outDir: resolve(__dirname, 'out/renderer'),
       rollupOptions: {
         input: resolve(__dirname, 'src/renderer/index.html')
       }

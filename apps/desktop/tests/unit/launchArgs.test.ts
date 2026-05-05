@@ -36,7 +36,7 @@ describe('launch args', () => {
       getLaunchPathFromArgv(
         [
           '/Applications/Electron.app/Contents/MacOS/Electron',
-          'out/main/index.js',
+          'apps/desktop/out/main/index.js',
           '/Users/user/notes'
         ],
         '/repo'

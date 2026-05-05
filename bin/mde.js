@@ -63,7 +63,7 @@ const createLaunchCommand = (args, cwd = process.cwd()) => {
   }
 
   return {
-    args: [resolve(projectRoot, 'out/main/index.js'), ...launchPathArgs],
+    args: [resolve(projectRoot, 'apps/desktop/out/main/index.js'), ...launchPathArgs],
     command: electronPath
   }
 }

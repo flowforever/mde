@@ -59,7 +59,7 @@ export const launchElectronApp = async (
   }
   const e2eUserDataPath = await mkdtemp(join(tmpdir(), 'mde-e2e-user-data-'))
   const app = await electron.launch({
-    args: ['--lang=en-US', 'out/main/index.js', ...options.args ?? []],
+    args: ['--lang=en-US', 'apps/desktop/out/main/index.js', ...options.args ?? []],
     env: createElectronLaunchEnv({
       e2eUserDataPath,
       overrideEnv: options.env

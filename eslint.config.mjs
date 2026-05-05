@@ -10,6 +10,7 @@ export default tseslint.config(
   {
     ignores: [
       '.superpowers/**',
+      'apps/desktop/out/**',
       'coverage/**',
       'dist/**',
       'node_modules/**',

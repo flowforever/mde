@@ -38,7 +38,7 @@ describe('Electron window config', () => {
   })
 
   it('points at the electron-vite preload bundle emitted by build', () => {
-    const preloadPath = normalize(createPreloadPath('/app/out/main'))
+    const preloadPath = normalize(createPreloadPath('/app/apps/desktop/out/main'))
     const pathSegments = preloadPath.split(sep)
 
     expect(basename(preloadPath)).toBe('index.mjs')
@@ -181,12 +181,17 @@ describe('Release automation config', () => {
     const desktopPackageJson = JSON.parse(
       await readFile('apps/desktop/package.json', 'utf8')
     ) as {
+      main?: string
       scripts?: Record<string, string>
+    }
+    const rootPackageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      main?: string
     }
     const electronBuilderConfig = JSON.parse(
       await readFile('apps/desktop/electron-builder.json', 'utf8')
     ) as {
       artifactName?: string
+      files?: string[]
       linux?: unknown
       mac?: {
         entitlements?: string
@@ -212,6 +217,12 @@ describe('Release automation config', () => {
         })
       ])
     )
+    expect(desktopPackageJson.main).toBe('out/main/index.js')
+    expect(rootPackageJson.main).toBe('apps/desktop/out/main/index.js')
+    expect(electronBuilderConfig.files).toEqual(
+      expect.arrayContaining(['out/**/*', 'package.json'])
+    )
+    expect(electronBuilderConfig.files).not.toContain('../../out/**/*')
     expect(desktopPackageJson.scripts?.['release:github']).toBe(
       'pnpm run release:github:mac'
     )
@@ -305,6 +316,13 @@ describe('Release automation config', () => {
     expect(workflow).toContain('APPLE_API_KEY_ID')
     expect(workflow).toContain('APPLE_API_ISSUER')
     expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY=false')
+  })
+
+  it('keeps generated desktop build output out of lint inputs', async () => {
+    const eslintConfig = await readFile('eslint.config.mjs', 'utf8')
+
+    expect(eslintConfig).toContain("'apps/desktop/out/**'")
+    expect(eslintConfig).toContain("'out/**'")
   })
 
   it('configures generated release notes with user-facing categories', async () => {

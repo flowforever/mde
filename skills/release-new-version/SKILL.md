@@ -7,11 +7,13 @@ description: Use when preparing, tagging, pushing, or verifying a new MDE releas
 
 ## Overview
 
-Use this workflow when publishing a production-ready MDE feature or bug fix. The release must include version updates, complete release notes, local verification, an annotated tag, a branch-and-tag push, post-push GitHub release checks, and user manual handling.
+Use this workflow when publishing a production-ready MDE feature or bug fix from the pnpm workspace. The release must include workspace version updates, complete release notes, local verification, an annotated tag, a branch-and-tag push, post-push GitHub release checks, and user manual handling.
 
 ## Preflight
 
-* Inspect `git status`, the current branch, recent commits, `package.json`, `package-lock.json`, and existing local and remote tags.
+* Inspect `git status`, the current branch, recent commits, `package.json`, `apps/desktop/package.json`, changed `packages/*/package.json` files, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, and existing local and remote tags.
+
+* Confirm `package.json` declares the workspace package manager as pnpm and keep root scripts as orchestration entry points. App/package-specific release, build, test, and dependency details belong to the owning workspace package.
 
 * Confirm the change is release-worthy. Do not release documentation-only, test-only, formatting-only, local-only, experimental, or internal configuration changes unless the user explicitly asks for a release.
 
@@ -22,6 +24,22 @@ Use this workflow when publishing a production-ready MDE feature or bug fix. The
 * Check whether optional macOS signing and notarization secrets exist in the GitHub repository: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_P8_BASE64`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`.
 
 * Treat signing secrets as optional for the no-paid-account release path. Without them, macOS releases are unsigned DMG/ZIP artifacts and Windows releases use the NSIS updater artifact from GitHub Releases.
+
+## Workspace Version Scope
+
+MDE is a private pnpm monorepo. Do not use `package-lock.json`, `npm ci`, or npm release commands.
+
+For every release:
+
+* Update root `package.json` to the release version.
+
+* Update `apps/desktop/package.json` to the same release version.
+
+* Update any changed private package manifests under `packages/*/package.json` when the package is part of the release scope.
+
+* Update `pnpm-lock.yaml` when manifest versions, dependencies, peer dependencies, or overrides changed.
+
+* Keep package releases private. Do not publish `@mde/editor-*` packages to a registry as part of the desktop release.
 
 ## Version Rule
 
@@ -65,7 +83,17 @@ Do not ship empty, placeholder, or vague generated notes. If GitHub creates a re
 
 1. Compute the next version from the latest valid release tag unless the user supplied an exact version.
 
-2. Update `package.json` and `package-lock.json` to the same version.
+2. Update the workspace release metadata:
+
+   * Root `package.json`
+
+   * `apps/desktop/package.json`
+
+   * Any changed `packages/*/package.json`
+
+   * `pnpm-lock.yaml` when manifest metadata changed
+
+   `package-lock.json` is not used in this repository and must not be recreated.
 
 3. Update `user-manual/` for user-visible behavior changes, or explicitly record that the manual is unaffected.
 
@@ -73,13 +101,15 @@ Do not ship empty, placeholder, or vague generated notes. If GitHub creates a re
 
 5. Run verification for the changed surface:
 
-   * Always run `npm run lint`, `npm run typecheck`, `npm run test:unit`, and `npm run test:integration`.
+   * Always run `pnpm run lint`, `pnpm run typecheck`, `pnpm run build`, `pnpm run test:unit`, and `pnpm run test:integration`.
 
-   * Run `npm run test:e2e` for feature or bug-fix runtime changes unless E2E already passed for the same code state and the user explicitly says not to repeat local E2E.
+   * Run `pnpm run test:e2e` for feature or bug-fix runtime changes unless E2E already passed for the same code state and the user explicitly says not to repeat local E2E.
 
-   * Run `npm run docs:build` when `user-manual/`, docs site config, or docs scripts changed.
+   * Run the owning workspace package test for package-local changes, for example `pnpm --filter @mde/editor-core test`, `pnpm --filter @mde/editor-host test`, `pnpm --filter @mde/editor-react test`, or `pnpm --filter @mde/desktop test`.
 
-   * Run `npm run docs:screenshots` when user manual screenshots need to be created or refreshed.
+   * Run `pnpm run docs:build` when `user-manual/`, docs site config, or docs scripts changed.
+
+   * Run `pnpm run docs:screenshots` when user manual screenshots need to be created or refreshed.
 
 6. Commit the release-ready changes with the repository commit message style.
 
@@ -118,9 +148,13 @@ gh run list --workflow "Deploy User Manual" --limit 5
 
 * Do not move requirement or bug documents into `done` until the release succeeds.
 
+* Do not publish or force-add internal planning docs under `docs/requirements/` or `docs/bugs/` unless the user explicitly asks for those ignored files to be included.
+
 * Do not create a release tag when a user-visible behavior change lacks a user manual update or an explicit note explaining why the manual is unaffected.
 
 * Keep release notes concrete and aligned with the actual version changes.
+
+* Keep release preparation pnpm-native. If `package-lock.json` appears in the worktree, stop and remove the unintended npm artifact before tagging.
 
 * If GitHub Actions fails or the release is missing, keep the task open and fix or report the blocker.
 
