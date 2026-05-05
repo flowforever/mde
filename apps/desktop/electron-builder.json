@@ -1,0 +1,44 @@
+{
+  "appId": "com.huashu.mde",
+  "productName": "MDE",
+  "directories": {
+    "output": "../../release"
+  },
+  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+  "icon": "../../build/icon",
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "flowforever",
+      "repo": "mde",
+      "releaseType": "release"
+    }
+  ],
+  "files": [
+    "../../out/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "../../bin/mde.js",
+      "to": "cli/mde"
+    }
+  ],
+  "mac": {
+    "category": "public.app-category.productivity",
+    "entitlements": "../../build/entitlements.mac.plist",
+    "entitlementsInherit": "../../build/entitlements.mac.inherit.plist",
+    "hardenedRuntime": true,
+    "icon": "../../build/icon.icns",
+    "target": [
+      "dmg",
+      "zip"
+    ]
+  },
+  "win": {
+    "icon": "../../build/icon.ico",
+    "target": [
+      "nsis"
+    ]
+  }
+}

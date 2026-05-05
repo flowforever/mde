@@ -9,5 +9,11 @@
     "./fake": "./src/fake.ts",
     "./file-tree": "./src/fileTree.ts",
     "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "cd ../.. && eslint packages/editor-host --max-warnings=0",
+    "test": "cd ../.. && vitest run --project unit apps/desktop/tests/unit/editorHost.test.ts --testTimeout=30000 && vitest run --project integration apps/desktop/tests/integration/editorHostBridge.integration.test.ts apps/desktop/tests/integration/editorHostFake.integration.test.ts apps/desktop/tests/integration/editorHostFileTreeConsumption.integration.test.ts apps/desktop/tests/integration/editorHostFileTreeContract.integration.test.ts apps/desktop/tests/integration/editorHostPlatformSpikes.integration.test.ts --testTimeout=30000"
   }
 }

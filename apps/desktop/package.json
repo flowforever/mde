@@ -1,0 +1,50 @@
+{
+  "name": "@mde/desktop",
+  "version": "1.5.3",
+  "description": "MDE Electron desktop app.",
+  "productName": "MDE",
+  "private": true,
+  "type": "module",
+  "main": "../../out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite --config electron.vite.config.ts dev",
+    "start": "electron-vite --config electron.vite.config.ts preview",
+    "build": "electron-vite --config electron.vite.config.ts build",
+    "package": "pnpm run build && electron-builder --config electron-builder.json --dir",
+    "dist": "pnpm run build && electron-builder --config electron-builder.json",
+    "dist:mac": "pnpm run build && electron-builder --config electron-builder.json --mac dmg zip --x64 --arm64",
+    "dist:win": "pnpm run build && electron-builder --config electron-builder.json --win nsis --x64",
+    "release:github": "pnpm run release:github:mac",
+    "release:github:mac": "pnpm run build && electron-builder --config electron-builder.json --mac dmg zip --x64 --arm64 --publish always",
+    "release:github:win": "pnpm run build && electron-builder --config electron-builder.json --win nsis --x64 --publish always",
+    "test": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e",
+    "test:unit": "cd ../.. && vitest run --config apps/desktop/vitest.config.ts --project unit --testTimeout=30000",
+    "test:integration": "cd ../.. && vitest run --config apps/desktop/vitest.config.ts --project integration --testTimeout=30000",
+    "test:e2e": "cd ../.. && playwright test --config apps/desktop/playwright.config.ts apps/desktop/tests/e2e/markdown-editor.e2e.test.ts && node scripts/run-editor-performance-e2e.mjs smoke",
+    "test:e2e:performance": "cd ../.. && node scripts/run-editor-performance-e2e.mjs smoke",
+    "test:e2e:performance:benchmark": "cd ../.. && node scripts/run-editor-performance-e2e.mjs benchmark",
+    "docs:screenshots": "cd ../.. && playwright test --config apps/desktop/playwright.config.ts apps/desktop/tests/e2e/manualScreenshots.spec.ts",
+    "lint": "cd ../.. && eslint apps/desktop --max-warnings=0",
+    "typecheck": "cd ../.. && tsc --project apps/desktop/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@blocknote/core": "^0.49.0",
+    "@blocknote/mantine": "^0.49.0",
+    "@blocknote/react": "^0.49.0",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
+    "@mde/editor-core": "workspace:*",
+    "@mde/editor-host": "workspace:*",
+    "@mde/editor-react": "workspace:*",
+    "electron-updater": "^6.8.3",
+    "lucide-react": "^1.12.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0"
+  }
+}

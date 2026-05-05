@@ -2,74 +2,79 @@ import { resolve } from 'node:path'
 
 import { defineConfig, defineProject } from 'vitest/config'
 
+const workspaceRoot = resolve(__dirname, '../..')
+
 const packageAliases = [
   {
     find: /^@mde\/editor-core$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/index.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/index.ts')
   },
   {
     find: /^@mde\/editor-core\/assets$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/assets.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/assets.ts')
   },
   {
     find: /^@mde\/editor-core\/flowcharts$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/flowcharts.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/flowcharts.ts')
   },
   {
     find: /^@mde\/editor-core\/frontmatter$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/frontmatter.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/frontmatter.ts')
   },
   {
     find: /^@mde\/editor-core\/links$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/links.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/links.ts')
   },
   {
     find: /^@mde\/editor-core\/markdown$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/markdown.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/markdown.ts')
   },
   {
     find: /^@mde\/editor-core\/search$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/search.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/search.ts')
   },
   {
     find: /^@mde\/editor-core\/types$/,
-    replacement: resolve(__dirname, 'packages/editor-core/src/types.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-core/src/types.ts')
   },
   {
     find: /^@mde\/editor-host$/,
-    replacement: resolve(__dirname, 'packages/editor-host/src/index.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-host/src/index.ts')
   },
   {
     find: /^@mde\/editor-host\/bridge$/,
-    replacement: resolve(__dirname, 'packages/editor-host/src/bridge.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-host/src/bridge.ts')
   },
   {
     find: /^@mde\/editor-host\/fake$/,
-    replacement: resolve(__dirname, 'packages/editor-host/src/fake.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-host/src/fake.ts')
   },
   {
     find: /^@mde\/editor-host\/file-tree$/,
-    replacement: resolve(__dirname, 'packages/editor-host/src/fileTree.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-host/src/fileTree.ts')
   },
   {
     find: /^@mde\/editor-host\/types$/,
-    replacement: resolve(__dirname, 'packages/editor-host/src/types.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-host/src/types.ts')
   },
   {
     find: /^@mde\/editor-react$/,
-    replacement: resolve(__dirname, 'packages/editor-react/src/index.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-react/src/index.ts')
   },
   {
     find: /^@mde\/editor-react\/styles\.css$/,
-    replacement: resolve(__dirname, 'packages/editor-react/styles.css')
+    replacement: resolve(workspaceRoot, 'packages/editor-react/styles.css')
   },
   {
     find: /^@mde\/editor-react\/testing$/,
-    replacement: resolve(__dirname, 'packages/editor-react/src/testing.ts')
+    replacement: resolve(workspaceRoot, 'packages/editor-react/src/testing.ts')
   },
   {
     find: /^mermaid$/,
-    replacement: resolve(__dirname, 'apps/desktop/tests/unit/mocks/mermaid.ts')
+    replacement: resolve(
+      workspaceRoot,
+      'apps/desktop/tests/unit/mocks/mermaid.ts'
+    )
   }
 ]
 

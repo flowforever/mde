@@ -20,23 +20,26 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          cache: npm
+          cache: pnpm
           node-version: 22
 
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Test with coverage
-        run: npm run test:coverage
+        run: pnpm run test:coverage
 
       - name: Run end-to-end tests
-        run: npm run test:e2e
+        run: pnpm run test:e2e
 
       - name: Prepare optional macOS signing and notarization credentials
         run: |
@@ -94,7 +97,7 @@ jobs:
             export CSC_LINK="$SECRET_CSC_LINK"
           fi
 
-          npm run release:github:mac
+          pnpm run release:github:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SECRET_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -129,14 +132,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          cache: npm
+          cache: pnpm
           node-version: 22
 
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build and publish Windows release
-        run: npm run release:github:win
+        run: pnpm run release:github:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -15,5 +15,11 @@
   },
   "dependencies": {
     "js-yaml": "^4.1.1"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "cd ../.. && eslint packages/editor-core --max-warnings=0",
+    "test": "cd ../.. && vitest run --project unit apps/desktop/tests/unit/editorCoreAssets.test.ts apps/desktop/tests/unit/editorCoreLinks.test.ts apps/desktop/tests/unit/editorCoreMarkdown.test.ts apps/desktop/tests/unit/flowchartMarkdown.test.ts apps/desktop/tests/unit/frontmatter.test.ts --testTimeout=30000 && vitest run --project integration apps/desktop/tests/integration/editorCoreFlowchartsConsumption.integration.test.ts apps/desktop/tests/integration/editorCoreLinksConsumption.integration.test.ts apps/desktop/tests/integration/editorCoreSearchConsumption.integration.test.ts apps/desktop/tests/integration/frontmatterPackageConsumption.integration.test.ts apps/desktop/tests/integration/frontmatterRoundTrip.integration.test.ts --testTimeout=30000"
   }
 }

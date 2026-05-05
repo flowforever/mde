@@ -28,9 +28,12 @@
   },
   "include": [
     "*.config.ts",
+    "apps/desktop/*.config.ts",
     "packages/**/*.ts",
     "apps/desktop/src/**/*.ts",
     "apps/desktop/src/**/*.tsx",
+    "apps/desktop/tests/**/*.ts",
+    "apps/desktop/tests/**/*.tsx",
     "tests/**/*.ts",
     "tests/**/*.tsx",
     "user-manual/.vitepress/**/*.ts"

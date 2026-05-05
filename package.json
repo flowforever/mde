@@ -11,29 +11,29 @@
     "mde": "./bin/mde.js"
   },
   "scripts": {
-    "dev": "electron-vite dev",
-    "start": "electron-vite preview",
-    "build": "electron-vite build",
-    "package": "pnpm run build && electron-builder --dir",
-    "dist": "pnpm run build && electron-builder",
-    "dist:mac": "pnpm run build && electron-builder --mac dmg zip --x64 --arm64",
-    "dist:win": "pnpm run build && electron-builder --win nsis --x64",
+    "dev": "pnpm --filter @mde/desktop dev",
+    "start": "pnpm --filter @mde/desktop start",
+    "build": "pnpm --filter @mde/desktop build",
+    "package": "pnpm --filter @mde/desktop package",
+    "dist": "pnpm --filter @mde/desktop dist",
+    "dist:mac": "pnpm --filter @mde/desktop dist:mac",
+    "dist:win": "pnpm --filter @mde/desktop dist:win",
     "icons:generate": "node scripts/generate-app-icons.mjs",
-    "release:github": "pnpm run release:github:mac",
-    "release:github:mac": "pnpm run build && electron-builder --mac dmg zip --x64 --arm64 --publish always",
-    "release:github:win": "pnpm run build && electron-builder --win nsis --x64 --publish always",
-    "register:cli": "npm link",
+    "release:github": "pnpm --filter @mde/desktop release:github",
+    "release:github:mac": "pnpm --filter @mde/desktop release:github:mac",
+    "release:github:win": "pnpm --filter @mde/desktop release:github:win",
+    "register:cli": "pnpm link --global",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "test:unit": "vitest run --project unit --testTimeout=30000",
     "test:integration": "vitest run --project integration --testTimeout=30000",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test tests/e2e/markdown-editor.e2e.test.ts && node scripts/run-editor-performance-e2e.mjs smoke",
-    "test:e2e:performance": "node scripts/run-editor-performance-e2e.mjs smoke",
-    "test:e2e:performance:benchmark": "node scripts/run-editor-performance-e2e.mjs benchmark",
+    "test:e2e": "pnpm --filter @mde/desktop test:e2e",
+    "test:e2e:performance": "pnpm --filter @mde/desktop test:e2e:performance",
+    "test:e2e:performance:benchmark": "pnpm --filter @mde/desktop test:e2e:performance:benchmark",
     "test": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e",
-    "docs:screenshots": "playwright test tests/e2e/manualScreenshots.spec.ts",
+    "docs:screenshots": "pnpm --filter @mde/desktop docs:screenshots",
     "docs:dev": "vitepress dev user-manual",
     "docs:build": "vitepress build user-manual",
     "docs:preview": "vitepress preview user-manual"
@@ -45,14 +45,12 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/js-yaml": "^4.0.9",
+    "@types/jsdom": "^28.0.1",
     "@types/node": "^20.19.39",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^3.2.4",
-    "electron": "^41.3.0",
-    "electron-builder": "^26.8.1",
-    "electron-vite": "^3.1.0",
+    "electron": "^41.5.0",
     "eslint": "^9.39.3",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -64,67 +62,6 @@
     "vite": "^6.4.2",
     "vitepress": "^1.6.4",
     "vitest": "^3.2.4"
-  },
-  "dependencies": {
-    "@mde/editor-core": "workspace:*",
-    "@mde/editor-host": "workspace:*",
-    "@mde/editor-react": "workspace:*",
-    "@blocknote/core": "^0.49.0",
-    "@blocknote/mantine": "^0.49.0",
-    "@blocknote/react": "^0.49.0",
-    "@mantine/core": "^8.3.18",
-    "@mantine/hooks": "^8.3.18",
-    "electron-updater": "^6.8.3",
-    "js-yaml": "^4.1.1",
-    "lucide-react": "^1.12.0",
-    "mermaid": "^11.14.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "shiki": "^4.0.2"
-  },
-  "build": {
-    "appId": "com.huashu.mde",
-    "productName": "MDE",
-    "directories": {
-      "output": "release"
-    },
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-    "icon": "build/icon",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "flowforever",
-        "repo": "mde",
-        "releaseType": "release"
-      }
-    ],
-    "files": [
-      "out/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "bin/mde.js",
-        "to": "cli/mde"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.productivity",
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "hardenedRuntime": true,
-      "icon": "build/icon.icns",
-      "target": [
-        "dmg",
-        "zip"
-      ]
-    },
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        "nsis"
-      ]
-    }
   },
   "overrides": {
     "uuid": "14.0.0",

@@ -7,10 +7,17 @@ if (mode !== "smoke" && mode !== "benchmark") {
   process.exit(1);
 }
 
-const command = process.platform === "win32" ? "npx.cmd" : "npx";
+const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const child = spawn(
   command,
-  ["playwright", "test", "tests/e2e/editor-performance.e2e.test.ts"],
+  [
+    "exec",
+    "playwright",
+    "test",
+    "--config",
+    "apps/desktop/playwright.config.ts",
+    "apps/desktop/tests/e2e/editor-performance.e2e.test.ts",
+  ],
   {
     env: {
       ...process.env,

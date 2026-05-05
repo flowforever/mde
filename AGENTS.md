@@ -12,6 +12,30 @@ All production code changes must include automated test coverage at three levels
 
 Do not add or modify production code without adding or updating the relevant UT, IT, and E2E coverage in the same change. If a change is documentation-only or configuration-only, state why runtime tests are not applicable and still run the available verification commands.
 
+Tests belong to the app or package that owns the behavior:
+
+* Desktop app unit, integration, support, fixture, screenshot, and E2E tests live under `apps/desktop/tests/`.
+
+* Shared editor package tests should be reachable from the owning package's local `test` script. Cross-package desktop integration coverage may live under `apps/desktop/tests/integration/` when it verifies how the desktop app consumes package contracts.
+
+* The root `tests/` directory is limited to shared fixtures and ambient test types. Do not add new unit, integration, or E2E suites under root `tests/`.
+
+* Root test commands are aggregation entry points. Package/app-specific test commands must remain runnable from the owning workspace package.
+
+## Monorepo Layout and Ownership
+
+`apps/desktop` owns the Electron desktop app, including desktop runtime dependencies, Electron/Vite/Playwright/Vitest config, desktop source, and desktop tests.
+
+`packages/editor-core` owns pure editor document logic. It must not depend on React, BlockNote, Electron, DOM-only packages, or desktop app code.
+
+`packages/editor-host` owns host contracts, bridge validation, fake host utilities, file-tree types, and related package tests. Keep runtime dependencies minimal.
+
+`packages/editor-react` owns React/BlockNote editor UI primitives and their package contracts. React, BlockNote, Mermaid, Shiki, and editor UI dependencies belong here or in the consuming desktop app according to peer/runtime ownership.
+
+The root `package.json` is a pnpm workspace orchestration surface. Keep common entry points such as `dev`, `start`, `build`, `test`, `lint`, and `typecheck` stable, but dispatch app/package-specific work through pnpm workspace filters or package-local scripts instead of moving implementation details back to root.
+
+Do not add app/package-specific dependencies, tests, or config to root when they belong to `apps/desktop` or `packages/editor-*`. Root may keep shared TypeScript/ESLint/Vitest aggregation config and workspace-level release or documentation tooling.
+
 ## User-Facing Text
 
 All user-visible production text must come from the app language packs and be accessed through the i18n text helpers. This includes operation menus, dialog copy, prompts, placeholders, button labels, aria labels, titles, status messages, and user-facing fallback errors.
@@ -19,6 +43,20 @@ All user-visible production text must come from the app language packs and be ac
 Do not hard-code production UI text in components, renderer services, or preload-facing surfaces. Stable protocol identifiers, persisted keys, external product names, test fixture text, and test expectations may remain literal when they are not user-facing production copy.
 
 When changing the wording or meaning of existing user-facing production text, add a new language-pack key and switch call sites to that new key instead of reusing the old key. This keeps stored custom language packs from showing stale translations for text whose intent has changed.
+
+## Component Naming and IDs
+
+All user-visible UI components, panels, dialogs, toolbars, rows, fields, menus, menu items, tabs, and buttons must have a stable internal component name and a matching `data-component-id` in the rendered component code.
+
+Use the component naming reference requirement in `docs/requirements/internal-component-naming-reference.md` as the source of truth while it is active. When implementing or changing that requirement, keep `user-manual/zh-CN/component-names.md`, the renderer code, and tests aligned.
+
+Maintain desktop component names and ids through `apps/desktop/src/renderer/src/componentIds.ts`. Editor package component ids are exposed through the `@mde/editor-react` contract and reused by the desktop map. The file must provide the code-level object mapping between each concrete standard component name and its `data-component-id`; do not use an array as the primary mapping structure. The top-level keys of `COMPONENT_NAME_ID_MAP` must stay sorted alphabetically. Renderer code should import ids from this mapping instead of scattering raw `data-component-id` strings through JSX.
+
+`data-component-id` values must be stable lowercase kebab-case identifiers with a product-area namespace, such as `explorer.new-markdown-file-button`, `editor.markdown-editing-surface`, or `ai.result-panel`. Do not include user paths, file names, document content, search queries, AI output, random values, translated text, or runtime state in a component id.
+
+Add `data-component-id` to the semantic element or the nearest meaningful owned container for the component. Do not add wrapper DOM solely to carry the id. Repeated component instances, such as list rows or tree rows, may share the same component type id; instance-specific testing should continue to use accessible names, existing test ids, paths, or other safe stable selectors.
+
+`data-component-id` does not replace accessible names, i18n text, ARIA labels, or existing `data-testid` selectors. UI changes that add or alter concrete component ids must include automated coverage that verifies the ids are present and that the component naming reference remains consistent with the renderer source.
 
 ## Release Tagging Policy
 
@@ -34,7 +72,7 @@ When pushing a production-ready feature or bug fix to the release branch, publis
 
   * If the user specifies an exact version, validate that it does not reuse an existing tag or move backwards; call out any policy mismatch before release.
 
-* Update both `package.json` and `package-lock.json` so the app version matches the release.
+* Update root `package.json`, `apps/desktop/package.json`, any changed package manifests, and `pnpm-lock.yaml` so the workspace version metadata matches the release. `package-lock.json` is not used in this pnpm workspace.
 
 * Prepare complete release notes before pushing the release tag. The notes must explain what changed in the version, grouped by user-facing features, bug fixes, breaking changes, maintenance, and verification when applicable.
 
@@ -53,6 +91,8 @@ When pushing a production-ready feature or bug fix to the release branch, publis
 Do not create a release tag for documentation-only, test-only, formatting-only, local-only, experimental, or internal configuration changes unless the user explicitly asks for a release. If it is unclear whether a change should ship as a user-facing release, ask before creating or pushing a tag.
 
 ## Requirement and Bug Tracking
+
+`docs/requirements/` and `docs/bugs/` are internal local planning workspaces and are ignored by default. They are not public user-manual content and are not required release artifacts unless the user explicitly asks to publish or force-add them.
 
 When a feature requirement or bug fix is completed and released:
 
@@ -78,12 +118,18 @@ Do not publish internal engineering docs under `docs/requirements`, `docs/bugs`,
 
 Before handing off work, run the relevant checks for the changed surface:
 
-* `npm run lint`
+* `pnpm run lint`
 
-* Unit test command once configured
+* `pnpm run typecheck`
 
-* Integration test command once configured
+* `pnpm run build`
 
-* E2E test command once configured
+* `pnpm run test:unit`
+
+* `pnpm run test:integration`
+
+* `pnpm run test:e2e`
+
+For package-local changes, run the owning package script as well, for example `pnpm --filter @mde/editor-core test`, `pnpm --filter @mde/editor-host test`, `pnpm --filter @mde/editor-react test`, or `pnpm --filter @mde/desktop test`.
 
 Treat failing lint, typecheck, unit, integration, or E2E checks as blockers unless the user explicitly asks for an unfinished checkpoint.

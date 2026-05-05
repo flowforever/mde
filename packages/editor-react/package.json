@@ -21,5 +21,11 @@
     "@blocknote/react": "^0.49.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "cd ../.. && eslint packages/editor-react --max-warnings=0",
+    "test": "cd ../.. && vitest run --project unit apps/desktop/tests/unit/FrontmatterPanel.test.tsx apps/desktop/tests/unit/MarkdownBlockEditor.test.tsx apps/desktop/tests/unit/MermaidFlowchartPanel.test.ts apps/desktop/tests/unit/editorCodeBlockLanguages.test.ts apps/desktop/tests/unit/editorCodeHighlighter.test.ts apps/desktop/tests/unit/editorLineSpacing.test.ts apps/desktop/tests/unit/editorLinkDialogState.test.ts apps/desktop/tests/unit/editorReactComponentIds.test.ts apps/desktop/tests/unit/editorSaveLifecycle.test.ts apps/desktop/tests/unit/editorViewMode.test.ts --testTimeout=30000 && vitest run --project integration apps/desktop/tests/integration/editorReact*.integration.test.ts --testTimeout=30000"
   }
 }

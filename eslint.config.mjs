@@ -37,8 +37,10 @@ export default tseslint.config(
   {
     files: [
       '*.config.ts',
+      'apps/desktop/*.config.ts',
       'packages/**/*.{ts,tsx}',
       'apps/desktop/src/**/*.{ts,tsx}',
+      'apps/desktop/tests/**/*.{ts,tsx}',
       'tests/**/*.{ts,tsx}',
       'user-manual/.vitepress/**/*.ts'
     ],
