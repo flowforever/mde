@@ -97,6 +97,10 @@ export interface EditorApi {
     filePath: string,
     workspaceRoot: string
   ) => Promise<FileContents>
+  readonly markdownFileExists?: (
+    filePath: string,
+    workspaceRoot: string
+  ) => Promise<boolean>
   readonly listDocumentHistory?: (
     filePath: string,
     workspaceRoot: string

@@ -91,6 +91,30 @@ describe('fileHandlers integration', () => {
     })
   })
 
+  it('checks whether a workspace Markdown file still exists through IPC', async () => {
+    const { handlers } = registerHandlers()
+
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.markdownFileExists)
+        ?.({}, 'README.md', workspace.rootPath)
+    ).resolves.toBe(true)
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.markdownFileExists)
+        ?.({}, 'missing.md', workspace.rootPath)
+    ).resolves.toBe(false)
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.markdownFileExists)
+        ?.({}, 'plain.txt', workspace.rootPath)
+    ).resolves.toBe(false)
+  })
+
   it('repairs moved image assets while reading Markdown through IPC', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     const imageBytes = Buffer.from([137, 80, 78, 71])

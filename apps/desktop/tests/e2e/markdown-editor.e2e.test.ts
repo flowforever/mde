@@ -5,6 +5,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rm,
   stat,
   writeFile
 } from 'node:fs/promises'
@@ -1589,6 +1590,42 @@ test('loads README markdown into the block editor surface', async () => {
     await expect(editor).toBeVisible()
     await expect(editor).toContainText('Fixture Workspace')
     await expect(editor).toContainText('Root markdown file.')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('syncs an open Markdown file after external disk changes', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const readmePath = join(workspacePath, 'README.md')
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+
+    await expect(editor).toBeVisible()
+    await expect(editor).toContainText('Fixture Workspace')
+
+    await writeFile(readmePath, '# Changed on disk\n\nExternal edit.\n')
+
+    await expect(editor).toContainText('Changed on disk', {
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
+
+    await rm(readmePath)
+
+    await expect(
+      window.getByTestId('markdown-block-editor')
+    ).toHaveCount(0, { timeout: E2E_UI_READY_TIMEOUT_MS })
+    await expect(
+      window.locator(`[data-component-id="${COMPONENT_IDS.editor.emptyState}"]`)
+    ).toBeVisible()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

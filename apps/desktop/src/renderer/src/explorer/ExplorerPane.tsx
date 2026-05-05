@@ -114,6 +114,7 @@ interface ExplorerPaneProps {
     filePath: string,
     query: string,
   ) => void;
+  readonly onValidateRecentFiles?: () => Promise<void> | void;
   readonly onPasteEntry?: (
     targetDirectoryPath: string,
   ) => Promise<void> | void;
@@ -543,6 +544,7 @@ export const ExplorerPane = ({
   onOpenWorkspace,
   onOpenWorkspaceInNewWindow = () => undefined,
   onOpenWorkspaceSearchResult = () => undefined,
+  onValidateRecentFiles = () => undefined,
   onPasteEntry = () => undefined,
   onRefreshTree = () => undefined,
   onRenameEntry,
@@ -651,6 +653,7 @@ export const ExplorerPane = ({
   const workspaceContentRef = useRef<HTMLDivElement | null>(null);
   const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
   const locateFileRequestIdRef = useRef(0);
+  const validatedRecentFilesWorkspaceRootRef = useRef<string | null>(null);
   const baseExpandedDirectoryPaths =
     expandedDirectoryState.workspaceRoot === workspaceRoot
       ? expandedDirectoryState.paths
@@ -815,6 +818,23 @@ export const ExplorerPane = ({
   useEffect(() => {
     writeRecentFilesPanelState(recentFilesPanelState);
   }, [recentFilesPanelState]);
+
+  useEffect(() => {
+    if (
+      recentFilesPanelState.isCollapsed ||
+      !workspaceRoot ||
+      validatedRecentFilesWorkspaceRootRef.current === workspaceRoot
+    ) {
+      return;
+    }
+
+    validatedRecentFilesWorkspaceRootRef.current = workspaceRoot;
+    void Promise.resolve(onValidateRecentFiles()).catch(() => undefined);
+  }, [
+    onValidateRecentFiles,
+    recentFilesPanelState.isCollapsed,
+    workspaceRoot,
+  ]);
 
   const updateRecentFilesHeightFromPointer = useCallback(
     (clientY: number): void => {
@@ -1449,10 +1469,16 @@ export const ExplorerPane = ({
     }
   };
   const toggleRecentFilesPanel = (): void => {
+    const shouldValidateRecentFiles = recentFilesPanelState.isCollapsed;
+
     setRecentFilesPanelState((currentState) => ({
       ...currentState,
       isCollapsed: !currentState.isCollapsed,
     }));
+
+    if (shouldValidateRecentFiles) {
+      void Promise.resolve(onValidateRecentFiles()).catch(() => undefined);
+    }
   };
   const toggleDeletedDocumentsPanel = (): void => {
     const nextValue = !isDeletedDocumentsVisible;

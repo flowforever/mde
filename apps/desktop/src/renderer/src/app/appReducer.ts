@@ -219,6 +219,24 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
         loadedFile: action.file,
         loadingWorkspaceRoot: null
       }
+    case 'file/external-contents-changed':
+      if (
+        state.loadedFile?.path !== action.file.path ||
+        !isCurrentWorkspace(state, action.workspaceRoot)
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        draftMarkdown: action.file.contents,
+        fileErrorMessage: null,
+        isDirty: false,
+        isLoadingFile: false,
+        isSavingFile: false,
+        loadedFile: action.file,
+        loadingWorkspaceRoot: null
+      }
     case 'file/load-failed':
       if (
         action.filePath !== state.selectedFilePath ||

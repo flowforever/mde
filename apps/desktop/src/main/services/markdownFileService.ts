@@ -57,6 +57,10 @@ export interface MarkdownFileService {
     workspacePath: string,
     filePath: string
   ) => Promise<FileContents>
+  readonly markdownFileExists: (
+    workspacePath: string,
+    filePath: string
+  ) => Promise<boolean>
   readonly writeMarkdownFile: (
     workspacePath: string,
     filePath: string,
@@ -1221,6 +1225,14 @@ export const createMarkdownFileService = ({
       path: filePath,
       ...(repairedImageAssetCount > 0 ? { repairedImageAssetCount } : {})
     })
+  },
+  async markdownFileExists(workspacePath, filePath) {
+    try {
+      await resolveExistingMarkdownFile(workspacePath, filePath)
+      return true
+    } catch {
+      return false
+    }
   },
   async searchMarkdownFiles(workspacePath, query) {
     const normalizedQuery = normalizeSearchQuery(query)

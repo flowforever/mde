@@ -2768,6 +2768,262 @@ describe("App shell", () => {
     ).toHaveTextContent("Cached summary");
   });
 
+  it("reloads the current Markdown file when it changes on disk", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      markdownFileExists: vi.fn().mockResolvedValue(true),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi
+        .fn()
+        .mockResolvedValueOnce({
+          contents: "# Original",
+          path: "README.md",
+        })
+        .mockResolvedValueOnce({
+          contents: "# Changed on disk",
+          path: "README.md",
+        }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("# Original")).toBeVisible();
+
+    await waitFor(
+      () => {
+        expect(screen.getByText("# Changed on disk")).toBeVisible();
+      },
+      { timeout: 8000 },
+    );
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears the current editor when the open Markdown file disappears on disk", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn().mockResolvedValue([]),
+      markdownFileExists: vi.fn().mockResolvedValue(false),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("# Original")).toBeVisible();
+
+    await waitFor(
+      () => {
+        expect(screen.queryByText("# Original")).not.toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
+    expect(screen.getByText(/select a folder to begin/i)).toBeVisible();
+  });
+
+  it("validates recent files when the recent files panel expands", async () => {
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: null,
+          recentFilePaths: ["README.md", "missing.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+    localStorage.setItem(
+      "mde.explorerRecentFilesPanel",
+      JSON.stringify({ height: 164, isCollapsed: true }),
+    );
+
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      markdownFileExists: vi
+        .fn()
+        .mockImplementation((filePath: string) =>
+          Promise.resolve(filePath === "README.md"),
+        ),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        name: "workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn(),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    const recentFilesToggle = await screen.findByRole("button", {
+      name: /recent files/i,
+    });
+
+    fireEvent.click(recentFilesToggle);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", {
+          name: /open recent file missing\.md/i,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole("button", { name: /open recent file README\.md/i }),
+    ).toBeVisible();
+    expect(editorApi.markdownFileExists).toHaveBeenCalledWith(
+      "README.md",
+      "/workspace",
+    );
+    expect(JSON.parse(localStorage.getItem("mde.workspaceFileHistory") ?? "[]"))
+      .toEqual([
+        {
+          lastOpenedFilePath: null,
+          recentFilePaths: ["README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]);
+  });
+
+  it("validates recent files when the expanded recent files panel opens with a workspace", async () => {
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: null,
+          recentFilePaths: ["README.md", "missing.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      markdownFileExists: vi
+        .fn()
+        .mockImplementation((filePath: string) =>
+          Promise.resolve(filePath === "README.md"),
+        ),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        name: "workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn(),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: /open recent file README\.md/i,
+      }),
+    ).toBeVisible();
+
+    await waitFor(() => {
+      expect(editorApi.markdownFileExists).toHaveBeenCalledWith(
+        "README.md",
+        "/workspace",
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", {
+          name: /open recent file missing\.md/i,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole("button", { name: /open recent file README\.md/i }),
+    ).toBeVisible();
+  });
+
   it("opens the theme settings panel and persists the selected theme", async () => {
     const user = userEvent.setup();
 

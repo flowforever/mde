@@ -26,6 +26,7 @@ export const FILE_CHANNELS = Object.freeze({
   pasteExternalEntries: "file:paste-external-entries",
   readClipboardText: "file:read-clipboard-text",
   readDocumentHistoryVersion: "file:read-document-history-version",
+  markdownFileExists: "file:markdown-file-exists",
   readMarkdownFile: "file:read-markdown",
   renameEntry: "file:rename-entry",
   restoreDeletedDocumentHistoryVersion:

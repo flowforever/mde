@@ -105,6 +105,11 @@ export type AppAction =
       readonly workspaceRoot: string
     }
   | {
+      readonly type: 'file/external-contents-changed'
+      readonly file: FileContents
+      readonly workspaceRoot: string
+    }
+  | {
       readonly type: 'file/load-failed'
       readonly filePath: string
       readonly message: string

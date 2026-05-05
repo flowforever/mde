@@ -157,6 +157,19 @@ export const registerFileHandlers = ({
   )
 
   ipcMain.handle(
+    FILE_CHANNELS.markdownFileExists,
+    async (event, filePath, workspaceRoot) =>
+      markdownFileService.markdownFileExists(
+        getRequiredWorkspaceRoot(
+          event,
+          getActiveWorkspaceRoot,
+          assertStringInput(workspaceRoot, 'Workspace root')
+        ),
+        assertStringInput(filePath, 'File path')
+      )
+  )
+
+  ipcMain.handle(
     FILE_CHANNELS.writeMarkdownFile,
     async (event, filePath, contents, workspaceRoot) =>
       markdownFileService.writeMarkdownFile(

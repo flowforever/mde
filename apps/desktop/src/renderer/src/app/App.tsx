@@ -324,6 +324,7 @@ const EXPLORER_WIDTH_DEFAULT = 288;
 const EXPLORER_WIDTH_MIN = 220;
 const EXPLORER_WIDTH_MAX = 440;
 const AUTO_SAVE_IDLE_DELAY_MS = 5000;
+export const EXTERNAL_FILE_SYNC_INTERVAL_MS = 5000;
 const SYSTEM_DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 const APP_VERSION = packageJson.version;
 
@@ -726,6 +727,63 @@ export const App = (): React.JSX.Element => {
     },
     [updateWorkspaceFileHistory],
   );
+
+  const validateRecentFiles = useCallback(async (): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath;
+    const markdownFileExists = window.editorApi?.markdownFileExists;
+
+    if (!workspaceRoot || !markdownFileExists) {
+      return;
+    }
+
+    const recentFilePaths = getWorkspaceRecentFiles(
+      workspaceFileHistory,
+      workspaceRoot,
+    );
+
+    if (recentFilePaths.length === 0) {
+      return;
+    }
+
+    const existingFilePaths = new Set(
+      (
+        await Promise.all(
+          recentFilePaths.map(async (filePath): Promise<string | null> => {
+            try {
+              return (await markdownFileExists(filePath, workspaceRoot))
+                ? filePath
+                : null;
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((filePath): filePath is string => filePath !== null),
+    );
+    const missingFilePaths = recentFilePaths.filter(
+      (filePath) => !existingFilePaths.has(filePath),
+    );
+
+    if (missingFilePaths.length === 0) {
+      return;
+    }
+
+    updateWorkspaceFileHistory((currentHistory) =>
+      missingFilePaths.reduce(
+        (nextHistory, filePath) =>
+          removeWorkspaceFileHistoryEntry(
+            nextHistory,
+            workspaceRoot,
+            filePath,
+          ),
+        currentHistory,
+      ),
+    );
+  }, [
+    state.workspace?.rootPath,
+    updateWorkspaceFileHistory,
+    workspaceFileHistory,
+  ]);
 
   const completeWorkspaceOpen = useCallback(
     (workspace: Workspace): void => {
@@ -2633,6 +2691,104 @@ export const App = (): React.JSX.Element => {
     state.workspace?.rootPath,
   ]);
 
+  useEffect(() => {
+    const editorApi = window.editorApi;
+    const markdownFileExists = editorApi?.markdownFileExists;
+    const loadedFilePath = state.loadedFile?.path;
+    const loadedFileContents = state.loadedFile?.contents;
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (
+      !editorApi ||
+      !markdownFileExists ||
+      !loadedFilePath ||
+      loadedFileContents === undefined ||
+      !workspaceRoot ||
+      state.isDirty ||
+      state.isLoadingFile ||
+      state.isSavingFile ||
+      historyPreview
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+    let isChecking = false;
+
+    const checkExternalMarkdownFile = async (): Promise<void> => {
+      if (isChecking) {
+        return;
+      }
+
+      isChecking = true;
+
+      try {
+        const exists = await markdownFileExists(loadedFilePath, workspaceRoot);
+
+        if (isCancelled) {
+          return;
+        }
+
+        if (!exists) {
+          dispatch({
+            entryPath: loadedFilePath,
+            type: "file/entry-deleted",
+            workspaceRoot,
+          });
+          updateWorkspaceFileHistory((currentHistory) =>
+            removeWorkspaceFileHistoryEntry(
+              currentHistory,
+              workspaceRoot,
+              loadedFilePath,
+            ),
+          );
+          await refreshWorkspaceTree(workspaceRoot, [
+            getParentPath(loadedFilePath),
+          ]);
+          return;
+        }
+
+        const file = await editorApi.readMarkdownFile(
+          loadedFilePath,
+          workspaceRoot,
+        );
+
+        if (isCancelled || file.contents === loadedFileContents) {
+          return;
+        }
+
+        dispatch({
+          file,
+          type: "file/external-contents-changed",
+          workspaceRoot,
+        });
+      } catch {
+        // External file changes are best-effort; the next interval will retry.
+      } finally {
+        isChecking = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void checkExternalMarkdownFile();
+    }, EXTERNAL_FILE_SYNC_INTERVAL_MS);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    historyPreview,
+    refreshWorkspaceTree,
+    state.isDirty,
+    state.isLoadingFile,
+    state.isSavingFile,
+    state.loadedFile?.contents,
+    state.loadedFile?.path,
+    state.workspace?.rootPath,
+    updateWorkspaceFileHistory,
+  ]);
+
   const uploadImageWithEditorHost = useCallback(
     async (file: File): Promise<string> => {
       const result = await createCurrentDesktopEditorHost().uploadImage?.({
@@ -3140,6 +3296,7 @@ export const App = (): React.JSX.Element => {
           void openWorkspaceInNewWindow(workspace);
         }}
         onOpenWorkspaceSearchResult={openWorkspaceSearchResult}
+        onValidateRecentFiles={validateRecentFiles}
         onPasteEntry={(targetDirectoryPath) => {
           void pasteExplorerEntry(targetDirectoryPath);
         }}

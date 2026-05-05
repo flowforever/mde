@@ -104,6 +104,12 @@ export const createEditorApi = (
       filePath,
       workspaceRoot
     ) as Promise<FileContents>,
+  markdownFileExists: (filePath, workspaceRoot) =>
+    ipcRenderer.invoke(
+      FILE_CHANNELS.markdownFileExists,
+      filePath,
+      workspaceRoot
+    ) as Promise<boolean>,
   listDocumentHistory: (filePath, workspaceRoot) =>
     ipcRenderer.invoke(
       FILE_CHANNELS.listDocumentHistory,
