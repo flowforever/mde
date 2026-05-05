@@ -6,13 +6,16 @@ on:
     branches:
       - master
     paths:
-      - 'src/**'
+      - 'apps/desktop/src/**'
+      - 'apps/desktop/tests/e2e/manualScreenshots.spec.ts'
+      - 'apps/desktop/tests/e2e/support/**'
+      - 'packages/**'
       - 'user-manual/**'
-      - 'tests/e2e/manualScreenshots.spec.ts'
-      - 'tests/e2e/support/**'
       - '.github/workflows/deploy-user-manual.yml'
+      - 'apps/desktop/package.json'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
 
 permissions:
   contents: read
@@ -31,17 +34,21 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Generate zh-CN manual screenshots
-        run: npm run docs:screenshots
+        run: pnpm run docs:screenshots
         env:
           MDE_E2E_WINDOW_MODE: visible
 
@@ -59,14 +66,18 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Download generated manual screenshots
         uses: actions/download-artifact@v4
@@ -75,7 +86,7 @@ jobs:
           path: user-manual/public/screenshots/zh-CN
 
       - name: Build manual
-        run: npm run docs:build
+        run: pnpm run docs:build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
