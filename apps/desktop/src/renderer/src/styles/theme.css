@@ -1087,7 +1087,7 @@ input:focus-visible,
 .global-search-form {
   display: grid;
   min-height: 54px;
-  grid-template-columns: 26px minmax(0, 1fr) 32px;
+  grid-template-columns: 26px minmax(0, 1fr) auto 32px;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
@@ -1131,6 +1131,33 @@ input::-webkit-search-cancel-button {
 .global-search-form button:hover {
   color: var(--panel-text-strong);
   background: var(--panel-surface-hover);
+}
+
+.global-search-mode-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 28px);
+  align-items: center;
+  gap: 2px;
+  padding: 1px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.global-search-form .global-search-mode-button {
+  width: 27px;
+  height: 27px;
+  border-radius: 4px;
+}
+
+.global-search-mode-button[aria-checked="true"] {
+  color: var(--panel-text-strong);
+  background: color-mix(
+    in srgb,
+    var(--panel-surface-hover) 78%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--panel-border) 70%, transparent);
 }
 
 .global-search-history {

@@ -13,6 +13,7 @@ import type {
   ReactNode,
 } from "react";
 import {
+  AtSign,
   Bot,
   ArchiveRestore,
   ChevronDown,
@@ -86,6 +87,8 @@ import {
   rememberSearchHistoryItem,
   writeSearchHistory,
 } from "../search/searchHistory";
+import { searchWorkspacePaths } from "../search/workspacePathSearch";
+import type { WorkspacePathSearchResult } from "../search/workspacePathSearch";
 import { COMPONENT_IDS } from "../componentIds";
 
 interface ExplorerPaneProps {
@@ -151,6 +154,11 @@ interface ExplorerPaneProps {
 
 type PendingExplorerAction = "create-file" | "create-folder" | "rename" | null;
 type AppLanguagePackGenerationMode = "create" | "update" | null;
+type GlobalSearchMode = "content" | "path";
+interface OpenWorkspaceSearchDetail {
+  cycleMode?: boolean;
+  mode?: GlobalSearchMode;
+}
 type SettingsPanelId = "ai" | "preferences" | "theme" | "updates";
 
 interface EntryContextMenu {
@@ -634,6 +642,8 @@ export const ExplorerPane = ({
   >(null);
   const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState("");
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [globalSearchMode, setGlobalSearchMode] =
+    useState<GlobalSearchMode>("content");
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [globalSearchHistory, setGlobalSearchHistory] = useState(() =>
     readSearchHistory(
@@ -696,8 +706,21 @@ export const ExplorerPane = ({
     () => getSearchShortcutLabel("workspace"),
     [],
   );
+  const globalPathSearchShortcutLabel = useMemo(
+    () => getSearchShortcutLabel("workspacePath"),
+    [],
+  );
   const globalSearchButtonTitle = text("globalSearch.searchWithShortcut", {
     shortcut: globalSearchShortcutLabel,
+  });
+  const globalSearchContentModeTitle = text(
+    "globalSearch.contentModeWithShortcut",
+    {
+      shortcut: globalSearchShortcutLabel,
+    },
+  );
+  const globalSearchPathModeTitle = text("globalSearch.pathModeWithShortcut", {
+    shortcut: globalPathSearchShortcutLabel,
   });
   const visibleGlobalSearchHistory = useMemo(
     () => filterSearchHistory(globalSearchHistory, globalSearchQuery),
@@ -708,13 +731,41 @@ export const ExplorerPane = ({
       ? text("globalSearch.matchingHistory")
       : text("globalSearch.history");
 
-  const openGlobalSearch = useCallback((): void => {
-    setIsGlobalSearchOpen(true);
-  }, []);
+  const setActiveGlobalSearchMode = useCallback(
+    (mode: GlobalSearchMode): void => {
+      setGlobalSearchMode(mode);
+      setGlobalSearchResult(null);
+      setGlobalSearchErrorMessage(null);
+      setIsGlobalSearchHistoryOpen(mode === "content");
+      setIsGlobalSearchLoading(
+        mode === "content" && globalSearchQuery.trim().length > 0,
+      );
+    },
+    [globalSearchQuery],
+  );
+
+  const openGlobalSearch = useCallback(
+    (
+      mode: GlobalSearchMode = "content",
+      options: { cycleMode?: boolean } = {},
+    ): void => {
+      const nextMode =
+        options.cycleMode && isGlobalSearchOpen
+          ? globalSearchMode === "path"
+            ? "content"
+            : "path"
+          : mode;
+
+      setActiveGlobalSearchMode(nextMode);
+      setIsGlobalSearchOpen(true);
+    },
+    [globalSearchMode, isGlobalSearchOpen, setActiveGlobalSearchMode],
+  );
 
   const closeGlobalSearch = useCallback((): void => {
     setIsGlobalSearchOpen(false);
     setIsGlobalSearchHistoryOpen(false);
+    setGlobalSearchMode("content");
     setGlobalSearchQuery("");
     setGlobalSearchResult(null);
     setGlobalSearchErrorMessage(null);
@@ -745,8 +796,16 @@ export const ExplorerPane = ({
   }, [hiddenEntryPathsByWorkspace]);
 
   useEffect(() => {
-    const openWorkspaceSearch = (): void => {
-      openGlobalSearch();
+    const openWorkspaceSearch = (event: Event): void => {
+      const detail =
+        event instanceof CustomEvent
+          ? (event.detail as OpenWorkspaceSearchDetail | null)
+          : null;
+      const requestedMode = detail?.mode === "path" ? "path" : "content";
+
+      openGlobalSearch(requestedMode, {
+        cycleMode: detail?.cycleMode === true,
+      });
     };
 
     window.addEventListener("mde:open-workspace-search", openWorkspaceSearch);
@@ -769,7 +828,11 @@ export const ExplorerPane = ({
   }, [isGlobalSearchOpen]);
 
   useEffect(() => {
-    if (!isGlobalSearchOpen || !onSearchWorkspace) {
+    if (
+      !isGlobalSearchOpen ||
+      globalSearchMode !== "content" ||
+      !onSearchWorkspace
+    ) {
       return;
     }
 
@@ -809,7 +872,13 @@ export const ExplorerPane = ({
       isCancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [globalSearchQuery, isGlobalSearchOpen, onSearchWorkspace, text]);
+  }, [
+    globalSearchMode,
+    globalSearchQuery,
+    isGlobalSearchOpen,
+    onSearchWorkspace,
+    text,
+  ]);
 
   useEffect(() => {
     writeDefaultHiddenExplorerWorkspaces(defaultHiddenWorkspaceRoots);
@@ -1418,6 +1487,10 @@ export const ExplorerPane = ({
       ? state.workspace.tree
       : filterHiddenNodes(state.workspace.tree, effectiveHiddenEntryPaths)
     : [];
+  const globalPathSearchResults =
+    globalSearchMode === "path"
+      ? searchWorkspacePaths(visibleTree, globalSearchQuery)
+      : [];
   const inlineEditor = pendingAction
     ? {
         targetDirectoryPath: actionTargetDirectoryPath,
@@ -2402,7 +2475,9 @@ export const ExplorerPane = ({
               className="explorer-icon-button"
               data-component-id={COMPONENT_IDS.explorer.workspaceSearchButton}
               disabled={!state.workspace}
-              onClick={openGlobalSearch}
+              onClick={() => {
+                openGlobalSearch("content");
+              }}
               title={globalSearchButtonTitle}
               type="button"
             >
@@ -2867,24 +2942,42 @@ export const ExplorerPane = ({
               }}
             >
               <form
-                  aria-label={text("explorer.searchWorkspaceContents")}
-                  className="global-search-form"
+                aria-label={text("explorer.searchWorkspaceContents")}
+                className="global-search-form"
                 onSubmit={(event) => {
                   event.preventDefault();
+                  if (globalSearchMode === "path") {
+                    const firstPathResult = globalPathSearchResults[0];
+
+                    if (firstPathResult) {
+                      onSelectFile(firstPathResult.path);
+                      closeGlobalSearch();
+                    }
+
+                    return;
+                  }
+
                   rememberGlobalSearchQuery(globalSearchQuery);
                   setIsGlobalSearchHistoryOpen(false);
                 }}
               >
                 <Search aria-hidden="true" focusable="false" size={18} />
                 <input
-                  aria-label={text("explorer.searchWorkspaceContents")}
+                  aria-label={
+                    globalSearchMode === "path"
+                      ? text("globalSearch.pathInput")
+                      : text("explorer.searchWorkspaceContents")
+                  }
                   data-component-id={COMPONENT_IDS.search.workspaceSearchField}
                   onChange={(event) => {
                     const nextQuery = event.target.value;
 
                     setGlobalSearchQuery(nextQuery);
-                    setIsGlobalSearchHistoryOpen(true);
-                    if (nextQuery.trim().length === 0) {
+                    setIsGlobalSearchHistoryOpen(globalSearchMode === "content");
+                    if (
+                      nextQuery.trim().length === 0 ||
+                      globalSearchMode === "path"
+                    ) {
                       setGlobalSearchResult(null);
                       setGlobalSearchErrorMessage(null);
                       setIsGlobalSearchLoading(false);
@@ -2894,7 +2987,7 @@ export const ExplorerPane = ({
                     }
                   }}
                   onFocus={() => {
-                    setIsGlobalSearchHistoryOpen(true);
+                    setIsGlobalSearchHistoryOpen(globalSearchMode === "content");
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") {
@@ -2902,12 +2995,50 @@ export const ExplorerPane = ({
                       closeGlobalSearch();
                     }
                   }}
-                  placeholder={text("globalSearch.placeholder")}
+                  placeholder={
+                    globalSearchMode === "path"
+                      ? text("globalSearch.pathPlaceholder")
+                      : text("globalSearch.placeholder")
+                  }
                   ref={globalSearchInputRef}
                   role="searchbox"
                   type="text"
                   value={globalSearchQuery}
                 />
+                <div
+                  aria-label={text("globalSearch.modeGroup")}
+                  className="global-search-mode-switch"
+                  role="radiogroup"
+                >
+                  <button
+                    aria-checked={globalSearchMode === "content"}
+                    aria-label={text("globalSearch.contentMode")}
+                    className="global-search-mode-button"
+                    onClick={() => {
+                      setActiveGlobalSearchMode("content");
+                      globalSearchInputRef.current?.focus();
+                    }}
+                    role="radio"
+                    title={globalSearchContentModeTitle}
+                    type="button"
+                  >
+                    <Search aria-hidden="true" focusable="false" size={14} />
+                  </button>
+                  <button
+                    aria-checked={globalSearchMode === "path"}
+                    aria-label={text("globalSearch.pathMode")}
+                    className="global-search-mode-button"
+                    onClick={() => {
+                      setActiveGlobalSearchMode("path");
+                      globalSearchInputRef.current?.focus();
+                    }}
+                    role="radio"
+                    title={globalSearchPathModeTitle}
+                    type="button"
+                  >
+                    <AtSign aria-hidden="true" focusable="false" size={15} />
+                  </button>
+                </div>
                 <button
                   aria-label={text("globalSearch.close")}
                   onClick={closeGlobalSearch}
@@ -2916,7 +3047,8 @@ export const ExplorerPane = ({
                   <X aria-hidden="true" focusable="false" size={16} />
                 </button>
               </form>
-              {isGlobalSearchHistoryOpen &&
+              {globalSearchMode === "content" &&
+              isGlobalSearchHistoryOpen &&
               visibleGlobalSearchHistory.length > 0 ? (
                 <div
                   aria-label={text("globalSearch.history")}
@@ -2969,7 +3101,30 @@ export const ExplorerPane = ({
               ) : null}
             </div>
             <div className="global-search-results" role="list">
-              {globalSearchErrorMessage ? (
+              {globalSearchMode === "path" &&
+              globalPathSearchResults.length > 0 ? (
+                globalPathSearchResults.map((result: WorkspacePathSearchResult) => (
+                  <button
+                    aria-label={text("globalSearch.openPathResult", {
+                      path: result.path,
+                    })}
+                    className="global-search-result global-search-path-result"
+                    key={result.path}
+                    onClick={() => {
+                      onSelectFile(result.path);
+                      closeGlobalSearch();
+                    }}
+                    type="button"
+                  >
+                    <span>{result.name}</span>
+                    <span>{result.path}</span>
+                    <span>{text("globalSearch.pathResultType")}</span>
+                    <span>
+                      {renderHighlightedSearchText(result.path, globalSearchQuery)}
+                    </span>
+                  </button>
+                ))
+              ) : globalSearchErrorMessage ? (
                 <p className="global-search-message" role="alert">
                   {globalSearchErrorMessage}
                 </p>
@@ -3027,7 +3182,9 @@ export const ExplorerPane = ({
                 </p>
               ) : (
                 <p className="global-search-message">
-                  {text("globalSearch.description")}
+                  {globalSearchMode === "path"
+                    ? text("globalSearch.pathDescription")
+                    : text("globalSearch.description")}
                 </p>
               )}
             </div>

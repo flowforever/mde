@@ -4,7 +4,7 @@ export const SEARCH_HISTORY_LIMIT = 12;
 export const GLOBAL_SEARCH_HISTORY_LIMIT = 16;
 export const PINNED_SEARCH_QUERY_LIMIT = 6;
 
-export type SearchShortcutScope = "editor" | "workspace";
+export type SearchShortcutScope = "editor" | "workspace" | "workspacePath";
 
 const normalizeSearchTerm = (query: string): string => query.trim();
 
@@ -123,6 +123,10 @@ export const getSearchShortcutLabel = (
 
   if (scope === "workspace") {
     return isMac ? "⌘⇧F" : "Ctrl+Shift+F";
+  }
+
+  if (scope === "workspacePath") {
+    return isMac ? "⌘P" : "Ctrl+P";
   }
 
   return isMac ? "⌘F" : "Ctrl+F";

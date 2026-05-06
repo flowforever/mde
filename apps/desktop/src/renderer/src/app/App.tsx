@@ -1937,21 +1937,36 @@ export const App = (): React.JSX.Element => {
 
   useEffect(() => {
     const openSearchOnShortcut = (event: KeyboardEvent): void => {
+      const shortcutKey = event.key.toLowerCase();
+
       if (
         !(event.metaKey || event.ctrlKey) ||
-        event.key.toLowerCase() !== "f"
+        !["f", "p"].includes(shortcutKey)
       ) {
         return;
       }
 
       event.preventDefault();
 
-      if (event.shiftKey) {
-        window.dispatchEvent(new CustomEvent("mde:open-workspace-search"));
+      if (shortcutKey === "p" && !event.shiftKey) {
+        window.dispatchEvent(
+          new CustomEvent("mde:open-workspace-search", {
+            detail: { cycleMode: true, mode: "path" },
+          }),
+        );
         return;
       }
 
-      if (state.loadedFile) {
+      if (shortcutKey === "f" && event.shiftKey) {
+        window.dispatchEvent(
+          new CustomEvent("mde:open-workspace-search", {
+            detail: { mode: "content" },
+          }),
+        );
+        return;
+      }
+
+      if (shortcutKey === "f" && state.loadedFile) {
         openEditorSearch();
       }
     };

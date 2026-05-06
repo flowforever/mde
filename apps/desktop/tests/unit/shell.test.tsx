@@ -2377,6 +2377,182 @@ describe("App shell", () => {
     });
   });
 
+  it("opens a workspace path search result without starting editor text search", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [
+          { name: "README.md", path: "README.md", type: "file" },
+          {
+            children: [
+              { name: "guide.md", path: "docs/guide.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ],
+        type: "workspace",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockImplementation((filePath: string) =>
+        Promise.resolve(
+          filePath === "docs/guide.md"
+            ? {
+                contents: "# Guide",
+                path: "docs/guide.md",
+              }
+            : {
+                contents: "# Original",
+                path: "README.md",
+              },
+        ),
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      searchWorkspaceMarkdown: vi.fn().mockResolvedValue({
+        limited: false,
+        query: "guide",
+        results: [],
+      }),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: /search workspace contents/i });
+    fireEvent.keyDown(window, { key: "f", metaKey: true, shiftKey: true });
+    await user.click(
+      await screen.findByRole("radio", { name: /path search mode/i }),
+    );
+
+    const workspaceSearchBox = screen.getByRole("searchbox", {
+      name: /search workspace paths/i,
+    });
+
+    await user.type(workspaceSearchBox, "guide");
+    expect(editorApi.searchWorkspaceMarkdown).not.toHaveBeenCalled();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open path result docs\/guide\.md/i,
+      }),
+    );
+
+    expect(editorApi.readMarkdownFile).toHaveBeenLastCalledWith(
+      "docs/guide.md",
+      "/workspace",
+    );
+    expect(screen.queryByTestId("mock-editor-search-query")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.title).toBe("guide.md - /workspace");
+    });
+  });
+
+  it("opens workspace path search from the command palette shortcut", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [
+          { name: "README.md", path: "README.md", type: "file" },
+          {
+            children: [
+              { name: "guide.md", path: "docs/guide.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ],
+        type: "workspace",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      searchWorkspaceMarkdown: vi.fn().mockResolvedValue({
+        limited: false,
+        query: "guide",
+        results: [],
+      }),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: /search workspace contents/i });
+    fireEvent.keyDown(window, { key: "p", metaKey: true });
+
+    expect(
+      await screen.findByRole("radio", { name: /path search mode/i }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByRole("radio", { name: /path search mode/i }),
+    ).toHaveAttribute("title", "Path search mode (Ctrl+P)");
+    expect(
+      screen.getByRole("radio", { name: /content search mode/i }),
+    ).toHaveAttribute("title", "Content search mode (Ctrl+Shift+F)");
+    expect(
+      screen.getByRole("searchbox", { name: /search workspace paths/i }),
+    ).toHaveFocus();
+    expect(
+      screen.getByRole("searchbox", { name: /search workspace paths/i }),
+    ).toHaveAttribute("placeholder", "Search paths");
+
+    fireEvent.keyDown(window, { key: "p", metaKey: true });
+
+    expect(
+      screen.getByRole("radio", { name: /content search mode/i }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByRole("searchbox", { name: /search workspace contents/i }),
+    ).toHaveAttribute("placeholder", "Search workspace");
+
+    fireEvent.keyDown(window, { key: "p", metaKey: true });
+
+    expect(
+      screen.getByRole("radio", { name: /path search mode/i }),
+    ).toHaveAttribute("aria-checked", "true");
+  });
+
   it("renders global workspace search history as filtered tags capped at sixteen", async () => {
     const user = userEvent.setup();
     const storedHistory = [

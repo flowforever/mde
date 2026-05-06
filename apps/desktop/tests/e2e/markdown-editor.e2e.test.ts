@@ -2416,6 +2416,51 @@ test('searches the workspace and opens a matched file with editor highlights', a
   }
 })
 
+test('searches workspace paths and opens a matched Markdown file directly', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const pathSearchShortcut = process.platform === 'darwin' ? 'Meta+P' : 'Control+P'
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.keyboard.press(pathSearchShortcut)
+
+    const pathSearchBox = window.getByRole('searchbox', {
+      name: /search workspace paths/i
+    })
+
+    await expect(pathSearchBox).toBeFocused()
+    await expect(
+      window.getByRole('radio', { name: /path search mode/i })
+    ).toHaveAttribute('aria-checked', 'true')
+    await expect(
+      window.getByRole('radio', { name: /path search mode/i })
+    ).toHaveAttribute(
+      'title',
+      process.platform === 'darwin'
+        ? 'Path search mode (⌘P)'
+        : 'Path search mode (Ctrl+P)'
+    )
+    await pathSearchBox.fill('doc/nst/dp')
+    await window
+      .getByRole('button', { name: /open path result docs\/nested\/deep\.md/i })
+      .click()
+
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Deeply nested markdown file.'
+    )
+    await expect(window).toHaveTitle(`deep.md - ${await realpath(workspacePath)}`)
+    await expect(
+      window.getByRole('searchbox', { name: /search current markdown/i })
+    ).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('renders consecutive Mermaid flowcharts inline with complete thumbnail previews', async () => {
   const workspacePath = await createFixtureWorkspace()
   const diagramPath = join(workspacePath, 'docs', 'diagram.md')
