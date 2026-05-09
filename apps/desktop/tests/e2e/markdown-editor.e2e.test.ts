@@ -28,7 +28,7 @@ import { COMPONENT_IDS } from '../../src/renderer/src/componentIds'
 import { getAppThemeRows, type AppThemeId } from '../../src/renderer/src/theme/appThemes'
 
 const E2E_TEST_TIMEOUT_MS = 120_000
-const E2E_BUILD_TIMEOUT_MS = 600_000
+const E2E_BUILD_TIMEOUT_MS = 900_000
 const E2E_UI_READY_TIMEOUT_MS = 20_000
 const E2E_AI_RESULT_TIMEOUT_MS = 30_000
 const AUTO_SUPERPOWER_FLOWCHART = [
@@ -283,6 +283,33 @@ const revealEditorOverflowActions = async (window: Page): Promise<void> => {
   if (await expandButton.isVisible({ timeout: 1000 }).catch(() => false)) {
     await expandButton.click()
   }
+}
+
+const clickEditorAction = async (
+  window: Page,
+  name: RegExp
+): Promise<void> => {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await revealEditorOverflowActions(window)
+
+    const button = window.getByRole('button', { name })
+
+    await expect(button).toBeVisible()
+
+    try {
+      await button.click({ timeout: 5_000 })
+      return
+    } catch (error) {
+      lastError = error
+      await window.waitForTimeout(100)
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Unable to click editor action ${name}`)
 }
 
 const resetThemePreference = async (window: Page): Promise<void> => {
@@ -2191,9 +2218,6 @@ test('toggles the editor between centered and full-width layouts', async () => {
     const historyButton = window.getByRole('button', {
       name: /^version history$/i
     })
-    const fullWidthButton = window.getByRole('button', {
-      name: /use full-width editor view/i
-    })
 
     await expect(editor).toBeVisible()
     await expect(historyButton).toBeVisible()
@@ -2207,8 +2231,7 @@ test('toggles the editor between centered and full-width layouts', async () => {
 
     expect(actionBarWidth).toBeLessThan(220)
     expect(actionBarWidth).toBeLessThan(centeredWidth)
-    await revealEditorOverflowActions(window)
-    await fullWidthButton.click()
+    await clickEditorAction(window, /use full-width editor view/i)
     await expect(
       window.getByRole('button', { name: /use centered editor view/i })
     ).toBeVisible()
@@ -2218,9 +2241,7 @@ test('toggles the editor between centered and full-width layouts', async () => {
 
     expect(fullWidth).toBeGreaterThan(centeredWidth + 120)
 
-    await window
-      .getByRole('button', { name: /use centered editor view/i })
-      .click()
+    await clickEditorAction(window, /use centered editor view/i)
     const recenteredWidth = await editor.evaluate(
       (element) => element.getBoundingClientRect().width
     )
@@ -3110,6 +3131,45 @@ test('opens a standalone markdown file from a command line path', async () => {
     await expect(
       window.getByRole('button', { name: /manage workspaces/i })
     ).toHaveText(/cli-file\.md/i)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('opens a command line markdown file from the nearest parent Git workspace', async () => {
+  const workspacePath = await mkdtemp(join(tmpdir(), 'mde-cli-git-workspace-'))
+  const docsPath = join(workspacePath, 'docs')
+  const filePath = join(docsPath, 'cli-guide.md')
+
+  await mkdir(join(workspacePath, '.git'))
+  await mkdir(docsPath)
+  await writeFile(join(workspacePath, 'README.md'), '# Workspace root')
+  await writeFile(filePath, '# CLI Guide\n\nOpened from a Git workspace.')
+
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [filePath]
+  })
+
+  try {
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    await expect(
+      window.getByRole('button', { name: /docs folder/i })
+    ).toHaveAttribute('aria-expanded', 'true')
+    await expect(
+      window.getByRole('button', { name: /cli-guide\.md Markdown file/i })
+    ).toHaveAttribute('aria-current', 'page')
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Opened from a Git workspace.'
+    )
+    await expect(window).toHaveTitle(
+      `cli-guide.md - ${await realpath(workspacePath)}`
+    )
+    await expect(
+      window.getByRole('button', { name: /manage workspaces/i })
+    ).toHaveText(new RegExp(`${workspacePath.split('/').at(-1) ?? ''}`, 'i'))
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

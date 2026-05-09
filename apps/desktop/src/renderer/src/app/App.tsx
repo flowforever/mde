@@ -445,6 +445,13 @@ export const App = (): React.JSX.Element => {
     useState(() => !window.editorApi);
   const [recentWorkspaces, setRecentWorkspaces] =
     useState(readRecentWorkspaces);
+  const candidateWorkspaceRoots = useMemo(
+    () =>
+      recentWorkspaces
+        .filter((workspace) => workspace.type === "workspace")
+        .map((workspace) => workspace.rootPath),
+    [recentWorkspaces],
+  );
   const [workspaceFileHistory, setWorkspaceFileHistory] = useState(
     readWorkspaceFileHistory,
   );
@@ -846,7 +853,7 @@ export const App = (): React.JSX.Element => {
 
   const loadWorkspaceDefaultFile = useCallback(
     async (workspace: Workspace): Promise<void> => {
-      if (workspace.type === "file" && workspace.openedFilePath) {
+      if (workspace.openedFilePath) {
         await loadFile(workspace.openedFilePath, workspace.rootPath);
         return;
       }
@@ -1089,7 +1096,7 @@ export const App = (): React.JSX.Element => {
         return;
       }
 
-      const workspace = await window.editorApi.openFile();
+      const workspace = await window.editorApi.openFile(candidateWorkspaceRoots);
 
       if (!workspace) {
         dispatch({ type: "workspace/open-cancelled" });
@@ -1167,7 +1174,10 @@ export const App = (): React.JSX.Element => {
 
         const workspace =
           typeof resourcePath === "string"
-            ? await window.editorApi.openPath(resourcePath)
+            ? await window.editorApi.openPath(
+                resourcePath,
+                candidateWorkspaceRoots,
+              )
             : await window.editorApi.openWorkspaceByPath(
                 resourcePath.workspaceRoot,
               );
@@ -1185,7 +1195,13 @@ export const App = (): React.JSX.Element => {
         });
       }
     },
-    [completeWorkspaceOpen, loadFile, loadWorkspaceDefaultFile, text],
+    [
+      candidateWorkspaceRoots,
+      completeWorkspaceOpen,
+      loadFile,
+      loadWorkspaceDefaultFile,
+      text,
+    ],
   );
 
   useEffect(() => {

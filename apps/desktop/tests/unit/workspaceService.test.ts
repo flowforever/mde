@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -29,6 +29,73 @@ describe('workspaceService', () => {
       ['file', 'README.md']
     ])
     expect(Object.isFrozen(workspace.tree)).toBe(true)
+  })
+
+  it('opens a Markdown file from the deepest matching known workspace root', async () => {
+    const parentWorkspacePath = await mkdtemp(join(tmpdir(), 'mde-parent-workspace-'))
+    const childWorkspacePath = join(parentWorkspacePath, 'docs')
+    const filePath = join(childWorkspacePath, 'guide.md')
+
+    await mkdir(childWorkspacePath)
+    await writeFile(join(parentWorkspacePath, 'README.md'), '# Parent')
+    await writeFile(filePath, '# Guide')
+
+    const workspace = await createWorkspaceService().openMarkdownFile(filePath, {
+      candidateWorkspaceRoots: [parentWorkspacePath, childWorkspacePath]
+    })
+
+    expect(workspace).toMatchObject({
+      name: 'docs',
+      openedFilePath: 'guide.md',
+      rootPath: await realpath(childWorkspacePath),
+      type: 'workspace'
+    })
+    expect(workspace.tree).toEqual([
+      {
+        name: 'guide.md',
+        path: 'guide.md',
+        type: 'file'
+      }
+    ])
+  })
+
+  it('opens a Markdown file from the nearest parent Git workspace when no known workspace matches', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-git-workspace-'))
+    const docsPath = join(workspacePath, 'docs')
+    const filePath = join(docsPath, 'guide.md')
+
+    await mkdir(join(workspacePath, '.git'))
+    await mkdir(docsPath)
+    await writeFile(join(workspacePath, 'README.md'), '# Root')
+    await writeFile(filePath, '# Guide')
+
+    const workspace = await createWorkspaceService().openMarkdownFile(filePath)
+
+    expect(workspace).toMatchObject({
+      name: basename(workspacePath),
+      openedFilePath: 'docs/guide.md',
+      rootPath: await realpath(workspacePath),
+      type: 'workspace'
+    })
+    expect(workspace.tree).toEqual([
+      {
+        children: [
+          {
+            name: 'guide.md',
+            path: 'docs/guide.md',
+            type: 'file'
+          }
+        ],
+        name: 'docs',
+        path: 'docs',
+        type: 'directory'
+      },
+      {
+        name: 'README.md',
+        path: 'README.md',
+        type: 'file'
+      }
+    ])
   })
 
   it('inspects dropped launch paths without opening them', async () => {

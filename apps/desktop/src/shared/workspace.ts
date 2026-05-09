@@ -77,11 +77,19 @@ export interface EditorApi {
   readonly onLaunchPath: (
     callback: (resourcePath: WorkspaceLaunchResource) => void
   ) => () => void
-  readonly openFile: () => Promise<Workspace | null>
-  readonly openFileByPath: (filePath: string) => Promise<Workspace>
+  readonly openFile: (
+    candidateWorkspaceRoots?: readonly string[]
+  ) => Promise<Workspace | null>
+  readonly openFileByPath: (
+    filePath: string,
+    candidateWorkspaceRoots?: readonly string[]
+  ) => Promise<Workspace>
   readonly openFileInNewWindow?: () => Promise<boolean>
   readonly openExternalLink?: (url: string) => Promise<void>
-  readonly openPath: (resourcePath: string) => Promise<Workspace>
+  readonly openPath: (
+    resourcePath: string,
+    candidateWorkspaceRoots?: readonly string[]
+  ) => Promise<Workspace>
   readonly openPathInNewWindow?: (resourcePath: string) => Promise<void>
   readonly inspectPath?: (resourcePath: string) => Promise<WorkspacePathInfo>
   readonly getDroppedFilePath?: (file: File) => string

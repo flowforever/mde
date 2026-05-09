@@ -1,5 +1,5 @@
 import { readdir, realpath, stat } from 'node:fs/promises'
-import { basename, dirname, extname } from 'node:path'
+import { basename, dirname, extname, join, relative, sep } from 'node:path'
 
 import type { TreeNode } from '@mde/editor-host/file-tree'
 import type { Workspace, WorkspacePathInfo } from '../../shared/workspace'
@@ -17,13 +17,23 @@ const ignoredEntryNames = new Set([
 
 export interface WorkspaceService {
   readonly inspectPath: (resourcePath: string) => Promise<WorkspacePathInfo>
-  readonly openPath: (resourcePath: string) => Promise<Workspace>
-  readonly openMarkdownFile: (filePath: string) => Promise<Workspace>
+  readonly openPath: (
+    resourcePath: string,
+    options?: OpenMarkdownFileOptions
+  ) => Promise<Workspace>
+  readonly openMarkdownFile: (
+    filePath: string,
+    options?: OpenMarkdownFileOptions
+  ) => Promise<Workspace>
   readonly openWorkspace: (workspacePath: string) => Promise<Workspace>
   readonly listDirectory: (
     workspacePath: string,
     directoryPath: string
   ) => Promise<readonly TreeNode[]>
+}
+
+export interface OpenMarkdownFileOptions {
+  readonly candidateWorkspaceRoots?: readonly string[]
 }
 
 const isMarkdownFile = (name: string): boolean => name.toLowerCase().endsWith('.md')
@@ -55,6 +65,62 @@ const freezeNodes = (nodes: readonly TreeNode[]): readonly TreeNode[] =>
         : Object.freeze({ ...node })
     )
   )
+
+const toWorkspaceRelativePath = (
+  workspacePath: string,
+  filePath: string
+): string => relative(workspacePath, filePath).split(sep).join('/')
+
+const isSameOrInsidePath = (resourcePath: string, rootPath: string): boolean =>
+  resourcePath === rootPath || resourcePath.startsWith(`${rootPath}${sep}`)
+
+const findGitWorkspaceRoot = async (
+  directoryPath: string
+): Promise<string | null> => {
+  let currentDirectoryPath = directoryPath
+
+  while (true) {
+    const gitPath = join(currentDirectoryPath, '.git')
+    const gitStats = await stat(gitPath).catch(() => null)
+
+    if (gitStats) {
+      return currentDirectoryPath
+    }
+
+    const parentDirectoryPath = dirname(currentDirectoryPath)
+
+    if (parentDirectoryPath === currentDirectoryPath) {
+      return null
+    }
+
+    currentDirectoryPath = parentDirectoryPath
+  }
+}
+
+const findCandidateWorkspaceRoot = async (
+  canonicalFilePath: string,
+  candidateWorkspaceRoots: readonly string[] = []
+): Promise<string | null> => {
+  const canonicalRoots = await Promise.all(
+    candidateWorkspaceRoots.map(async (workspaceRoot): Promise<string | null> => {
+      try {
+        const canonicalWorkspaceRoot = await realpath(workspaceRoot)
+        const workspaceStats = await stat(canonicalWorkspaceRoot)
+
+        return workspaceStats.isDirectory() &&
+          isSameOrInsidePath(canonicalFilePath, canonicalWorkspaceRoot)
+          ? canonicalWorkspaceRoot
+          : null
+      } catch {
+        return null
+      }
+    })
+  )
+
+  return canonicalRoots
+    .filter((workspaceRoot): workspaceRoot is string => workspaceRoot !== null)
+    .sort((leftRoot, rightRoot) => rightRoot.length - leftRoot.length)[0] ?? null
+}
 
 export const createWorkspaceService = (): WorkspaceService => {
   const readTree = async (
@@ -127,7 +193,7 @@ export const createWorkspaceService = (): WorkspaceService => {
         path: canonicalPath
       })
     },
-    async openPath(resourcePath) {
+    async openPath(resourcePath, options) {
       const resourceStats = await stat(resourcePath)
 
       if (resourceStats.isDirectory()) {
@@ -135,12 +201,12 @@ export const createWorkspaceService = (): WorkspaceService => {
       }
 
       if (resourceStats.isFile()) {
-        return this.openMarkdownFile(resourcePath)
+        return this.openMarkdownFile(resourcePath, options)
       }
 
       throw new Error('Launch path must be a workspace folder or Markdown file')
     },
-    async openMarkdownFile(filePath) {
+    async openMarkdownFile(filePath, options = {}) {
       assertMarkdownFilePath(filePath)
 
       const canonicalFilePath = await realpath(filePath)
@@ -151,6 +217,26 @@ export const createWorkspaceService = (): WorkspaceService => {
 
       if (!fileStats.isFile()) {
         throw new Error('Markdown path must be a file')
+      }
+
+      const matchedWorkspaceRoot =
+        await findCandidateWorkspaceRoot(
+          canonicalFilePath,
+          options.candidateWorkspaceRoots
+        )
+      const gitWorkspaceRoot =
+        matchedWorkspaceRoot ?? (await findGitWorkspaceRoot(dirname(canonicalFilePath)))
+
+      if (gitWorkspaceRoot) {
+        const workspace = await this.openWorkspace(gitWorkspaceRoot)
+
+        return Object.freeze({
+          ...workspace,
+          openedFilePath: toWorkspaceRelativePath(
+            workspace.rootPath,
+            canonicalFilePath
+          )
+        })
       }
 
       const rootPath = await realpath(dirname(canonicalFilePath))

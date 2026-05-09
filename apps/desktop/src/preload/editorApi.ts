@@ -50,23 +50,28 @@ export const createEditorApi = (
       ipcRenderer.removeListener(WORKSPACE_CHANNELS.launchPath, listener)
     }
   },
-  openFile: () =>
-    ipcRenderer.invoke(WORKSPACE_CHANNELS.openFile) as Promise<
+  openFile: (candidateWorkspaceRoots) =>
+    ipcRenderer.invoke(
+      WORKSPACE_CHANNELS.openFile,
+      candidateWorkspaceRoots
+    ) as Promise<
       Awaited<ReturnType<EditorApi['openFile']>>
     >,
-  openFileByPath: (filePath) =>
+  openFileByPath: (filePath, candidateWorkspaceRoots) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openFileByPath,
-      filePath
+      filePath,
+      candidateWorkspaceRoots
     ) as Promise<Awaited<ReturnType<EditorApi['openFileByPath']>>>,
   openFileInNewWindow: () =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.openFileInNewWindow) as Promise<boolean>,
   openExternalLink: (url) =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.openExternalLink, url) as Promise<void>,
-  openPath: (resourcePath) =>
+  openPath: (resourcePath, candidateWorkspaceRoots) =>
     ipcRenderer.invoke(
       WORKSPACE_CHANNELS.openPath,
-      resourcePath
+      resourcePath,
+      candidateWorkspaceRoots
     ) as Promise<Awaited<ReturnType<EditorApi['openPath']>>>,
   inspectPath: (resourcePath) =>
     ipcRenderer.invoke(

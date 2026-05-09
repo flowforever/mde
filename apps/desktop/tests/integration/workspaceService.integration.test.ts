@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
@@ -196,6 +196,46 @@ describe('workspaceService integration', () => {
       {
         name: 'single.md',
         path: 'single.md',
+        type: 'file'
+      }
+    ])
+  })
+
+  it('opens a renderer supplied Markdown path from a known workspace root through IPC', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-known-launch-'))
+    const docsPath = join(workspacePath, 'docs')
+    const filePath = join(docsPath, 'known.md')
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await mkdir(docsPath)
+    await writeFile(join(workspacePath, 'README.md'), '# Root')
+    await writeFile(filePath, '# Known')
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      workspaceService: createWorkspaceService()
+    })
+
+    const openPath = handlers.get(WORKSPACE_CHANNELS.openPath)
+    const listDirectory = handlers.get(WORKSPACE_CHANNELS.listDirectory)
+
+    await expect(
+      openPath?.({}, filePath, [workspacePath])
+    ).resolves.toMatchObject({
+      openedFilePath: 'docs/known.md',
+      rootPath: await realpath(workspacePath),
+      type: 'workspace'
+    })
+    expect(((await listDirectory?.({}, 'docs')) as TreeNode[])).toEqual([
+      {
+        name: 'known.md',
+        path: 'docs/known.md',
         type: 'file'
       }
     ])

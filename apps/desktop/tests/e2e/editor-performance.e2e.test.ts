@@ -29,7 +29,7 @@ import {
   type EditorPerformanceStageMetrics,
 } from "./support/editorPerformanceMetrics";
 
-const E2E_BUILD_TIMEOUT_MS = 600_000;
+const E2E_BUILD_TIMEOUT_MS = 900_000;
 const E2E_PERFORMANCE_TIMEOUT_MS = 300_000;
 const E2E_UI_READY_TIMEOUT_MS = 20_000;
 const PERFORMANCE_MODE: EditorPerformanceMode =

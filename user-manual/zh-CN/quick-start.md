@@ -29,3 +29,5 @@
 ## 从命令行打开
 
 安装版 MDE 启动后会在后台检测 `mde` 命令是否可用。注册成功后，可以在终端中使用 `mde /path/to/workspace` 打开文件夹，也可以使用 `mde /path/to/file.md` 打开单个 Markdown 文件。已经存在可执行 `mde` 命令时，MDE 不会覆盖它。
+
+当 `mde /path/to/file.md` 指向某个已记住工作区里的 Markdown 文件时，MDE 会先打开那个工作区，再在 Explorer 中定位并打开该文件。如果这个文件不在已记住的工作区里，MDE 会向上查找最近的 `.git` 目录，并把对应 Git 项目作为工作区打开；找不到匹配工作区或 Git 项目时，才会继续按单个 Markdown 文件打开。

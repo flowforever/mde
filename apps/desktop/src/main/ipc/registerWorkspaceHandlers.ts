@@ -152,6 +152,26 @@ export const registerWorkspaceHandlers = ({
     return url.toString()
   }
 
+  const getCandidateWorkspaceRoots = (value: unknown): readonly string[] => {
+    if (value === undefined) {
+      return []
+    }
+
+    if (!Array.isArray(value)) {
+      throw new Error('Candidate workspace roots must be an array')
+    }
+
+    return Object.freeze(
+      value.map((candidateRoot) => {
+        if (typeof candidateRoot !== 'string') {
+          throw new Error('Candidate workspace root must be a string')
+        }
+
+        return candidateRoot
+      })
+    )
+  }
+
   const openHttpUrlExternally = async (url: string): Promise<void> => {
     if (!openExternalLink) {
       throw new Error('Opening external links is unavailable')
@@ -175,9 +195,12 @@ export const registerWorkspaceHandlers = ({
 
   const openFileByPath = async (
     event: WorkspaceIpcEvent | null,
-    filePath: string
+    filePath: string,
+    candidateWorkspaceRoots: readonly string[] = []
   ) => {
-    const workspace = await workspaceService.openMarkdownFile(filePath)
+    const workspace = await workspaceService.openMarkdownFile(filePath, {
+      candidateWorkspaceRoots
+    })
     const state = getWindowState(event)
 
     state.activeWorkspaceRoot = workspace.rootPath
@@ -188,9 +211,12 @@ export const registerWorkspaceHandlers = ({
 
   const openPath = async (
     event: WorkspaceIpcEvent | null,
-    resourcePath: string
+    resourcePath: string,
+    candidateWorkspaceRoots: readonly string[] = []
   ) => {
-    const workspace = await workspaceService.openPath(resourcePath)
+    const workspace = await workspaceService.openPath(resourcePath, {
+      candidateWorkspaceRoots
+    })
     const state = getWindowState(event)
 
     state.activeWorkspaceRoot = workspace.rootPath
@@ -245,9 +271,13 @@ export const registerWorkspaceHandlers = ({
     return true
   })
 
-  ipcMain.handle(WORKSPACE_CHANNELS.openFile, async (event) => {
+  ipcMain.handle(WORKSPACE_CHANNELS.openFile, async (event, roots: unknown) => {
     if (testFilePath) {
-      return openFileByPath(event, testFilePath)
+      return openFileByPath(
+        event,
+        testFilePath,
+        getCandidateWorkspaceRoots(roots)
+      )
     }
 
     const result = await dialog.showOpenDialog({
@@ -259,17 +289,21 @@ export const registerWorkspaceHandlers = ({
       return null
     }
 
-    return openFileByPath(event, result.filePaths[0] ?? '')
+    return openFileByPath(
+      event,
+      result.filePaths[0] ?? '',
+      getCandidateWorkspaceRoots(roots)
+    )
   })
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.openFileByPath,
-    async (event, filePath: unknown) => {
+    async (event, filePath: unknown, roots: unknown) => {
       if (typeof filePath !== 'string') {
         throw new Error('File path must be a string')
       }
 
-      return openFileByPath(event, filePath)
+      return openFileByPath(event, filePath, getCandidateWorkspaceRoots(roots))
     }
   )
 
@@ -304,12 +338,12 @@ export const registerWorkspaceHandlers = ({
 
   ipcMain.handle(
     WORKSPACE_CHANNELS.openPath,
-    async (event, resourcePath: unknown) => {
+    async (event, resourcePath: unknown, roots: unknown) => {
       if (typeof resourcePath !== 'string') {
         throw new Error('Launch path must be a string')
       }
 
-      return openPath(event, resourcePath)
+      return openPath(event, resourcePath, getCandidateWorkspaceRoots(roots))
     }
   )
 

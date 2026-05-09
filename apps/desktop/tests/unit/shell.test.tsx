@@ -387,7 +387,7 @@ describe("App shell", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(editorApi.openPath).toHaveBeenCalledWith("/notes/API.md");
+      expect(editorApi.openPath).toHaveBeenCalledWith("/notes/API.md", []);
     });
 
     expect(editorApi.readMarkdownFile).toHaveBeenCalledWith("API.md", "/notes");
@@ -1572,6 +1572,75 @@ describe("App shell", () => {
 
     expect(editorPane).not.toHaveClass("is-editor-full-width");
     expect(localStorage.getItem("mde.editorViewMode")).toBe("centered");
+  });
+
+  it("opens an initial Markdown launch path with known workspace roots", async () => {
+    localStorage.setItem(
+      "mde.recentWorkspaces",
+      JSON.stringify([
+        {
+          name: "Workspace",
+          rootPath: "/workspace",
+          type: "workspace",
+        },
+      ]),
+    );
+
+    const editorApi = {
+      consumeLaunchPath: vi
+        .fn()
+        .mockResolvedValue("/workspace/docs/guide.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        name: "workspace",
+        openedFilePath: "docs/guide.md",
+        rootPath: "/workspace",
+        tree: [
+          {
+            children: [
+              { name: "guide.md", path: "docs/guide.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ],
+        type: "workspace",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Guide",
+        path: "docs/guide.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+
+    render(<App />);
+
+    await screen.findByText("# Guide");
+
+    expect(editorApi.openPath).toHaveBeenCalledWith(
+      "/workspace/docs/guide.md",
+      ["/workspace"],
+    );
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+      "docs/guide.md",
+      "/workspace",
+    );
   });
 
   it("collapses overflowing editor actions with prioritized visible buttons", async () => {
