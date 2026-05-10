@@ -1744,6 +1744,10 @@ input::-webkit-search-cancel-button {
   color: var(--panel-muted);
 }
 
+.explorer-automation-home-button {
+  color: var(--panel-text-strong);
+}
+
 .explorer-toolbar {
   display: grid;
   grid-template-columns: repeat(6, 32px);

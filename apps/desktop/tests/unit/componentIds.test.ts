@@ -6,7 +6,7 @@ import {
 } from "../../src/renderer/src/componentIds";
 
 const kebabComponentIdPattern =
-  /^(app|workspace|explorer|editor|search|link|flowchart|ai|settings|updates)\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  /^(app|workspace|explorer|editor|search|link|flowchart|ai|automation|settings|updates)\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 describe("componentIds", () => {
   it("keeps the top-level component name map sorted by key", () => {
@@ -34,6 +34,9 @@ describe("componentIds", () => {
   it("exposes JSX-friendly constants for key product areas", () => {
     expect(COMPONENT_IDS.app.shell).toBe(
       COMPONENT_NAME_ID_MAP.appShell.componentId,
+    );
+    expect(COMPONENT_IDS.automation.centerWindow).toBe(
+      COMPONENT_NAME_ID_MAP.automationCenterWindow.componentId,
     );
     expect(COMPONENT_IDS.explorer.newMarkdownFileButton).toBe(
       COMPONENT_NAME_ID_MAP.explorerNewMarkdownFileButton.componentId,

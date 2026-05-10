@@ -1,0 +1,26 @@
+{
+  "name": "@mde/automation-flow",
+  "version": "1.5.14",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./diagnostics": "./src/diagnostics.ts",
+    "./parser": "./src/parser.ts",
+    "./schema": "./src/schema.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "cd ../.. && eslint packages/automation-flow --max-warnings=0",
+    "test": "vitest run --config vitest.config.ts --testTimeout=30000",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "test:integration": "vitest run --config vitest.config.ts --project integration --testTimeout=30000",
+    "test:unit": "vitest run --config vitest.config.ts --project unit --testTimeout=30000"
+  }
+}

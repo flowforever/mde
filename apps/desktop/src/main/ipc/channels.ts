@@ -45,6 +45,26 @@ export const AI_CHANNELS = Object.freeze({
   translateMarkdown: "ai:translate-markdown",
 });
 
+export const AUTOMATION_CHANNELS = Object.freeze({
+  archiveFlow: "automation:archive-flow",
+  cancelRun: "automation:cancel-run",
+  createFlowFromTemplate: "automation:create-flow-from-template",
+  getProjection: "automation:get-projection",
+  listCapabilityReports: "automation:list-capability-reports",
+  listReports: "automation:list-reports",
+  listTemplates: "automation:list-templates",
+  loadFlowDefinition: "automation:load-flow-definition",
+  openNativeSession: "automation:open-native-session",
+  resumeRun: "automation:resume-run",
+  restoreFlow: "automation:restore-flow",
+  saveFlowDefinition: "automation:save-flow-definition",
+  setFlowLifecycle: "automation:set-flow-lifecycle",
+  startRun: "automation:start-run",
+  submitDecision: "automation:submit-decision",
+  updateFilters: "automation:update-filters",
+  validateTemplateInput: "automation:validate-template-input",
+});
+
 export const UPDATE_CHANNELS = Object.freeze({
   checkForUpdates: "update:check-for-updates",
   downloadAndOpen: "update:download-and-open",

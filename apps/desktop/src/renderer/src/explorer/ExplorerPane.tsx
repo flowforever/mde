@@ -28,6 +28,7 @@ import {
   FilePlus,
   FolderOpen,
   FolderPlus,
+  Home,
   Languages,
   Monitor,
   Paintbrush,
@@ -110,6 +111,7 @@ interface ExplorerPaneProps {
   readonly onDeleteEntry: () => void;
   readonly onForgetWorkspace?: (workspace: RecentWorkspace) => void;
   readonly onOpenFile?: () => void;
+  readonly onOpenAutomationCenter?: () => void;
   readonly onOpenRecentFile?: (filePath: string) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenWorkspaceInNewWindow?: (workspace: RecentWorkspace) => void;
@@ -547,6 +549,7 @@ export const ExplorerPane = ({
   onCopyEntryPath = () => undefined,
   onDeleteEntry,
   onForgetWorkspace = () => undefined,
+  onOpenAutomationCenter = () => undefined,
   onOpenFile = () => undefined,
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
@@ -2195,6 +2198,16 @@ export const ExplorerPane = ({
       data-component-id={COMPONENT_IDS.explorer.pane}
     >
       <div className="explorer-header-row">
+        <button
+          aria-label={text("explorer.openAutomationCenter")}
+          className="explorer-icon-button explorer-automation-home-button"
+          data-component-id={COMPONENT_IDS.explorer.automationHomeButton}
+          onClick={onOpenAutomationCenter}
+          title={text("explorer.openAutomationCenter")}
+          type="button"
+        >
+          <Home aria-hidden="true" focusable="false" size={17} />
+        </button>
         <div
           className="explorer-header"
           data-component-id={COMPONENT_IDS.explorer.header}

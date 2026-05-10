@@ -1,0 +1,694 @@
+import { randomUUID } from 'node:crypto'
+
+import type {
+  AgentEngineId,
+  AutomationDiscoveredTaskSource,
+  AutomationFlow,
+  AutomationFlowTaskCandidate,
+  AutomationRunState
+} from '@mde/automation-flow'
+
+import type { AgentCliCapabilityProbeReport } from './agentCliAdapters'
+import type { AutomationAdapterRegistry } from './automationAdapterRegistry'
+import type {
+  AutomationStoredDecision,
+  AutomationStoredRun,
+  AutomationStore
+} from './automationStore'
+import type { MdeRuntimeBridge } from './mdeRuntimeBridge'
+import type { AutomationReportSummary } from '../../../shared/automation'
+import { createAutomationPromptBundle } from './automationPromptBundle'
+import { createAutomationRunLockKey } from './automationRunLocks'
+
+export type AutomationRuntimeAction =
+  | 'abandon'
+  | 'open-native-session'
+  | 'resume'
+  | 'retry'
+  | 'view-evidence'
+
+export type AutomationRuntimePhaseStatus = 'done' | 'failed' | 'pending' | 'running'
+
+export interface AutomationRuntimePhase {
+  readonly status: AutomationRuntimePhaseStatus
+  readonly title: string
+}
+
+export interface AutomationRuntimePhaseEvent {
+  readonly phaseTitle: string
+  readonly status: Exclude<AutomationRuntimePhaseStatus, 'pending'>
+}
+
+interface AutomationRuntimeOptions {
+  readonly adapterRegistry: AutomationAdapterRegistry
+  readonly createId?: (prefix: string) => string
+  readonly createRuntimeToken?: () => string
+  readonly profileId?: string
+  readonly runtimeBridge: MdeRuntimeBridge
+  readonly store: AutomationStore
+}
+
+interface StartRunInput {
+  readonly automationFlow: AutomationFlow
+  readonly candidate: AutomationFlowTaskCandidate
+  readonly taskSource?: AutomationDiscoveredTaskSource
+  readonly workspaceRoot?: string
+}
+
+interface StartRunResult {
+  readonly adapterCapabilityReport: AgentCliCapabilityProbeReport
+  readonly automationFlowSnapshotId: string
+  readonly created: boolean
+  readonly decision?: AutomationStoredDecision
+  readonly runId: string
+  readonly state: AutomationRunState
+}
+
+interface ResumeRunInput {
+  readonly adapterSessionId?: string
+  readonly response?: string
+  readonly runId: string
+}
+
+interface ResumeRunResult {
+  readonly adapterSessionLineage: readonly string[]
+  readonly runId: string
+}
+
+interface CompleteRunInput {
+  readonly outcome: AutomationReportSummary['outcome']
+  readonly runId: string
+  readonly summary?: string
+  readonly title: string
+}
+
+interface GetRunActionsInput {
+  readonly engine: AgentEngineId
+  readonly runId: string
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationRuntime {
+  readonly cancelRun: (runId: string) => Promise<AutomationStoredRun>
+  readonly completeRun: (
+    input: CompleteRunInput
+  ) => Promise<AutomationReportSummary>
+  readonly derivePhaseProgress: (input: {
+    readonly automationFlow: AutomationFlow
+    readonly phaseEvents?: readonly AutomationRuntimePhaseEvent[]
+    readonly taskTitle: string
+  }) => readonly AutomationRuntimePhase[]
+  readonly getRunActions: (
+    input: GetRunActionsInput
+  ) => Promise<readonly AutomationRuntimeAction[]>
+  readonly openNativeSession: (runId: string) => Promise<boolean>
+  readonly resumeRun: (input: ResumeRunInput) => Promise<ResumeRunResult>
+  readonly startDiscoveryRun: (input: {
+    readonly automationFlow: AutomationFlow
+    readonly workspaceRoot?: string
+  }) => Promise<StartRunResult>
+  readonly startRun: (input: StartRunInput) => Promise<StartRunResult>
+}
+
+const createDefaultIdFactory = (): ((prefix: string) => string) => {
+  let counter = 0
+
+  return (prefix: string): string => {
+    counter += 1
+
+    return `${prefix}-${counter}`
+  }
+}
+
+const getWorkspaceRoot = (
+  inputWorkspaceRoot: string | undefined,
+  candidate: AutomationFlowTaskCandidate
+): string | undefined =>
+  inputWorkspaceRoot ?? candidate.sourcePath
+
+const getWorkspaceScope = (
+  workspaceRoot: string | undefined,
+  candidate: AutomationFlowTaskCandidate
+): string =>
+  workspaceRoot === undefined
+    ? `source:${candidate.sourceItemId}`
+    : `workspace:${workspaceRoot}`
+
+const createDiscoveryRunLockKey = ({
+  automationFlow,
+  profileId,
+  workspaceRoot
+}: {
+  readonly automationFlow: AutomationFlow
+  readonly profileId: string
+  readonly workspaceRoot?: string
+}): string =>
+  createAutomationRunLockKey({
+    automationFlowId: automationFlow.id,
+    profileId,
+    sourceItemId: `discovery:${automationFlow.id}`,
+    taskId: `discovery:${automationFlow.id}`,
+    workspaceScope:
+      workspaceRoot === undefined
+        ? `scope:${automationFlow.scope}`
+        : `workspace:${workspaceRoot}`
+  })
+
+const toLineage = (run: AutomationStoredRun): readonly string[] =>
+  Object.freeze([...(run.adapterSessionLineage ?? [])])
+
+const normalizeExecutionPhaseTitle = (line: string): string =>
+  line
+    .trim()
+    .replace(/^[-*]\s+/u, '')
+    .replace(/^\d+[.)]\s+/u, '')
+    .trim()
+
+const extractExecutionPhases = (
+  automationFlow: AutomationFlow,
+  taskTitle: string
+): readonly string[] => {
+  const phases = automationFlow.sections.executionStandard
+    .split(/\r?\n/u)
+    .map(normalizeExecutionPhaseTitle)
+    .filter((line) => line.length > 0)
+
+  if (phases.length > 0) {
+    return Object.freeze(phases)
+  }
+
+  return Object.freeze([`Review ${taskTitle}`])
+}
+
+const createSourceSnapshotFromCandidate = (
+  candidate: AutomationFlowTaskCandidate
+): AutomationDiscoveredTaskSource =>
+  Object.freeze({
+    automationFlowId: candidate.automationFlowId,
+    discoveredAt: new Date(0).toISOString(),
+    ...(candidate.engine !== undefined ? { engine: candidate.engine } : {}),
+    ...(candidate.externalId !== undefined ? { externalId: candidate.externalId } : {}),
+    ...(candidate.priority !== undefined ? { priority: candidate.priority } : {}),
+    ...(candidate.provider !== undefined ? { provider: candidate.provider } : {}),
+    ...(candidate.relativePath !== undefined ? { relativePath: candidate.relativePath } : {}),
+    sourceItemId: candidate.sourceItemId,
+    ...(candidate.sourcePath !== undefined ? { sourcePath: candidate.sourcePath } : {}),
+    sourceSnapshotHash:
+      candidate.sourceSnapshotHash ?? `candidate:${candidate.sourceItemId}`,
+    sourceType: candidate.sourceType,
+    ...(candidate.sourceUri !== undefined ? { sourceUri: candidate.sourceUri } : {}),
+    title: candidate.title,
+    ...(candidate.workspaceId !== undefined ? { workspaceId: candidate.workspaceId } : {})
+  })
+
+const getStateAfterAdapterEvents = (
+  events: readonly { readonly type: string; readonly outcome?: string }[]
+): AutomationRunState => {
+  const finalReport = [...events]
+    .reverse()
+    .find((event) => event.type === 'final-report')
+
+  if (finalReport?.outcome === 'succeeded') {
+    return 'done'
+  }
+
+  if (finalReport?.outcome === 'failed') {
+    return 'failed'
+  }
+
+  if (finalReport?.outcome === 'cancelled') {
+    return 'cancelled'
+  }
+
+  if (
+    finalReport?.outcome === 'blocked' ||
+    events.some((event) => event.type === 'decision-required')
+  ) {
+    return 'needs-me'
+  }
+
+  return 'running'
+}
+
+export const createAutomationRuntime = ({
+  adapterRegistry,
+  createId = createDefaultIdFactory(),
+  createRuntimeToken = randomUUID,
+  profileId = 'default-profile',
+  runtimeBridge,
+  store
+}: AutomationRuntimeOptions): AutomationRuntime => {
+  const runStartLocks = new Map<string, Promise<StartRunResult>>()
+
+  const runWithStartLock = async (
+    runLockKey: string,
+    task: () => Promise<StartRunResult>
+  ): Promise<StartRunResult> => {
+    const existingTask = runStartLocks.get(runLockKey)
+
+    if (existingTask !== undefined) {
+      return existingTask
+    }
+
+    const nextTask = task().finally(() => {
+      if (runStartLocks.get(runLockKey) === nextTask) {
+        runStartLocks.delete(runLockKey)
+      }
+    })
+
+    runStartLocks.set(runLockKey, nextTask)
+
+    return nextTask
+  }
+
+  const derivePhaseProgress: AutomationRuntime['derivePhaseProgress'] = ({
+    automationFlow,
+    phaseEvents = [],
+    taskTitle
+  }) => {
+    const eventByTitle = new Map(
+      phaseEvents.map((event) => [event.phaseTitle, event.status])
+    )
+
+    return Object.freeze(
+      extractExecutionPhases(automationFlow, taskTitle).map((title) =>
+        Object.freeze({
+          status: eventByTitle.get(title) ?? 'pending',
+          title
+        })
+      )
+    )
+  }
+
+  const runtime: AutomationRuntime = {
+    async cancelRun(runId) {
+      const run = await store.getRun(runId)
+
+      await adapterRegistry.cancelRun(run.engine, runId)
+
+      return store.updateRunState(runId, {
+        recoverable: false,
+        state: 'cancelled'
+      })
+    },
+    async completeRun({ outcome, runId, summary, title }) {
+      const run = await store.getRun(runId)
+
+      return store.createReport({
+        outcome,
+        reportId: createId('report'),
+        runId,
+        ...(summary !== undefined ? { summary } : {}),
+        taskId: run.taskId,
+        title
+      })
+    },
+    derivePhaseProgress,
+    async getRunActions({ engine, runId, workspaceRoot }) {
+      const run = await store.getRun(runId)
+      const report = await adapterRegistry.probe(engine, { workspaceRoot })
+      const actions: AutomationRuntimeAction[] = []
+
+      if (run.state === 'needs-me' || run.state === 'failed') {
+        actions.push('resume')
+      }
+
+      if (run.state === 'failed') {
+        actions.push('retry', 'view-evidence', 'abandon')
+      }
+
+      if (
+        report.capabilities.openNativeSession &&
+        run.adapterSessionId !== undefined
+      ) {
+        actions.push('open-native-session')
+      }
+
+      return Object.freeze(actions)
+    },
+    async resumeRun({ adapterSessionId, response = '', runId }) {
+      const existingRun = await store.getRun(runId)
+      const nextAdapterSessionId =
+        adapterSessionId ?? existingRun.adapterSessionId ?? createId('adapter-session')
+      const promptBundle = createAutomationPromptBundle({
+        automationFlow:
+          (existingRun.automationFlowSnapshot as AutomationFlow | undefined) ??
+          ({
+            allowedEngines: [existingRun.engine],
+            confirmationPolicy: {
+              fileWrites: 'automation-flow-controlled',
+              highRisk: 'require-user',
+              unclearScope: 'require-user'
+            },
+            defaultEngine: existingRun.engine,
+            id: existingRun.automationFlowId,
+            lifecycle: 'enabled',
+            loopPolicy: {
+              intervalMinutes: 15,
+              maxActiveRuns: 1,
+              mode: 'manual',
+              onBlocked: 'pause-automation-flow',
+              onEmpty: 'wait'
+            },
+            match: {},
+            name: existingRun.automationFlowId,
+            pickOrder: [],
+            priority: 0,
+            reportPattern: '',
+            scope: 'workspace',
+            sections: {
+              acceptanceStandard: '',
+              executionStandard: '',
+              pickRules: '',
+              reportPattern: '',
+              verificationExpectations: ''
+            },
+            sourceTypes: ['adapter-discovered'],
+            status: 'formal'
+          } satisfies AutomationFlow),
+        automationFlowSnapshotId:
+          existingRun.automationFlowSnapshotId ?? createId('snapshot'),
+        runId,
+        runKind: existingRun.runKind,
+        ...(existingRun.taskSourceSnapshot !== undefined
+          ? { taskSource: existingRun.taskSourceSnapshot }
+          : {}),
+        workspaceRoot: existingRun.workspaceRoot
+      })
+
+      await adapterRegistry.resumeRun(existingRun.engine, {
+        adapterSessionId: nextAdapterSessionId,
+        promptBundle: `${promptBundle.prompt}\n\n## User Response\n\n${response}`,
+        runId,
+        workspaceRoot: existingRun.workspaceRoot
+      })
+      const run = await store.updateRunState(runId, {
+        adapterSessionId: nextAdapterSessionId,
+        recoverable: false,
+        state: 'running'
+      })
+
+      return Object.freeze({
+        adapterSessionLineage: toLineage(run),
+        runId
+      })
+    },
+    async openNativeSession(runId) {
+      const run = await store.getRun(runId)
+
+      if (run.adapterSessionId === undefined) {
+        return false
+      }
+
+      const result = await adapterRegistry.openNativeSession(run.engine, {
+        adapterSessionId: run.adapterSessionId,
+        workspaceRoot: run.workspaceRoot
+      })
+
+      return result.accepted
+    },
+    async startDiscoveryRun({ automationFlow, workspaceRoot }) {
+      const runLockKey = createDiscoveryRunLockKey({
+        automationFlow,
+        profileId,
+        workspaceRoot
+      })
+
+      return runWithStartLock(runLockKey, async () => {
+        const activeRun = await store.findActiveRunByLockKey(runLockKey)
+
+        if (activeRun !== null) {
+          return Object.freeze({
+            adapterCapabilityReport: await adapterRegistry.probe(
+              automationFlow.defaultEngine,
+              { workspaceRoot }
+            ),
+            automationFlowSnapshotId:
+              activeRun.automationFlowSnapshotId ?? createId('snapshot'),
+            created: false,
+            runId: activeRun.runId,
+            state: activeRun.state
+          })
+        }
+
+        const capabilityReport = await adapterRegistry.assertCanStartRun(
+          automationFlow.defaultEngine,
+          { workspaceRoot }
+        )
+        const runId = createId('run')
+        const automationFlowSnapshotId = createId('snapshot')
+        const adapterSessionId = createId('adapter-session')
+        const promptBundle = createAutomationPromptBundle({
+          automationFlow,
+          automationFlowSnapshotId,
+          runId,
+          runKind: 'discovery',
+          workspaceRoot
+        })
+
+        await store.createRun({
+          adapterSessionId,
+          adapterSessionLineage: [adapterSessionId],
+          automationFlowId: automationFlow.id,
+          automationFlowSnapshot: automationFlow,
+          automationFlowSnapshotId,
+          engine: automationFlow.defaultEngine,
+          promptBundleMetadata: promptBundle.metadata,
+          runId,
+          runKind: 'discovery',
+          runLockKey,
+          sourceItemId: `discovery:${automationFlow.id}`,
+          state: 'starting',
+          taskId: `discovery:${automationFlow.id}`,
+          title: `${automationFlow.name} discovery`,
+          ...(workspaceRoot !== undefined ? { workspaceRoot } : {})
+        })
+
+        const adapterResult = await adapterRegistry.startRun(
+          automationFlow.defaultEngine,
+          {
+            automationFlow,
+            automationFlowSnapshotId,
+            preferredAdapterSessionId: adapterSessionId,
+            promptBundle: promptBundle.prompt,
+            runId,
+            runKind: 'discovery',
+            workspaceRoot
+          }
+        )
+        const discoveredEvent = adapterResult.events.find(
+          (event) => event.type === 'discovered-task-sources'
+        )
+
+        if (discoveredEvent?.type === 'discovered-task-sources') {
+          await store.replaceDiscoveredTaskSources(
+            automationFlow.id,
+            discoveredEvent.sources
+          )
+        }
+
+        const state: AutomationRunState =
+          discoveredEvent?.type === 'discovered-task-sources'
+            ? 'done'
+            : getStateAfterAdapterEvents(adapterResult.events)
+
+        await store.updateRunState(runId, {
+          adapterSessionId: adapterResult.adapterSessionId,
+          recoverable: false,
+          state
+        })
+
+        return Object.freeze({
+          adapterCapabilityReport: capabilityReport,
+          automationFlowSnapshotId,
+          created: true,
+          runId,
+          state
+        })
+      })
+    },
+    async startRun({ automationFlow, candidate, taskSource, workspaceRoot }) {
+      const resolvedWorkspaceRoot = getWorkspaceRoot(workspaceRoot, candidate)
+      const runLockKey = createAutomationRunLockKey({
+        automationFlowId: automationFlow.id,
+        profileId,
+        sourceItemId: candidate.sourceItemId,
+        taskId: candidate.taskId,
+        workspaceScope: getWorkspaceScope(resolvedWorkspaceRoot, candidate)
+      })
+
+      return runWithStartLock(runLockKey, async () => {
+        const activeRun = await store.findActiveRunByLockKey(runLockKey)
+
+        if (activeRun !== null) {
+          return Object.freeze({
+            adapterCapabilityReport: await adapterRegistry.probe(
+              candidate.engine,
+              {
+                workspaceRoot: resolvedWorkspaceRoot
+              }
+            ),
+            automationFlowSnapshotId:
+              activeRun.automationFlowSnapshotId ?? createId('snapshot'),
+            created: false,
+            runId: activeRun.runId,
+            state: activeRun.state
+          })
+        }
+
+        const capabilityReport = await adapterRegistry.assertCanStartRun(
+          candidate.engine,
+          {
+            workspaceRoot: resolvedWorkspaceRoot
+          }
+        )
+        const runId = createId('run')
+        const automationFlowSnapshotId = createId('snapshot')
+        const adapterSessionId = createId('adapter-session')
+        const runtimeToken = createRuntimeToken()
+        const resolvedTaskSource =
+          taskSource ?? createSourceSnapshotFromCandidate(candidate)
+        const promptBundle = createAutomationPromptBundle({
+          automationFlow,
+          automationFlowSnapshotId,
+          runId,
+          runKind: 'task',
+          taskSource: resolvedTaskSource,
+          workspaceRoot: resolvedWorkspaceRoot
+        })
+
+        await store.createRun({
+          adapterSessionId,
+          adapterSessionLineage: [adapterSessionId],
+          automationFlowId: automationFlow.id,
+          automationFlowSnapshot: automationFlow,
+          automationFlowSnapshotId,
+          engine: candidate.engine,
+          promptBundleMetadata: promptBundle.metadata,
+          runId,
+          runKind: 'task',
+          runLockKey,
+          sourceItemId: candidate.sourceItemId,
+          ...(candidate.sourcePath !== undefined
+            ? { sourcePath: candidate.sourcePath }
+            : {}),
+          sourceSnapshotHash: resolvedTaskSource.sourceSnapshotHash,
+          state: 'starting',
+          taskId: candidate.taskId,
+          taskSourceSnapshot: resolvedTaskSource,
+          title: candidate.title,
+          ...(resolvedWorkspaceRoot !== undefined
+            ? { workspaceRoot: resolvedWorkspaceRoot }
+            : {})
+        })
+
+        if (
+          candidate.sourcePath !== undefined &&
+          resolvedWorkspaceRoot !== undefined
+        ) {
+          runtimeBridge.registerRun({
+            automationFlowSnapshotId,
+            runId,
+            sourceItemId: candidate.sourceItemId,
+            sourcePath: candidate.sourcePath,
+            taskId: candidate.taskId,
+            token: runtimeToken,
+            workspaceRoot: resolvedWorkspaceRoot
+          })
+        }
+
+        if (!capabilityReport.capabilities.autonomyGate) {
+          const decision = await store.markNeedsMe(runId, {
+            decisionId: createId('decision'),
+            prompt: automationFlow.sections.acceptanceStandard,
+            taskId: candidate.taskId,
+            type: 'approval'
+          })
+
+          return Object.freeze({
+            adapterCapabilityReport: capabilityReport,
+            automationFlowSnapshotId,
+            created: true,
+            decision,
+            runId,
+            state: 'needs-me'
+          })
+        }
+
+        const adapterResult = await adapterRegistry.startRun(candidate.engine, {
+          automationFlow,
+          automationFlowSnapshotId,
+          candidate,
+          preferredAdapterSessionId: adapterSessionId,
+          promptBundle: promptBundle.prompt,
+          runId,
+          runKind: 'task',
+          taskSource: resolvedTaskSource,
+          workspaceRoot: resolvedWorkspaceRoot
+        })
+        let decision: AutomationStoredDecision | undefined
+
+        for (const event of adapterResult.events) {
+          if (event.type === 'phase-update') {
+            await store.appendEvent(runId, {
+              eventId: createId('event'),
+              summary: `${event.phaseTitle}: ${event.status}`,
+              type: 'phase-update'
+            })
+          }
+
+          if (event.type === 'decision-required') {
+            decision = await store.markNeedsMe(runId, {
+              decisionId: createId('decision'),
+              prompt: event.prompt,
+              taskId: candidate.taskId,
+              type: 'input'
+            })
+          }
+
+          if (event.type === 'final-report') {
+            await store.createReport({
+              outcome: event.outcome,
+              reportId: createId('report'),
+              runId,
+              ...(event.summary !== undefined ? { summary: event.summary } : {}),
+              taskId: candidate.taskId,
+              title: event.title
+            })
+          }
+        }
+
+        const state = getStateAfterAdapterEvents(adapterResult.events)
+
+        if (state !== 'done' && state !== 'failed' && state !== 'cancelled') {
+          await store.updateRunState(runId, {
+            adapterSessionId: adapterResult.adapterSessionId,
+            recoverable: false,
+            state
+          })
+        }
+
+        if (
+          (state === 'done' || state === 'failed' || state === 'cancelled') &&
+          automationFlow.loopPolicy.mode === 'continuous'
+        ) {
+          await runtime.startDiscoveryRun({
+            automationFlow,
+            workspaceRoot: resolvedWorkspaceRoot
+          })
+        }
+
+        return Object.freeze({
+          adapterCapabilityReport: capabilityReport,
+          automationFlowSnapshotId,
+          created: true,
+          ...(decision !== undefined ? { decision } : {}),
+          runId,
+          state
+        })
+      })
+    }
+  }
+
+  return Object.freeze(runtime)
+}

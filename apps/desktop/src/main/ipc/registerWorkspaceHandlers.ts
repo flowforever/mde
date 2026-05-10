@@ -88,6 +88,7 @@ export const registerWorkspaceHandlers = ({
       }
     ]
   ])
+  let lastActiveWorkspaceRoot: string | null = null
 
   const getWindowState = (
     event?: WorkspaceIpcEvent | null
@@ -188,6 +189,7 @@ export const registerWorkspaceHandlers = ({
     const state = getWindowState(event)
 
     state.activeWorkspaceRoot = workspace.rootPath
+    lastActiveWorkspaceRoot = workspace.rootPath
     rememberWorkspaceResource(workspace)
 
     return workspace
@@ -204,6 +206,7 @@ export const registerWorkspaceHandlers = ({
     const state = getWindowState(event)
 
     state.activeWorkspaceRoot = workspace.rootPath
+    lastActiveWorkspaceRoot = workspace.rootPath
     rememberWorkspaceResource(workspace)
 
     return workspace
@@ -220,6 +223,7 @@ export const registerWorkspaceHandlers = ({
     const state = getWindowState(event)
 
     state.activeWorkspaceRoot = workspace.rootPath
+    lastActiveWorkspaceRoot = workspace.rootPath
     rememberWorkspaceResource(workspace)
 
     return workspace
@@ -409,7 +413,8 @@ export const registerWorkspaceHandlers = ({
   )
 
   return {
-    getActiveWorkspaceRoot: (event) => getWindowState(event).activeWorkspaceRoot,
+    getActiveWorkspaceRoot: (event) =>
+      getWindowState(event).activeWorkspaceRoot ?? lastActiveWorkspaceRoot,
     removeWindow: (sender) => {
       statesByWindowId.delete(sender.id)
     },

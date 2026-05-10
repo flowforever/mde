@@ -23,6 +23,7 @@ export default defineConfig({
             { link: '/zh-CN/search', text: '搜索' },
             { link: '/zh-CN/links', text: '链接' },
             { link: '/zh-CN/ai', text: 'AI Summary 和 Translation' },
+            { link: '/zh-CN/automation', text: 'Automation Center' },
             { link: '/zh-CN/settings', text: '设置' },
             { link: '/zh-CN/troubleshooting', text: '常见问题' }
           ],

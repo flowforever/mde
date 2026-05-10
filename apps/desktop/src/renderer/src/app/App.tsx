@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 import type { AiApi, AiGenerationResult, AiTool } from "../../../shared/ai";
+import type { MdeWindowApi } from "../../../shared/windowApi";
 import {
   DOCUMENT_HISTORY_EVENT_LABEL_KEYS,
   DOCUMENT_HISTORY_FILTERS,
@@ -159,6 +160,7 @@ declare global {
   interface Window {
     readonly aiApi?: AiApi;
     readonly editorApi?: EditorApi;
+    readonly mdeWindow?: MdeWindowApi;
     readonly updateApi?: UpdateApi;
   }
 }
@@ -3376,6 +3378,9 @@ export const App = (): React.JSX.Element => {
         }}
         onOpenWorkspace={() => {
           void openWorkspace();
+        }}
+        onOpenAutomationCenter={() => {
+          void window.mdeWindow?.openAutomationCenter();
         }}
         onOpenWorkspaceInNewWindow={(workspace) => {
           void openWorkspaceInNewWindow(workspace);

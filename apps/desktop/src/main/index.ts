@@ -16,8 +16,19 @@ import {
 } from './ipc/registerWorkspaceHandlers'
 import { getLaunchPathFromArgv } from './launchArgs'
 import { registerAiHandlers } from './ipc/registerAiHandlers'
+import { registerAutomationHandlers } from './ipc/registerAutomationHandlers'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createAiService } from './services/aiService'
+import { createAutomationAdapterRegistry } from './services/automation/automationAdapterRegistry'
+import {
+  createFakeAgentCliAdapter,
+  createJsonlAgentCliAdapter
+} from './services/automation/agentCliAdapters'
+import { createAutomationRuntime } from './services/automation/automationRuntime'
+import { createAutomationRuntimeCoordinator } from './services/automation/automationRuntimeCoordinator'
+import { createAutomationRuntimeOwner } from './services/automation/automationRuntimeOwner'
+import { createAutomationStore } from './services/automation/automationStore'
+import { createMdeRuntimeBridge } from './services/automation/mdeRuntimeBridge'
 import { registerMdeCliInBackground } from './services/cliRegistrationService'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
@@ -29,6 +40,13 @@ import {
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
 import type { WorkspaceLaunchResource } from '../shared/workspace'
+import {
+  AUTOMATION_CENTER_WINDOW_MODE,
+  EDITOR_WINDOW_MODE,
+  WINDOW_MODE_ARGUMENT_PREFIX,
+  type MdeWindowMode
+} from '../shared/windowMode'
+import { WINDOW_CHANNELS } from '../shared/windowApi'
 import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
 import { applyReadyToShowWindowMode } from './e2eWindowMode'
 
@@ -56,6 +74,8 @@ type StartupDiagnosticsGlobal = typeof globalThis & {
 
 const startupDiagnosticPattern = /preload|security|unable to load preload/i
 const DEV_PRODUCT_NAME = `${APP_PRODUCT_NAME} Dev`
+const E2E_AUTOMATION_AUTONOMY_GATE_ENV = 'MDE_E2E_AUTOMATION_AUTONOMY_GATE'
+const E2E_AUTOMATION_JSONL_ADAPTER_ENV = 'MDE_E2E_AUTOMATION_JSONL_ADAPTER'
 
 interface RuntimeIdentityApp {
   readonly isPackaged: boolean
@@ -148,8 +168,12 @@ const captureStartupDiagnostics = (webContents: WebContents): void => {
 export const createPreloadPath = (mainDirectory: string): string =>
   join(mainDirectory, '../preload/index.mjs')
 
+const createWindowModeArgument = (windowMode: MdeWindowMode): string =>
+  `${WINDOW_MODE_ARGUMENT_PREFIX}${windowMode}`
+
 export const createWindowOptions = (
-  preloadPath: string
+  preloadPath: string,
+  windowMode: MdeWindowMode = EDITOR_WINDOW_MODE
 ): BrowserWindowConstructorOptions => ({
   width: 1200,
   height: 800,
@@ -158,6 +182,7 @@ export const createWindowOptions = (
   backgroundColor: '#fbf7ef',
   show: false,
   webPreferences: {
+    additionalArguments: [createWindowModeArgument(windowMode)],
     contextIsolation: true,
     nodeIntegration: false,
     preload: preloadPath,
@@ -165,12 +190,73 @@ export const createWindowOptions = (
   }
 })
 
-const createMainWindow = async (
+const focusWindow = (window: BrowserWindow): void => {
+  if (window.isMinimized()) {
+    window.restore()
+  }
+
+  window.focus()
+}
+
+export const createEditorWindowTracker = (): {
+  readonly focusOrCreateMainWindow: (
+    openEditorWindow: (() => Promise<BrowserWindow>) | null
+  ) => void
+  readonly getMainWindow: () => BrowserWindow | null
+  readonly setMainWindow: (
+    window: BrowserWindow,
+    onClosed?: () => void
+  ) => void
+} => {
+  let editorWindows: readonly BrowserWindow[] = []
+  let mainWindow: BrowserWindow | null = null
+
+  const removeEditorWindow = (window: BrowserWindow): void => {
+    editorWindows = editorWindows.filter(
+      (editorWindow) => editorWindow !== window
+    )
+  }
+
+  return {
+    focusOrCreateMainWindow: (openEditorWindow) => {
+      if (mainWindow) {
+        focusWindow(mainWindow)
+        return
+      }
+
+      if (openEditorWindow) {
+        void openEditorWindow()
+      }
+    },
+    getMainWindow: () => mainWindow,
+    setMainWindow: (window, onClosed = () => undefined) => {
+      removeEditorWindow(window)
+      editorWindows = [...editorWindows, window]
+      mainWindow = window
+
+      window.on('focus', () => {
+        mainWindow = window
+      })
+
+      window.once('closed', () => {
+        onClosed()
+        removeEditorWindow(window)
+
+        if (mainWindow === window) {
+          mainWindow = editorWindows.at(-1) ?? null
+        }
+      })
+    }
+  }
+}
+
+const createMdeWindow = async (
   BrowserWindow: BrowserWindowConstructor,
+  windowMode: MdeWindowMode,
   onWindowCreated: (window: BrowserWindow) => void = () => undefined
 ): Promise<BrowserWindow> => {
   const window = new BrowserWindow(
-    createWindowOptions(createPreloadPath(__dirname))
+    createWindowOptions(createPreloadPath(__dirname), windowMode)
   )
 
   captureStartupDiagnostics(window.webContents)
@@ -188,6 +274,53 @@ const createMainWindow = async (
   await window.loadFile(join(__dirname, '../renderer/index.html'))
 
   return window
+}
+
+export const createMainWindow = async (
+  BrowserWindow: BrowserWindowConstructor,
+  onWindowCreated: (window: BrowserWindow) => void = () => undefined
+): Promise<BrowserWindow> =>
+  createMdeWindow(BrowserWindow, EDITOR_WINDOW_MODE, onWindowCreated)
+
+export const createAutomationCenterWindow = async (
+  BrowserWindow: BrowserWindowConstructor,
+  onWindowCreated: (window: BrowserWindow) => void = () => undefined
+): Promise<BrowserWindow> =>
+  createMdeWindow(BrowserWindow, AUTOMATION_CENTER_WINDOW_MODE, onWindowCreated)
+
+export const createAutomationCenterWindowManager = (
+  BrowserWindow: BrowserWindowConstructor,
+  onWindowCreated: (window: BrowserWindow) => void = () => undefined
+): {
+  readonly openOrFocusAutomationCenterWindow: () => Promise<BrowserWindow>
+} => {
+  let automationCenterWindow: BrowserWindow | null = null
+
+  const setAutomationCenterWindow = (window: BrowserWindow): void => {
+    automationCenterWindow = window
+
+    window.once('closed', () => {
+      if (automationCenterWindow === window) {
+        automationCenterWindow = null
+      }
+    })
+
+    onWindowCreated(window)
+  }
+
+  return {
+    openOrFocusAutomationCenterWindow: async () => {
+      if (automationCenterWindow) {
+        focusWindow(automationCenterWindow)
+        return automationCenterWindow
+      }
+
+      return createAutomationCenterWindow(
+        BrowserWindow,
+        setAutomationCenterWindow
+      )
+    }
+  }
 }
 
 const bootstrap = async (): Promise<void> => {
@@ -214,7 +347,10 @@ const bootstrap = async (): Promise<void> => {
     return
   }
 
-  let mainWindow: BrowserWindow | null = null
+  const editorWindowTracker = createEditorWindowTracker()
+  let openAutomationCenterWindow:
+    | (() => Promise<BrowserWindow>)
+    | null = null
   let workspaceSession: WorkspaceHandlerSession | null = null
   let openAppWindow:
     | ((launchPath?: WorkspaceLaunchResource | null) => Promise<BrowserWindow>)
@@ -222,31 +358,17 @@ const bootstrap = async (): Promise<void> => {
   const setMainWindow = (window: BrowserWindow): void => {
     const webContentsId = window.webContents.id
 
-    mainWindow = window
-
-    window.on('focus', () => {
-      mainWindow = window
-    })
-
-    window.once('closed', () => {
+    editorWindowTracker.setMainWindow(window, () => {
       workspaceSession?.removeWindow({ id: webContentsId })
-
-      if (mainWindow === window) {
-        mainWindow = BrowserWindow.getAllWindows().at(-1) ?? null
-      }
     })
   }
 
   const focusMainWindow = (): void => {
-    if (!mainWindow) {
-      return
-    }
+    const createEditorWindow = openAppWindow
 
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore()
-    }
-
-    mainWindow.focus()
+    editorWindowTracker.focusOrCreateMainWindow(
+      createEditorWindow ? () => createEditorWindow(null) : null
+    )
   }
 
   app.on('second-instance', (_event, commandLine, workingDirectory) => {
@@ -302,6 +424,81 @@ const bootstrap = async (): Promise<void> => {
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain
   })
+  const automationAppDataPath = app.getPath('userData')
+  const automationStore = createAutomationStore({
+    appDataPath: automationAppDataPath
+  })
+  const automationAdapterCapabilities =
+    process.env[E2E_AUTOMATION_AUTONOMY_GATE_ENV] === 'false'
+      ? { autonomyGate: false }
+      : undefined
+  const jsonlAdapterPath = process.env[E2E_AUTOMATION_JSONL_ADAPTER_ENV]
+  const automationAdapterRegistry = createAutomationAdapterRegistry(
+    jsonlAdapterPath
+      ? [
+          createJsonlAgentCliAdapter({
+            commandPath: jsonlAdapterPath,
+            engine: 'codex'
+          })
+        ]
+      : [
+          createFakeAgentCliAdapter({
+            ...(automationAdapterCapabilities !== undefined
+              ? { capabilities: automationAdapterCapabilities }
+              : {}),
+            commandPath: 'codex',
+            engine: 'codex'
+          }),
+          createFakeAgentCliAdapter({
+            ...(automationAdapterCapabilities !== undefined
+              ? { capabilities: automationAdapterCapabilities }
+              : {}),
+            commandPath: 'claude',
+            engine: 'claude-code'
+          })
+        ]
+  )
+  const automationRuntime = createAutomationRuntime({
+    adapterRegistry: automationAdapterRegistry,
+    profileId: automationAppDataPath,
+    runtimeBridge: createMdeRuntimeBridge({
+      appDataPath: automationAppDataPath
+    }),
+    store: automationStore
+  })
+  const automationRuntimeCoordinator = createAutomationRuntimeCoordinator({
+    owner: createAutomationRuntimeOwner({
+      appDataPath: automationAppDataPath
+    }),
+    runtime: automationRuntime,
+    store: automationStore
+  })
+
+  await automationRuntimeCoordinator.start()
+
+  registerAutomationHandlers({
+    adapterRegistry: automationAdapterRegistry,
+    getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
+    homePath: app.getPath('home'),
+    ipcMain,
+    runtime: automationRuntimeCoordinator,
+    store: automationStore
+  })
+  const automationCenterWindowManager = createAutomationCenterWindowManager(
+    BrowserWindow
+  )
+  openAutomationCenterWindow =
+    automationCenterWindowManager.openOrFocusAutomationCenterWindow
+  ipcMain.handle(WINDOW_CHANNELS.openAutomationCenter, async () => {
+    if (!openAutomationCenterWindow) {
+      throw new Error('Automation Center window creation is not ready')
+    }
+
+    await openAutomationCenterWindow()
+  })
+  ipcMain.handle(WINDOW_CHANNELS.focusWorkspaceWindow, () => {
+    focusMainWindow()
+  })
   openAppWindow = (launchPath = null) =>
     createMainWindow(BrowserWindow, (window) => {
       workspaceSession?.setPendingLaunchPath(window.webContents, launchPath)
@@ -311,15 +508,17 @@ const bootstrap = async (): Promise<void> => {
   await openAppWindow(initialLaunchPath)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void openAppWindow?.(null)
-    }
+    focusMainWindow()
   })
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
       app.quit()
     }
+  })
+
+  app.on('before-quit', () => {
+    void automationRuntimeCoordinator.prepareForShutdown()
   })
 }
 

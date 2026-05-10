@@ -1334,6 +1334,68 @@ test('opens a workspace from a command line path', async () => {
   }
 })
 
+test('opens Automation Center in a separate window from Explorer Home', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath]
+  })
+
+  try {
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+
+    const automationWindowPromise = app.waitForEvent('window', {
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
+
+    await window
+      .getByRole('button', { name: /open automation center/i })
+      .click()
+
+    const automationWindow = await automationWindowPromise
+
+    await automationWindow.waitForLoadState('domcontentloaded')
+    await expect(
+      automationWindow.getByRole('main', { name: /automation center/i })
+    ).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.centerWindow
+    )
+    await expect(
+      automationWindow.getByRole('region', { name: /signal stack/i })
+    ).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.signalStack
+    )
+    await expect(
+      automationWindow.getByText(/no automation tasks yet/i)
+    ).toBeVisible()
+    await expect(window.locator('.app-shell')).toBeVisible()
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible()
+
+    await window.bringToFront()
+    const unexpectedWindowPromise = app
+      .waitForEvent('window', { timeout: 1_000 })
+      .then(() => true)
+      .catch(() => false)
+
+    await window
+      .getByRole('button', { name: /open automation center/i })
+      .click()
+
+    expect(await unexpectedWindowPromise).toBe(false)
+    await expect(
+      automationWindow.getByRole('main', { name: /automation center/i })
+    ).toBeVisible()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('shows and clears the external resource drop target feedback', async () => {
   const workspacePath = await createFixtureWorkspace()
   const introPath = join(workspacePath, 'docs', 'intro.md')

@@ -104,15 +104,26 @@ export const launchElectronApp = async (
 
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded', { timeout: 20_000 })
-  await window.evaluate(() => {
-    globalThis.localStorage.setItem('mde.appLanguagePreference', 'en')
-    globalThis.localStorage.removeItem('mde.customAppLanguagePacks')
-  })
   // Avoid reloading the first window before the renderer finishes consuming
   // one-shot command-line launch paths.
   await window.locator('.app-shell').waitFor({
     state: 'visible',
     timeout: 20_000
+  })
+  await window.evaluate(() => {
+    try {
+      globalThis.localStorage.setItem('mde.appLanguagePreference', 'en')
+      globalThis.localStorage.removeItem('mde.customAppLanguagePacks')
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === 'SecurityError'
+      ) {
+        return
+      }
+
+      throw error
+    }
   })
 
   const mainDiagnostics = await app.evaluate(() => {

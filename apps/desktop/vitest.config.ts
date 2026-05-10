@@ -6,6 +6,26 @@ const workspaceRoot = resolve(__dirname, '../..')
 
 const packageAliases = [
   {
+    find: /^@mde\/automation-flow$/,
+    replacement: resolve(workspaceRoot, 'packages/automation-flow/src/index.ts')
+  },
+  {
+    find: /^@mde\/automation-flow\/diagnostics$/,
+    replacement: resolve(workspaceRoot, 'packages/automation-flow/src/diagnostics.ts')
+  },
+  {
+    find: /^@mde\/automation-flow\/parser$/,
+    replacement: resolve(workspaceRoot, 'packages/automation-flow/src/parser.ts')
+  },
+  {
+    find: /^@mde\/automation-flow\/schema$/,
+    replacement: resolve(workspaceRoot, 'packages/automation-flow/src/schema.ts')
+  },
+  {
+    find: /^@mde\/automation-flow\/types$/,
+    replacement: resolve(workspaceRoot, 'packages/automation-flow/src/types.ts')
+  },
+  {
     find: /^@mde\/editor-core$/,
     replacement: resolve(workspaceRoot, 'packages/editor-core/src/index.ts')
   },
@@ -88,12 +108,18 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
+        'packages/automation-flow/src/**/*.ts',
         'packages/editor-core/src/**/*.ts',
         'packages/editor-host/src/**/*.ts',
         'apps/desktop/src/main/autoUpdate.ts',
         'apps/desktop/src/main/ipc/**/*.ts',
         'apps/desktop/src/main/services/**/*.ts',
+        'apps/desktop/src/preload/automationApi.ts',
+        'apps/desktop/src/shared/automation.ts',
+        'apps/desktop/src/shared/windowMode.ts',
         'apps/desktop/src/renderer/src/app/appReducer.ts',
+        'apps/desktop/src/renderer/src/automation/**/*.ts',
+        'apps/desktop/src/renderer/src/automation/**/*.tsx',
         'apps/desktop/src/renderer/src/editor/**/*.ts',
         'apps/desktop/src/renderer/src/editor/**/*.tsx',
         'apps/desktop/src/renderer/src/explorer/**/*.tsx'
