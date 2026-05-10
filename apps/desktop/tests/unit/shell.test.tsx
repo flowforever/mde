@@ -140,10 +140,11 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
 
 import { App } from "../../src/renderer/src/app/App";
 import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
+import { WINDOW_WORKSPACE_SESSION_STORAGE_KEY } from "../../src/renderer/src/workspaces/recentWorkspaces";
 import type { AiApi, AiGenerationResult } from "../../src/shared/ai";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { UpdateApi } from "../../src/shared/update";
-import type { EditorApi } from "../../src/shared/workspace";
+import type { EditorApi, Workspace } from "../../src/shared/workspace";
 
 const createDeferred = <Value,>(): {
   readonly promise: Promise<Value>;
@@ -231,6 +232,7 @@ describe("App shell", () => {
     vi.useRealTimers();
     mockEditorState.changeIndex = 0;
     localStorage.clear();
+    sessionStorage.clear();
     document.title = "MDE";
     Reflect.deleteProperty(window, "aiApi");
     Reflect.deleteProperty(window, "editorApi");
@@ -1103,6 +1105,110 @@ describe("App shell", () => {
     expect(
       screen.queryByRole("dialog", { name: /workspace manager/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("restores the current window workspace and file on renderer reload before the global active workspace", async () => {
+    const workspaceA: Workspace = {
+      name: "Workspace A",
+      rootPath: "/workspace-a",
+      tree: [
+        { name: "README.md", path: "README.md", type: "file" },
+        {
+          children: [
+            {
+              name: "intro.md",
+              path: "docs/intro.md",
+              type: "file",
+            },
+          ],
+          name: "docs",
+          path: "docs",
+          type: "directory",
+        },
+      ],
+      type: "workspace",
+    };
+    const workspaceB: Workspace = {
+      name: "Workspace B",
+      rootPath: "/workspace-b",
+      tree: [{ name: "SECOND.md", path: "SECOND.md", type: "file" }],
+      type: "workspace",
+    };
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn((rootPath: string) =>
+        Promise.resolve(rootPath === "/workspace-a" ? workspaceA : workspaceB),
+      ),
+      readMarkdownFile: vi.fn((filePath: string, workspaceRoot: string) =>
+        Promise.resolve({
+          contents: `${workspaceRoot}:${filePath}`,
+          path: filePath,
+        }),
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    sessionStorage.setItem(
+      WINDOW_WORKSPACE_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        openedFilePath: "docs/intro.md",
+        workspace: {
+          name: "Workspace A",
+          rootPath: "/workspace-a",
+          type: "workspace",
+        },
+      }),
+    );
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace B",
+        rootPath: "/workspace-b",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: "SECOND.md",
+          recentFilePaths: ["SECOND.md"],
+          workspaceRoot: "/workspace-b",
+        },
+      ]),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith(
+        "/workspace-a",
+      );
+    });
+    expect(editorApi.openWorkspaceByPath).not.toHaveBeenCalledWith(
+      "/workspace-b",
+    );
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+      "docs/intro.md",
+      "/workspace-a",
+    );
+    expect(await screen.findByText("/workspace-a:docs/intro.md")).toBeVisible();
+    expect(document.title).toBe("intro.md - /workspace-a");
   });
 
   it("hydrates and renders at most twenty recent files in the explorer", async () => {

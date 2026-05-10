@@ -21,6 +21,13 @@ interface LegacyRecentWorkspace {
 
 export const RECENT_WORKSPACES_STORAGE_KEY = 'mde.recentWorkspaces'
 export const ACTIVE_WORKSPACE_STORAGE_KEY = 'mde.activeWorkspace'
+export const WINDOW_WORKSPACE_SESSION_STORAGE_KEY =
+  'mde.windowWorkspaceSession'
+
+export interface WindowWorkspaceSession {
+  readonly openedFilePath: string | null
+  readonly workspace: RecentWorkspace
+}
 
 const MAX_RECENT_WORKSPACES = 24
 const LEGACY_RECENT_WORKSPACES_STORAGE_KEY = 'mdv.recentWorkspaces'
@@ -69,6 +76,23 @@ const getRecentWorkspaceKey = (workspace: RecentWorkspace): string =>
   workspace.type === 'file'
     ? `file:${workspace.filePath}`
     : `workspace:${workspace.rootPath}`
+
+const isWindowWorkspaceSession = (
+  value: unknown
+): value is WindowWorkspaceSession => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+
+  return (
+    isRecentWorkspace(candidate.workspace) &&
+    (candidate.openedFilePath === null ||
+      (typeof candidate.openedFilePath === 'string' &&
+        candidate.openedFilePath.trim().length > 0))
+  )
+}
 
 export const readRecentWorkspaces = (
   storage: Pick<Storage, 'getItem'> = globalThis.localStorage
@@ -127,6 +151,31 @@ export const readActiveWorkspace = (
     }
 
     return normalizeRecentWorkspace(parsedValue)
+  } catch {
+    return null
+  }
+}
+
+export const readWindowWorkspaceSession = (
+  storage: Pick<Storage, 'getItem'> = globalThis.sessionStorage
+): WindowWorkspaceSession | null => {
+  try {
+    const storedValue = storage.getItem(WINDOW_WORKSPACE_SESSION_STORAGE_KEY)
+
+    if (!storedValue) {
+      return null
+    }
+
+    const parsedValue = JSON.parse(storedValue) as unknown
+
+    if (!isWindowWorkspaceSession(parsedValue)) {
+      return null
+    }
+
+    return {
+      openedFilePath: parsedValue.openedFilePath,
+      workspace: normalizeRecentWorkspace(parsedValue.workspace)
+    }
   } catch {
     return null
   }
@@ -192,6 +241,17 @@ export const writeActiveWorkspace = (
 ): void => {
   try {
     storage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, JSON.stringify(workspace))
+  } catch {
+    // Storage may be unavailable in restricted renderer contexts.
+  }
+}
+
+export const writeWindowWorkspaceSession = (
+  storage: Pick<Storage, 'setItem'> = globalThis.sessionStorage,
+  session: WindowWorkspaceSession
+): void => {
+  try {
+    storage.setItem(WINDOW_WORKSPACE_SESSION_STORAGE_KEY, JSON.stringify(session))
   } catch {
     // Storage may be unavailable in restricted renderer contexts.
   }

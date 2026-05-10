@@ -3,11 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   ACTIVE_WORKSPACE_STORAGE_KEY,
   RECENT_WORKSPACES_STORAGE_KEY,
+  WINDOW_WORKSPACE_SESSION_STORAGE_KEY,
   forgetRecentWorkspace,
   readActiveWorkspace,
   readRecentWorkspaces,
+  readWindowWorkspaceSession,
   rememberWorkspace,
   writeActiveWorkspace,
+  writeWindowWorkspaceSession,
   writeRecentWorkspaces
 } from '../../src/renderer/src/workspaces/recentWorkspaces'
 
@@ -50,6 +53,9 @@ describe('recentWorkspaces', () => {
   it('uses the MDE storage key', () => {
     expect(RECENT_WORKSPACES_STORAGE_KEY).toBe('mde.recentWorkspaces')
     expect(ACTIVE_WORKSPACE_STORAGE_KEY).toBe('mde.activeWorkspace')
+    expect(WINDOW_WORKSPACE_SESSION_STORAGE_KEY).toBe(
+      'mde.windowWorkspaceSession'
+    )
   })
 
   it('reads only valid remembered workspaces', () => {
@@ -227,6 +233,54 @@ describe('recentWorkspaces', () => {
         openedFilePath: 'API.md',
         rootPath: '/notes',
         type: 'file'
+      })
+    )
+  })
+
+  it('reads and writes the per-window workspace session with the opened file', () => {
+    const { setItem, storage } = createStorage(
+      JSON.stringify({
+        openedFilePath: 'docs/intro.md',
+        workspace: {
+          name: 'Docs',
+          rootPath: '/workspaces/docs',
+          type: 'workspace'
+        }
+      }),
+      WINDOW_WORKSPACE_SESSION_STORAGE_KEY
+    )
+
+    expect(readWindowWorkspaceSession(storage)).toEqual({
+      openedFilePath: 'docs/intro.md',
+      workspace: {
+        name: 'Docs',
+        rootPath: '/workspaces/docs',
+        type: 'workspace'
+      }
+    })
+
+    writeWindowWorkspaceSession(storage, {
+      openedFilePath: 'API.md',
+      workspace: {
+        filePath: '/notes/API.md',
+        name: 'API.md',
+        openedFilePath: 'API.md',
+        rootPath: '/notes',
+        type: 'file'
+      }
+    })
+
+    expect(setItem).toHaveBeenCalledWith(
+      WINDOW_WORKSPACE_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        openedFilePath: 'API.md',
+        workspace: {
+          filePath: '/notes/API.md',
+          name: 'API.md',
+          openedFilePath: 'API.md',
+          rootPath: '/notes',
+          type: 'file'
+        }
       })
     )
   })

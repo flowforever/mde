@@ -105,9 +105,11 @@ import {
   forgetRecentWorkspace,
   readActiveWorkspace,
   readRecentWorkspaces,
+  readWindowWorkspaceSession,
   rememberWorkspace,
   type RecentWorkspace,
   writeActiveWorkspace,
+  writeWindowWorkspaceSession,
   writeRecentWorkspaces,
 } from "../workspaces/recentWorkspaces";
 import {
@@ -540,10 +542,16 @@ export const App = (): React.JSX.Element => {
   );
 
   const rememberOpenedWorkspace = useCallback((workspace: Workspace): void => {
+    const recentWorkspace = createRecentWorkspace(workspace);
+
     writeActiveWorkspace(
       globalThis.localStorage,
-      createRecentWorkspace(workspace),
+      recentWorkspace,
     );
+    writeWindowWorkspaceSession(globalThis.sessionStorage, {
+      openedFilePath: workspace.openedFilePath ?? null,
+      workspace: recentWorkspace,
+    });
     setRecentWorkspaces((currentWorkspaces) => {
       const nextWorkspaces = rememberWorkspace(currentWorkspaces, workspace);
 
@@ -803,7 +811,11 @@ export const App = (): React.JSX.Element => {
   );
 
   const loadFile = useCallback(
-    async (filePath: string, expectedWorkspaceRoot?: string): Promise<void> => {
+    async (
+      filePath: string,
+      expectedWorkspaceRoot?: string,
+      sessionWorkspace?: Workspace,
+    ): Promise<void> => {
       const workspaceRoot = expectedWorkspaceRoot ?? state.workspace?.rootPath;
 
       if (!workspaceRoot) {
@@ -831,6 +843,18 @@ export const App = (): React.JSX.Element => {
 
         dispatch({ type: "file/loaded", file, workspaceRoot });
         rememberOpenedFile(workspaceRoot, file.path);
+        const windowSessionWorkspace =
+          sessionWorkspace ??
+          (state.workspace?.rootPath === workspaceRoot
+            ? state.workspace
+            : null);
+
+        if (windowSessionWorkspace) {
+          writeWindowWorkspaceSession(globalThis.sessionStorage, {
+            openedFilePath: file.path,
+            workspace: createRecentWorkspace(windowSessionWorkspace),
+          });
+        }
       } catch (error) {
         dispatch({
           filePath,
@@ -840,7 +864,7 @@ export const App = (): React.JSX.Element => {
         });
       }
     },
-    [closeAiMenus, rememberOpenedFile, state.workspace?.rootPath, text],
+    [closeAiMenus, rememberOpenedFile, state.workspace, text],
   );
 
   const openWorkspaceSearchResult = useCallback(
@@ -852,9 +876,20 @@ export const App = (): React.JSX.Element => {
   );
 
   const loadWorkspaceDefaultFile = useCallback(
-    async (workspace: Workspace): Promise<void> => {
+    async (
+      workspace: Workspace,
+      preferredFilePath?: string | null,
+    ): Promise<void> => {
+      if (
+        preferredFilePath &&
+        findFileNodeByPath(workspace.tree, preferredFilePath)
+      ) {
+        await loadFile(preferredFilePath, workspace.rootPath, workspace);
+        return;
+      }
+
       if (workspace.openedFilePath) {
-        await loadFile(workspace.openedFilePath, workspace.rootPath);
+        await loadFile(workspace.openedFilePath, workspace.rootPath, workspace);
         return;
       }
 
@@ -870,7 +905,7 @@ export const App = (): React.JSX.Element => {
         return;
       }
 
-      await loadFile(lastOpenedFilePath, workspace.rootPath);
+      await loadFile(lastOpenedFilePath, workspace.rootPath, workspace);
     },
     [loadFile, workspaceFileHistory],
   );
@@ -1138,7 +1173,10 @@ export const App = (): React.JSX.Element => {
   );
 
   const switchWorkspace = useCallback(
-    async (workspace: RecentWorkspace): Promise<void> => {
+    async (
+      workspace: RecentWorkspace,
+      preferredFilePath?: string | null,
+    ): Promise<void> => {
       dispatch({ type: "workspace/open-started" });
 
       try {
@@ -1152,7 +1190,7 @@ export const App = (): React.JSX.Element => {
             : await window.editorApi.openWorkspaceByPath(workspace.rootPath);
 
         completeWorkspaceOpen(openedWorkspace);
-        await loadWorkspaceDefaultFile(openedWorkspace);
+        await loadWorkspaceDefaultFile(openedWorkspace, preferredFilePath);
       } catch (error) {
         dispatch({
           type: "workspace/open-failed",
@@ -1186,7 +1224,7 @@ export const App = (): React.JSX.Element => {
         if (typeof resourcePath === "string") {
           await loadWorkspaceDefaultFile(workspace);
         } else {
-          await loadFile(resourcePath.filePath, workspace.rootPath);
+          await loadFile(resourcePath.filePath, workspace.rootPath, workspace);
         }
       } catch (error) {
         dispatch({
@@ -1221,6 +1259,22 @@ export const App = (): React.JSX.Element => {
 
       if (resourcePath) {
         void openPath(resourcePath).finally(() => {
+          if (!isCancelled) {
+            setHasResolvedInitialLaunchPath(true);
+          }
+        });
+        return;
+      }
+
+      const windowWorkspaceSession = readWindowWorkspaceSession(
+        globalThis.sessionStorage,
+      );
+
+      if (windowWorkspaceSession) {
+        void switchWorkspace(
+          windowWorkspaceSession.workspace,
+          windowWorkspaceSession.openedFilePath,
+        ).finally(() => {
           if (!isCancelled) {
             setHasResolvedInitialLaunchPath(true);
           }

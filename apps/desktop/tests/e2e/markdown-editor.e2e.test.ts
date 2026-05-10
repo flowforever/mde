@@ -1267,6 +1267,53 @@ test('starts each Electron launch with isolated persisted workspace state', asyn
   }
 })
 
+test('reloads the current window with its own workspace and opened file', async () => {
+  const firstWorkspacePath = await createFixtureWorkspace()
+  const secondWorkspacePath = await createFixtureWorkspace()
+  const firstWorkspaceRoot = await realpath(firstWorkspacePath)
+  const secondWorkspaceRoot = await realpath(secondWorkspacePath)
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${firstWorkspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Fixture Workspace'
+    )
+    await expect(window).toHaveTitle(`README.md - ${firstWorkspaceRoot}`)
+
+    await window.evaluate(
+      (workspaceRoot) => {
+        globalThis.localStorage.setItem(
+          'mde.activeWorkspace',
+          JSON.stringify({
+            name: 'Second Workspace',
+            rootPath: workspaceRoot,
+            type: 'workspace'
+          })
+        )
+      },
+      secondWorkspaceRoot
+    )
+    await window.reload({ waitUntil: 'domcontentloaded' })
+
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Fixture Workspace',
+      { timeout: E2E_UI_READY_TIMEOUT_MS }
+    )
+    await expect(window).toHaveTitle(`README.md - ${firstWorkspaceRoot}`)
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('opens a workspace from a command line path', async () => {
   const workspacePath = await createFixtureWorkspace()
   const { app, startupDiagnostics, window } = await launchElectronApp({
@@ -3835,8 +3882,6 @@ test('keeps the editing position after idle autosave', async () => {
             ) {
               return false
             }
-
-            editableElement.focus({ preventScroll: true })
 
             const selectedNodeText = selection.anchorNode?.textContent ?? ''
             const activeElement = document.activeElement
