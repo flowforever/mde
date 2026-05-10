@@ -3477,7 +3477,11 @@ export const App = (): React.JSX.Element => {
             onRegenerateSummary={(instruction) => {
               void summarizeMarkdown(instruction);
             }}
+            onSearchStateChange={setEditorSearchState}
+            pinnedSearchQueries={pinnedEditorSearchQueries}
             result={currentAiResult}
+            searchQuery={editorSearchQuery}
+            searchState={editorSearchState}
             text={text}
             workspaceRoot={state.workspace?.rootPath ?? ""}
           />

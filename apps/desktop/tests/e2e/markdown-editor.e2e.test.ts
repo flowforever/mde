@@ -3068,6 +3068,11 @@ test('summarizes and translates the current Markdown file with an installed AI C
         'utf8'
       )
     ).resolves.toContain('Translated from fake CLI')
+    await window.getByRole('button', { name: /search current markdown/i }).click()
+    await window
+      .getByRole('searchbox', { name: /search current markdown/i })
+      .fill('Translated')
+    await expect(window.locator('.editor-search-count')).toHaveText('1/1')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

@@ -11,7 +11,11 @@ import type { AiGenerationResult } from "../../src/shared/ai";
 const capturedEditorProps = vi.hoisted(
   () =>
     [] as {
+      readonly activeSearchMatchIndex?: number;
       readonly onImageUpload: unknown;
+      readonly onSearchStateChange?: unknown;
+      readonly pinnedSearchQueries?: readonly string[];
+      readonly searchQuery?: string;
     }[],
 );
 
@@ -21,10 +25,20 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
   return {
     ...(actual as object),
     MarkdownBlockEditor: (props: {
+      readonly activeSearchMatchIndex?: number;
       readonly markdown: string;
       readonly onImageUpload: unknown;
+      readonly onSearchStateChange?: unknown;
+      readonly pinnedSearchQueries?: readonly string[];
+      readonly searchQuery?: string;
     }) => {
-      capturedEditorProps.push({ onImageUpload: props.onImageUpload });
+      capturedEditorProps.push({
+        activeSearchMatchIndex: props.activeSearchMatchIndex,
+        onImageUpload: props.onImageUpload,
+        onSearchStateChange: props.onSearchStateChange,
+        pinnedSearchQueries: props.pinnedSearchQueries,
+        searchQuery: props.searchQuery,
+      });
 
       return <div data-testid="readonly-ai-editor">{props.markdown}</div>;
     },
@@ -50,7 +64,9 @@ describe("AiResultPanel", () => {
         isRegeneratingSummary={false}
         onClose={vi.fn()}
         onRegenerateSummary={vi.fn()}
+        onSearchStateChange={vi.fn()}
         result={summaryResult}
+        searchState={{ activeMatchIndex: -1, matchCount: 0 }}
         text={text}
         workspaceRoot="/workspace"
       />,
@@ -62,7 +78,9 @@ describe("AiResultPanel", () => {
         isRegeneratingSummary
         onClose={vi.fn()}
         onRegenerateSummary={vi.fn()}
+        onSearchStateChange={vi.fn()}
         result={summaryResult}
+        searchState={{ activeMatchIndex: -1, matchCount: 0 }}
         text={text}
         workspaceRoot="/workspace"
       />,
@@ -72,5 +90,34 @@ describe("AiResultPanel", () => {
     expect(capturedEditorProps[1]?.onImageUpload).toBe(
       capturedEditorProps[0]?.onImageUpload,
     );
+  });
+
+  it("passes active editor search state into the read-only result editor", () => {
+    capturedEditorProps.length = 0;
+    const onSearchStateChange = vi.fn();
+
+    render(
+      <AiResultPanel
+        colorScheme="light"
+        isRegeneratingSummary={false}
+        onClose={vi.fn()}
+        onRegenerateSummary={vi.fn()}
+        onSearchStateChange={onSearchStateChange}
+        pinnedSearchQueries={["Cached"]}
+        result={summaryResult}
+        searchQuery="summary"
+        searchState={{ activeMatchIndex: 2, matchCount: 4 }}
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    expect(capturedEditorProps).toHaveLength(1);
+    expect(capturedEditorProps[0]).toMatchObject({
+      activeSearchMatchIndex: 2,
+      onSearchStateChange,
+      pinnedSearchQueries: ["Cached"],
+      searchQuery: "summary",
+    });
   });
 });

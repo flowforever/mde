@@ -12,7 +12,17 @@ interface AiResultPanelProps {
   readonly isRegeneratingSummary: boolean;
   readonly onClose: () => void;
   readonly onRegenerateSummary: (instruction: string) => void;
+  readonly onSearchStateChange: (state: {
+    readonly activeMatchIndex: number;
+    readonly matchCount: number;
+  }) => void;
+  readonly pinnedSearchQueries?: readonly string[];
   readonly result: AiGenerationResult;
+  readonly searchQuery?: string;
+  readonly searchState: {
+    readonly activeMatchIndex: number;
+    readonly matchCount: number;
+  };
   readonly text: AppText;
   readonly workspaceRoot: string;
 }
@@ -22,7 +32,11 @@ export const AiResultPanel = ({
   isRegeneratingSummary,
   onClose,
   onRegenerateSummary,
+  onSearchStateChange,
+  pinnedSearchQueries = [],
   result,
+  searchQuery = "",
+  searchState,
   text,
   workspaceRoot,
 }: AiResultPanelProps): React.JSX.Element => {
@@ -107,10 +121,14 @@ export const AiResultPanel = ({
           key={`${result.kind}:${result.path}:${result.contents}`}
           markdown={result.contents}
           markdownAssetResolver={markdownAssetResolver}
+          activeSearchMatchIndex={searchState.activeMatchIndex}
           onImageUpload={rejectReadOnlyImageUpload}
           onMarkdownChange={ignoreReadOnlyMarkdownChange}
+          onSearchStateChange={onSearchStateChange}
           onSaveRequest={ignoreReadOnlySaveRequest}
           path={result.path}
+          pinnedSearchQueries={pinnedSearchQueries}
+          searchQuery={searchQuery}
           text={text}
           workspaceRoot={workspaceRoot}
         />

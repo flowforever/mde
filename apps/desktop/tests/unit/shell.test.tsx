@@ -2034,6 +2034,19 @@ describe("App shell", () => {
     ).not.toBeInTheDocument();
 
     await user.click(
+      screen.getByRole("button", { name: /search current markdown/i }),
+    );
+    await user.type(
+      screen.getByRole("searchbox", { name: /search current markdown/i }),
+      "translated",
+    );
+    expect(
+      within(screen.getByRole("region", { name: /ai result/i })).getByTestId(
+        "mock-editor-search-query",
+      ),
+    ).toHaveTextContent("translated");
+
+    await user.click(
       screen.getByRole("button", { name: /translate markdown/i }),
     );
     await user.type(
