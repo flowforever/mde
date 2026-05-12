@@ -23,8 +23,12 @@ describe('Agent Chat component ids', () => {
     expect(COMPONENT_IDS.agentChat.messageField).toBe(
       'agent-chat.message-field'
     )
+    expect(COMPONENT_IDS.agentChat.messageBox).toBe('agent-chat.message-box')
     expect(COMPONENT_IDS.agentChat.messageItem).toBe('agent-chat.message-item')
     expect(COMPONENT_IDS.agentChat.panel).toBe('agent-chat.panel')
+    expect(COMPONENT_IDS.agentChat.resizeHandle).toBe(
+      'agent-chat.resize-handle'
+    )
     expect(COMPONENT_IDS.agentChat.thinkingStatus).toBe(
       'agent-chat.thinking-status'
     )
@@ -42,9 +46,17 @@ describe('Agent Chat component ids', () => {
         componentId: 'agent-chat.close-button',
         standardName: 'Agent Chat Close Button'
       },
+      agentChatMessageBox: {
+        componentId: 'agent-chat.message-box',
+        standardName: 'Agent Chat Message Box'
+      },
       agentChatPanel: {
         componentId: 'agent-chat.panel',
         standardName: 'Agent Chat Panel'
+      },
+      agentChatResizeHandle: {
+        componentId: 'agent-chat.resize-handle',
+        standardName: 'Agent Chat Resize Handle'
       },
       agentChatThinkingStatus: {
         componentId: 'agent-chat.thinking-status',

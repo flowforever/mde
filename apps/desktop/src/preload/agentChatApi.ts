@@ -41,6 +41,11 @@ export const createAgentChatApi = (
       ipcRenderer.removeListener(AGENT_CHAT_CHANNELS.event, handler)
     }
   },
+  releaseWorkspaceSubscriptions: (request) =>
+    ipcRenderer.invoke(
+      AGENT_CHAT_CHANNELS.releaseWorkspaceSubscriptions,
+      request
+    ) as Promise<void>,
   resumeSession: (request) =>
     ipcRenderer.invoke(
       AGENT_CHAT_CHANNELS.resumeSession,

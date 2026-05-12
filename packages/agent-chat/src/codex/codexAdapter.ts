@@ -219,15 +219,36 @@ export const createCodexAgentChatAdapter = (
       readonly turnId: string
     }
   >()
+  const pendingInterruptByThread = new Set<string>()
+  const interruptTurn = (
+    threadId: string,
+    activeTurn: {
+      readonly client: CodexAppServerClient
+      readonly turnId: string
+    }
+  ): void => {
+    void activeTurn.client
+      .turnInterrupt({
+        threadId,
+        turnId: activeTurn.turnId
+      })
+      .catch(() => undefined)
+  }
   const rememberTurn = (
     threadId: string,
     turnId: string,
     client: CodexAppServerClient
   ): void => {
-    activeTurnByThread.set(threadId, { client, turnId })
+    const activeTurn = { client, turnId }
+    activeTurnByThread.set(threadId, activeTurn)
+    if (pendingInterruptByThread.has(threadId)) {
+      pendingInterruptByThread.delete(threadId)
+      interruptTurn(threadId, activeTurn)
+    }
   }
   const forgetTurn = (threadId: string): void => {
     activeTurnByThread.delete(threadId)
+    pendingInterruptByThread.delete(threadId)
   }
 
   return {
@@ -367,7 +388,7 @@ export const createCodexAgentChatAdapter = (
       const activeTurn = nativeSessionId
         ? activeTurnByThread.get(nativeSessionId)
         : undefined
-      if (!nativeSessionId || !activeTurn) {
+      if (!nativeSessionId) {
         yield {
           diagnostic: createAgentChatDiagnostic({
             code: 'native-session-unavailable'
@@ -378,10 +399,14 @@ export const createCodexAgentChatAdapter = (
         return
       }
 
-      await activeTurn.client.turnInterrupt({
-        threadId: nativeSessionId,
-        turnId: activeTurn.turnId
-      })
+      if (activeTurn) {
+        await activeTurn.client.turnInterrupt({
+          threadId: nativeSessionId,
+          turnId: activeTurn.turnId
+        })
+      } else {
+        pendingInterruptByThread.add(nativeSessionId)
+      }
       yield {
         nativeSessionId,
         sessionId: input.session.sessionId,

@@ -208,14 +208,15 @@ Agent Chat 区域覆盖编辑器入口、右侧会话面板、上下文预览、
 | Agent Chat Close Button | `agent-chat.close-button` | Agent Chat 关闭按钮 | Agent Chat 面板标题栏 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 关闭右侧 Agent Chat 面板。 |
 | Agent Chat Composer | `agent-chat.composer` | Agent Chat 输入区 | Agent Chat 面板底部 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 输入消息、粘贴图片并发送到当前会话。 |
 | Agent Chat Context Preview | `agent-chat.context-preview` | Agent Chat 上下文预览 | Agent Chat 面板 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 显示当前文档、权限模式和选区摘要。 |
+| Agent Chat Message Box | `agent-chat.message-box` | Agent Chat 消息框 | Agent Chat 输入区 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 容纳消息输入框、图片按钮和发送/停止主按钮。 |
 | Agent Chat Message Field | `agent-chat.message-field` | Agent Chat 消息输入框 | Agent Chat 输入区 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 输入发送给当前会话的消息。 |
 | Agent Chat Message Item | `agent-chat.message-item` | Agent Chat 消息项 | Agent Chat 消息列表 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 显示一条用户或助手消息。 |
 | Agent Chat Message List | `agent-chat.message-list` | Agent Chat 消息列表 | Agent Chat 面板 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 展示用户和助手消息。 |
 | Agent Chat New Session Button | `agent-chat.new-session-button` | Agent Chat 新建会话按钮 | Agent Chat 会话栏 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 创建新的 MDE draft 会话。 |
 | Agent Chat Panel | `agent-chat.panel` | Agent Chat 面板 | 编辑器右侧 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | Codex Agent Chat 的右侧面板容器。 |
-| Agent Chat Send Button | `agent-chat.send-button` | Agent Chat 发送按钮 | Agent Chat 输入区 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 发送当前输入和附件。 |
+| Agent Chat Resize Handle | `agent-chat.resize-handle` | Agent Chat 宽度调整柄 | 编辑器与 Agent Chat 面板之间 | `apps/desktop/src/renderer/src/app/App.tsx` | 通过拖拽或键盘调整右侧 Agent Chat 面板宽度。 |
+| Agent Chat Send Button | `agent-chat.send-button` | Agent Chat 发送/停止按钮 | Agent Chat 消息框 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 空闲时发送当前输入和附件，发送中请求停止当前会话。 |
 | Agent Chat Session Picker | `agent-chat.session-picker` | Agent Chat 会话选择器 | Agent Chat 会话栏 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 在当前工作区的 Agent Chat 会话之间切换。 |
-| Agent Chat Stop Button | `agent-chat.stop-button` | Agent Chat 停止按钮 | Agent Chat 输入区 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 请求停止当前 Agent Chat 会话。 |
 | Agent Chat Thinking Status | `agent-chat.thinking-status` | Agent Chat 思考状态 | Agent Chat 面板 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 显示当前会话正在等待 Agent 响应。 |
 
 ## 设置和更新

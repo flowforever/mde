@@ -2,10 +2,14 @@ import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
 import type {
   AgentChatAttachment,
+  AgentChatAvailabilityResponse,
+  AgentChatChangedFilesSummary,
   AgentChatAvailabilityRequest,
   AgentChatCreateDraftSessionRequest,
+  AgentChatDiagnostic,
   AgentChatEvent,
   AgentChatListSessionsRequest,
+  AgentChatReleaseWorkspaceSubscriptionsRequest,
   AgentChatResumeSessionRequest,
   AgentChatRuntime,
   AgentChatSaveAttachmentRequest,
@@ -53,6 +57,14 @@ const assertStringArray = (value: unknown, name: string): readonly string[] => {
     throw new Error(`${name} must be an array`)
   }
   return Object.freeze(value.map((item) => assertString(item, name)))
+}
+
+const getSenderId = (sender: Pick<IpcMainInvokeEvent['sender'], 'id'>): string => {
+  const rawSenderId = sender.id
+
+  return typeof rawSenderId === 'number' || typeof rawSenderId === 'string'
+    ? String(rawSenderId)
+    : ''
 }
 
 const assertBytes = (value: unknown): Uint8Array => {
@@ -226,6 +238,15 @@ const assertListSessionsRequest = (
   }
 }
 
+const assertReleaseWorkspaceSubscriptionsRequest = (
+  value: unknown
+): AgentChatReleaseWorkspaceSubscriptionsRequest => {
+  const request = assertRecord(value, 'Agent Chat subscription release request')
+  return {
+    workspaceRoot: assertString(request.workspaceRoot, 'Workspace root')
+  }
+}
+
 const assertSendMessageRequest = (
   value: unknown
 ): AgentChatSendMessageRequest => {
@@ -247,6 +268,75 @@ const assertSendMessageRequest = (
     sessionId,
     workspaceRoot
   }
+}
+
+const assertContextMatchesWorkspace = (
+  contextManifest: AgentChatSendMessageRequest['contextManifest'],
+  workspaceRoot: string
+): void => {
+  if (contextManifest.workspaceRoot !== workspaceRoot) {
+    throw new Error('Agent Chat context workspace must match active workspace')
+  }
+}
+
+const sanitizeDiagnosticForRenderer = (
+  diagnostic: AgentChatDiagnostic
+): AgentChatDiagnostic =>
+  Object.freeze({
+    code: diagnostic.code,
+    message: diagnostic.message,
+    recoverable: diagnostic.recoverable
+  })
+
+const sanitizeChangedFilesSummaryForRenderer = (
+  summary: AgentChatChangedFilesSummary
+): AgentChatChangedFilesSummary =>
+  Object.freeze({
+    available: summary.available,
+    ...(summary.diagnostic
+      ? { diagnostic: sanitizeDiagnosticForRenderer(summary.diagnostic) }
+      : {}),
+    files: summary.files
+  })
+
+const sanitizeAvailabilityForRenderer = (
+  availability: AgentChatAvailabilityResponse
+): AgentChatAvailabilityResponse =>
+  Object.freeze({
+    available: availability.available,
+    ...(availability.diagnostic
+      ? { diagnostic: sanitizeDiagnosticForRenderer(availability.diagnostic) }
+      : {}),
+    ...(availability.engineId ? { engineId: availability.engineId } : {}),
+    ...(availability.reason ? { reason: availability.reason } : {})
+  })
+
+const sanitizeEventForRenderer = (event: AgentChatEvent): AgentChatEvent => {
+  if (event.type === 'session-failed') {
+    return Object.freeze({
+      diagnostic: sanitizeDiagnosticForRenderer(event.diagnostic),
+      session: event.session,
+      type: event.type
+    })
+  }
+
+  if (event.type === 'diagnostic') {
+    return Object.freeze({
+      diagnostic: sanitizeDiagnosticForRenderer(event.diagnostic),
+      ...(event.sessionId ? { sessionId: event.sessionId } : {}),
+      type: event.type
+    })
+  }
+
+  if (event.type === 'changed-files-updated') {
+    return Object.freeze({
+      sessionId: event.sessionId,
+      summary: sanitizeChangedFilesSummaryForRenderer(event.summary),
+      type: event.type
+    })
+  }
+
+  return event
 }
 
 const assertResumeSessionRequest = (
@@ -295,23 +385,89 @@ export const registerAgentChatHandlers = ({
 }: RegisterAgentChatHandlersOptions): void => {
   const subscriptions = new Map<string, () => void>()
 
+  const cleanupSubscription = (key: string): void => {
+    const unsubscribe = subscriptions.get(key)
+    if (!unsubscribe) {
+      return
+    }
+    unsubscribe()
+    subscriptions.delete(key)
+  }
+
+  const cleanupWorkspaceSubscriptions = (
+    sender: Pick<IpcMainInvokeEvent['sender'], 'id'>,
+    workspaceRoot: string
+  ): void => {
+    const senderId = getSenderId(sender)
+    if (!senderId) {
+      return
+    }
+
+    const workspacePrefix = `${workspaceRoot}:`
+    const senderSuffix = `:${senderId}`
+    for (const key of subscriptions.keys()) {
+      if (key.startsWith(workspacePrefix) && key.endsWith(senderSuffix)) {
+        cleanupSubscription(key)
+      }
+    }
+  }
+
   const ensureSubscribed = (
     event: Pick<IpcMainInvokeEvent, 'sender'>,
-    sessionId: string
+    sessionId: string,
+    workspaceRoot: string
   ): void => {
-    const rawSenderId = (event.sender as { id?: unknown }).id
-    const senderId =
-      typeof rawSenderId === 'number' || typeof rawSenderId === 'string'
-        ? String(rawSenderId)
-        : ''
-    const key = `${sessionId}:${senderId}`
+    const sender = event.sender as IpcMainInvokeEvent['sender'] & {
+      readonly isDestroyed?: () => boolean
+      readonly off?: (eventName: 'destroyed', listener: () => void) => unknown
+      readonly once?: (eventName: 'destroyed', listener: () => void) => unknown
+      readonly removeListener?: (
+        eventName: 'destroyed',
+        listener: () => void
+      ) => unknown
+    }
+    const isSenderDestroyed = (): boolean =>
+      typeof sender.isDestroyed === 'function' ? sender.isDestroyed() : false
+
+    if (isSenderDestroyed()) {
+      return
+    }
+
+    const senderId = getSenderId(sender)
+    if (!senderId) {
+      return
+    }
+
+    const key = `${workspaceRoot}:${sessionId}:${senderId}`
     if (subscriptions.has(key)) {
       return
     }
+    const destroyedListener = (): void => {
+      cleanupSubscription(key)
+    }
+    const removeDestroyedListener = (): void => {
+      if (typeof sender.off === 'function') {
+        sender.off('destroyed', destroyedListener)
+        return
+      }
+
+      sender.removeListener?.('destroyed', destroyedListener)
+    }
     const unsubscribe = runtime.subscribe(sessionId, (payload: AgentChatEvent) => {
-      event.sender.send(AGENT_CHAT_CHANNELS.event, payload)
+      if (
+        isSenderDestroyed() ||
+        getActiveWorkspaceRoot({ sender }) !== workspaceRoot
+      ) {
+        cleanupSubscription(key)
+        return
+      }
+      sender.send(AGENT_CHAT_CHANNELS.event, sanitizeEventForRenderer(payload))
     })
-    subscriptions.set(key, unsubscribe)
+    subscriptions.set(key, () => {
+      unsubscribe()
+      removeDestroyedListener()
+    })
+    sender.once?.('destroyed', destroyedListener)
   }
 
   ipcMain.handle(AGENT_CHAT_CHANNELS.getAvailability, async (event, value) => {
@@ -327,7 +483,9 @@ export const registerAgentChatHandlers = ({
         reason: 'engine-not-selected'
       }
     }
-    return runtime.getAvailability({ ...request, workspaceRoot })
+    return sanitizeAvailabilityForRenderer(
+      await runtime.getAvailability({ ...request, workspaceRoot })
+    )
   })
 
   ipcMain.handle(AGENT_CHAT_CHANNELS.createDraftSession, async (event, value) => {
@@ -338,7 +496,7 @@ export const registerAgentChatHandlers = ({
       request.workspaceRoot
     )
     const session = await runtime.createDraftSession({ ...request, workspaceRoot })
-    ensureSubscribed(event, session.sessionId)
+    ensureSubscribed(event, session.sessionId, workspaceRoot)
     return session
   })
 
@@ -352,6 +510,14 @@ export const registerAgentChatHandlers = ({
     return runtime.listSessions({ ...request, workspaceRoot })
   })
 
+  ipcMain.handle(
+    AGENT_CHAT_CHANNELS.releaseWorkspaceSubscriptions,
+    (event, value) => {
+      const request = assertReleaseWorkspaceSubscriptionsRequest(value)
+      cleanupWorkspaceSubscriptions(event.sender, request.workspaceRoot)
+    }
+  )
+
   ipcMain.handle(AGENT_CHAT_CHANNELS.saveAttachment, async (event, value) => {
     const request = assertSaveAttachmentRequest(value)
     const workspaceRoot = getRequiredWorkspaceRoot(
@@ -359,7 +525,7 @@ export const registerAgentChatHandlers = ({
       getActiveWorkspaceRoot,
       request.workspaceRoot
     )
-    ensureSubscribed(event, request.sessionId)
+    ensureSubscribed(event, request.sessionId, workspaceRoot)
     return runtime.saveAttachment({ ...request, workspaceRoot })
   })
 
@@ -370,7 +536,8 @@ export const registerAgentChatHandlers = ({
       getActiveWorkspaceRoot,
       request.workspaceRoot
     )
-    ensureSubscribed(event, request.sessionId)
+    assertContextMatchesWorkspace(request.contextManifest, workspaceRoot)
+    ensureSubscribed(event, request.sessionId, workspaceRoot)
     await runtime.sendMessage({ ...request, workspaceRoot })
   })
 
@@ -381,11 +548,14 @@ export const registerAgentChatHandlers = ({
       getActiveWorkspaceRoot,
       request.workspaceRoot
     )
+    if (request.contextManifest) {
+      assertContextMatchesWorkspace(request.contextManifest, workspaceRoot)
+    }
     if (request.sessionId) {
-      ensureSubscribed(event, request.sessionId)
+      ensureSubscribed(event, request.sessionId, workspaceRoot)
     }
     const session = await runtime.resumeSession({ ...request, workspaceRoot })
-    ensureSubscribed(event, session.sessionId)
+    ensureSubscribed(event, session.sessionId, workspaceRoot)
     return session
   })
 
@@ -396,7 +566,7 @@ export const registerAgentChatHandlers = ({
       getActiveWorkspaceRoot,
       request.workspaceRoot
     )
-    ensureSubscribed(event, request.sessionId)
+    ensureSubscribed(event, request.sessionId, workspaceRoot)
     await runtime.stopSession({ ...request, workspaceRoot })
   })
 }

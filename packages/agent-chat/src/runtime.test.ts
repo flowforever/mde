@@ -305,6 +305,64 @@ describe('createAgentChatRuntime', () => {
     ])
   })
 
+  it('uses the first user message as the draft session title before native title is available', async () => {
+    const adapter = createRecordingAdapter({
+      sendEvents: [
+        {
+          nativeSessionId: 'thread-1',
+          sessionId: 'mde-chat-1',
+          type: 'session-started'
+        }
+      ]
+    })
+    const runtime = createAgentChatRuntime({
+      adapters: [adapter],
+      fileStore: createTestFileStore(),
+      now: () => '2026-05-12T00:00:00.000Z'
+    })
+    const session = await runtime.createDraftSession({
+      engineId: 'codex',
+      host: 'editor',
+      sessionPurpose: 'document-chat',
+      workspaceRoot: '/workspace'
+    })
+    const events: AgentChatEvent[] = []
+    runtime.subscribe(session.sessionId, (event) => {
+      events.push(event)
+    })
+
+    await runtime.sendMessage({
+      contextManifest: createContextManifest(),
+      content: '  Summarize   README and propose next steps  ',
+      sessionId: session.sessionId,
+      workspaceRoot: '/workspace'
+    })
+
+    const titleEvent = events.find((event) => event.type === 'session-updated')
+
+    expect(titleEvent?.type).toBe('session-updated')
+    if (titleEvent?.type !== 'session-updated') {
+      throw new Error('Expected a session-updated event')
+    }
+    expect(titleEvent.session).toMatchObject({
+      sessionId: session.sessionId,
+      title: 'Summarize README and propose next steps'
+    })
+    await expect(
+      runtime.listSessions({
+        selectedEngineId: 'codex',
+        workspaceRoot: '/workspace'
+      })
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: session.sessionId,
+          title: 'Summarize README and propose next steps'
+        })
+      ])
+    )
+  })
+
   it('emits an empty changed-file summary to clear stale changed-file UI', async () => {
     const adapter = createRecordingAdapter({
       sendEvents: [

@@ -45,6 +45,7 @@ interface MockMarkdownBlockEditorHandle {
 
 const mockEditorState = vi.hoisted(() => ({
   changeIndex: 0,
+  selectionContextGate: null as Promise<void> | null,
   selectedBlockIds: [] as readonly string[],
   selectedText: "",
 }));
@@ -61,11 +62,13 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
         ref,
         () => ({
           getMarkdown: () => Promise.resolve(props.markdown),
-          getSelectionContext: () =>
-            Promise.resolve({
+          getSelectionContext: async () => {
+            await mockEditorState.selectionContextGate;
+            return {
               selectedBlockIds: mockEditorState.selectedBlockIds,
               selectedText: mockEditorState.selectedText,
-            }),
+            };
+          },
         }),
         [props.markdown],
       );
@@ -182,7 +185,7 @@ import { App } from "../../src/renderer/src/app/App";
 import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
 import { WINDOW_WORKSPACE_SESSION_STORAGE_KEY } from "../../src/renderer/src/workspaces/recentWorkspaces";
 import type { AiApi, AiGenerationResult } from "../../src/shared/ai";
-import type { AgentChatApi } from "../../src/shared/agentChat";
+import type { AgentChatApi, AgentChatEvent } from "../../src/shared/agentChat";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { UpdateApi } from "../../src/shared/update";
 import type { EditorApi, Workspace } from "../../src/shared/workspace";
@@ -272,6 +275,9 @@ describe("App shell", () => {
     cleanup();
     vi.useRealTimers();
     mockEditorState.changeIndex = 0;
+    mockEditorState.selectionContextGate = null;
+    mockEditorState.selectedBlockIds = [];
+    mockEditorState.selectedText = "";
     localStorage.clear();
     sessionStorage.clear();
     document.title = "MDE";
@@ -2292,9 +2298,12 @@ describe("App shell", () => {
       }),
       listSessions: vi.fn().mockResolvedValue([]),
       onEvent: vi.fn(() => vi.fn()),
+      releaseWorkspaceSubscriptions: vi.fn().mockResolvedValue(undefined),
       resumeSession: vi.fn(),
       saveAttachment: vi.fn(),
-      sendMessage: vi.fn(),
+      sendMessage: vi.fn<AgentChatApi["sendMessage"]>().mockResolvedValue(
+        undefined,
+      ),
       stopSession: vi.fn(),
     } satisfies AgentChatApi;
 
@@ -2330,6 +2339,375 @@ describe("App shell", () => {
     expect(agentChatApi.listSessions).toHaveBeenCalledWith({
       selectedEngineId: "codex",
       workspaceRoot: "/workspace",
+    });
+  });
+
+  it("resizes the Agent Chat panel from the right-side drag separator", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+    const agentChatApi = {
+      createDraftSession: vi.fn(),
+      getAvailability: vi.fn().mockResolvedValue({
+        available: true,
+        engineId: "codex",
+      }),
+      listSessions: vi.fn().mockResolvedValue([]),
+      onEvent: vi.fn(() => vi.fn()),
+      releaseWorkspaceSubscriptions: vi.fn().mockResolvedValue(undefined),
+      resumeSession: vi.fn(),
+      saveAttachment: vi.fn(),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      stopSession: vi.fn(),
+    } satisfies AgentChatApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+    Object.defineProperty(window, "agentChatApi", {
+      configurable: true,
+      value: agentChatApi,
+    });
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /agent chat/i }),
+    );
+
+    const shell = screen.getByRole("main");
+    const editorPane = screen.getByLabelText("Editor");
+    const panel = await screen.findByRole("complementary", {
+      name: /agent chat/i,
+    });
+    const resizeHandle = await screen.findByRole("separator", {
+      name: /resize agent chat panel/i,
+    });
+
+    expect(editorPane).not.toContainElement(panel);
+    expect(shell).toContainElement(panel);
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "420");
+    expect(shell.style.getPropertyValue("--agent-chat-width")).toBe("420px");
+
+    fireEvent.pointerDown(resizeHandle, { clientX: 604, pointerId: 1 });
+    const pointerMove = new Event("pointermove");
+
+    Object.defineProperty(pointerMove, "clientX", { value: 544 });
+    window.dispatchEvent(pointerMove);
+    fireEvent.pointerUp(window);
+
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "480");
+    expect(shell.style.getPropertyValue("--agent-chat-width")).toBe("480px");
+  });
+
+  it("remounts the Agent Chat panel when the active workspace changes", async () => {
+    const user = userEvent.setup();
+    let launchPathListener: ((resourcePath: string) => void) | undefined;
+    let agentChatListener: ((event: AgentChatEvent) => void) | undefined;
+    const createOpenedFile = (workspaceRoot: string) => ({
+      filePath: `${workspaceRoot}/README.md`,
+      name: "README.md",
+      openedFilePath: "README.md",
+      rootPath: workspaceRoot,
+      tree: [{ name: "README.md", path: "README.md", type: "file" as const }],
+      type: "file" as const,
+    });
+    const createSession = (workspaceRoot: string) => ({
+      createdAt: "2026-05-12T00:00:00.000Z",
+      engineId: "codex" as const,
+      host: "editor" as const,
+      permissionMode: "max-permission" as const,
+      sessionId: workspaceRoot === "/workspace-a" ? "session-a" : "session-b",
+      sessionPurpose: "document-chat" as const,
+      state: "draft" as const,
+      title: workspaceRoot === "/workspace-a" ? "Chat A" : "Chat B",
+      updatedAt: "2026-05-12T00:00:00.000Z",
+      workspaceRoot,
+    });
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace-a/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn((listener: (resourcePath: string) => void) => {
+        launchPathListener = listener;
+        return vi.fn();
+      }),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn((resourcePath: string) =>
+        Promise.resolve(
+          createOpenedFile(
+            resourcePath.startsWith("/workspace-b")
+              ? "/workspace-b"
+              : "/workspace-a",
+          ),
+        ),
+      ),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn((filePath: string, workspaceRoot: string) =>
+        Promise.resolve({
+          contents: `# ${workspaceRoot}`,
+          path: filePath,
+        }),
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+    const agentChatApi = {
+      createDraftSession: vi.fn(),
+      getAvailability: vi.fn().mockResolvedValue({
+        available: true,
+        engineId: "codex",
+      }),
+      listSessions: vi.fn<AgentChatApi["listSessions"]>((request) =>
+        Promise.resolve([createSession(request.workspaceRoot)]),
+      ),
+      onEvent: vi.fn((listener: (event: AgentChatEvent) => void) => {
+        agentChatListener = listener;
+        return vi.fn();
+      }),
+      releaseWorkspaceSubscriptions: vi.fn().mockResolvedValue(undefined),
+      resumeSession: vi.fn(),
+      saveAttachment: vi.fn(),
+      sendMessage: vi.fn<AgentChatApi["sendMessage"]>().mockResolvedValue(
+        undefined,
+      ),
+      stopSession: vi.fn(),
+    } satisfies AgentChatApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+    Object.defineProperty(window, "agentChatApi", {
+      configurable: true,
+      value: agentChatApi,
+    });
+
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", { name: /agent chat/i }),
+    );
+    await screen.findByRole("option", { name: "Chat A" });
+
+    act(() => {
+      agentChatListener?.({
+        message: {
+          attachments: [],
+          content: "Workspace A answer",
+          createdAt: "2026-05-12T00:00:00.000Z",
+          messageId: "message-a",
+          role: "assistant",
+          sessionId: "session-a",
+        },
+        type: "assistant-message-completed",
+      });
+    });
+    expect(await screen.findByText("Workspace A answer")).toBeInTheDocument();
+
+    act(() => {
+      launchPathListener?.("/workspace-b/README.md");
+    });
+
+    await waitFor(() => {
+      expect(agentChatApi.listSessions).toHaveBeenCalledWith({
+        selectedEngineId: "codex",
+        workspaceRoot: "/workspace-b",
+      });
+    });
+    expect(await screen.findByRole("option", { name: "Chat B" })).toBeInTheDocument();
+    expect(screen.queryByText("Workspace A answer")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Message Agent Chat"), {
+      target: { value: "Workspace B question" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+    await waitFor(() => {
+      expect(agentChatApi.sendMessage).toHaveBeenCalled();
+    });
+    const sendRequest = agentChatApi.sendMessage.mock.calls.at(-1)?.[0];
+
+    expect(sendRequest?.contextManifest.currentDocumentSnapshot).toBe(
+      "# /workspace-b",
+    );
+    expect(sendRequest?.contextManifest.workspaceRoot).toBe("/workspace-b");
+    expect(sendRequest?.workspaceRoot).toBe("/workspace-b");
+    await waitFor(() => {
+      expect(agentChatApi.releaseWorkspaceSubscriptions).toHaveBeenCalledWith({
+        workspaceRoot: "/workspace-a",
+      });
+    });
+  });
+
+  it("does not reuse cached Agent Chat availability after switching workspace", async () => {
+    let launchPathListener: ((resourcePath: string) => void) | undefined;
+    const workspaceBAvailability = createDeferred<{
+      readonly available: false;
+      readonly engineId: "codex";
+      readonly reason: "protocol-unsupported";
+    }>();
+    const createOpenedFile = (workspaceRoot: string) => ({
+      filePath: `${workspaceRoot}/README.md`,
+      name: "README.md",
+      openedFilePath: "README.md",
+      rootPath: workspaceRoot,
+      tree: [{ name: "README.md", path: "README.md", type: "file" as const }],
+      type: "file" as const,
+    });
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace-a/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn((listener: (resourcePath: string) => void) => {
+        launchPathListener = listener;
+        return vi.fn();
+      }),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn((resourcePath: string) =>
+        Promise.resolve(
+          createOpenedFile(
+            resourcePath.startsWith("/workspace-b")
+              ? "/workspace-b"
+              : "/workspace-a",
+          ),
+        ),
+      ),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn((filePath: string, workspaceRoot: string) =>
+        Promise.resolve({
+          contents: `# ${workspaceRoot}`,
+          path: filePath,
+        }),
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+    const agentChatApi = {
+      createDraftSession: vi.fn(),
+      getAvailability: vi.fn<AgentChatApi["getAvailability"]>((request) =>
+        request.workspaceRoot === "/workspace-b"
+          ? workspaceBAvailability.promise
+          : Promise.resolve({
+              available: true,
+              engineId: "codex",
+            }),
+      ),
+      listSessions: vi.fn().mockResolvedValue([]),
+      onEvent: vi.fn(() => vi.fn()),
+      releaseWorkspaceSubscriptions: vi.fn().mockResolvedValue(undefined),
+      resumeSession: vi.fn(),
+      saveAttachment: vi.fn(),
+      sendMessage: vi.fn(),
+      stopSession: vi.fn(),
+    } satisfies AgentChatApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+    Object.defineProperty(window, "agentChatApi", {
+      configurable: true,
+      value: agentChatApi,
+    });
+
+    render(<App />);
+    expect(
+      await screen.findByRole("button", { name: /^Agent Chat$/ }),
+    ).toBeInTheDocument();
+
+    act(() => {
+      launchPathListener?.("/workspace-b/README.md");
+    });
+
+    expect(await screen.findByText("# /workspace-b")).toBeVisible();
+    await waitFor(() => {
+      expect(agentChatApi.getAvailability).toHaveBeenCalledWith({
+        selectedEngineId: "codex",
+        workspaceRoot: "/workspace-b",
+      });
+    });
+    expect(
+      screen.queryByRole("button", { name: /^Agent Chat$/ }),
+    ).not.toBeInTheDocument();
+
+    act(() => {
+      workspaceBAvailability.resolve({
+        available: false,
+        engineId: "codex",
+        reason: "protocol-unsupported",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /^Agent Chat$/ }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -2377,6 +2755,7 @@ describe("App shell", () => {
       }),
       listSessions: vi.fn().mockResolvedValue([]),
       onEvent: vi.fn(() => vi.fn()),
+      releaseWorkspaceSubscriptions: vi.fn().mockResolvedValue(undefined),
       resumeSession: vi.fn(),
       saveAttachment: vi.fn(),
       sendMessage: vi.fn(),
@@ -2463,6 +2842,7 @@ describe("App shell", () => {
       }),
       listSessions: vi.fn().mockResolvedValue([]),
       onEvent: vi.fn(() => vi.fn()),
+      releaseWorkspaceSubscriptions: vi.fn().mockResolvedValue(undefined),
       resumeSession: vi.fn(),
       saveAttachment: vi.fn(),
       sendMessage: vi.fn(),

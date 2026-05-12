@@ -16,6 +16,7 @@ import type {
   AgentChatAttachment,
   AgentChatChangedFilesSummary,
   AgentChatContextManifest,
+  AgentChatDiagnostic,
   AgentChatEvent,
   AgentChatMessage,
   AgentChatSession,
@@ -146,9 +147,7 @@ const createSessionLabel = (
     return title;
   }
 
-  const suffix = session.nativeSessionId ?? session.sessionId;
-
-  return `${text('agentChat.session')} ${suffix.slice(-8)}`;
+  return text('agentChat.untitledSession');
 };
 
 const getChangeTypeLabelKey = (
@@ -163,6 +162,34 @@ const getChangeTypeLabelKey = (
   }
 
   return 'agentChat.changeTypeModified';
+};
+
+const getMessageRoleNameKey = (
+  role: AgentChatMessage['role'],
+): AppTextKey => {
+  if (role === 'user') {
+    return 'agentChat.userName';
+  }
+
+  if (role === 'system') {
+    return 'agentChat.systemName';
+  }
+
+  return 'agentChat.assistantName';
+};
+
+const getMessageRoleAvatarKey = (
+  role: AgentChatMessage['role'],
+): AppTextKey => {
+  if (role === 'user') {
+    return 'agentChat.userAvatar';
+  }
+
+  if (role === 'system') {
+    return 'agentChat.systemAvatar';
+  }
+
+  return 'agentChat.assistantAvatar';
 };
 
 export function AgentChatPanel({
@@ -191,6 +218,17 @@ export function AgentChatPanel({
   const showGenericDiagnostic = useCallback(() => {
     setDiagnosticMessage(text('agentChat.diagnostic'));
   }, [text]);
+  const showDiagnostic = useCallback(
+    (diagnostic?: Pick<AgentChatDiagnostic, 'code'>) => {
+      if (diagnostic?.code === 'turn-failed') {
+        setDiagnosticMessage(text('agentChat.turnFailed'));
+        return;
+      }
+
+      showGenericDiagnostic();
+    },
+    [showGenericDiagnostic, text],
+  );
 
   const activeSession = useMemo(
     () =>
@@ -211,6 +249,7 @@ export function AgentChatPanel({
     activeSessionId ? changedFilesBySession[activeSessionId] : undefined;
   const isActiveSessionSending =
     activeSessionId !== null && pendingSendSessionIds.has(activeSessionId);
+  const canStopActiveSession = Boolean(activeSession?.nativeSessionId);
 
   useEffect(() => {
     let isMounted = true;
@@ -245,6 +284,10 @@ export function AgentChatPanel({
   useEffect(
     () =>
       api.onEvent((event) => {
+        if ('session' in event && event.session.workspaceRoot !== workspaceRoot) {
+          return;
+        }
+
         if ('session' in event) {
           setSessions((currentSessions) =>
             upsertSession(currentSessions, event.session),
@@ -255,6 +298,9 @@ export function AgentChatPanel({
           setActiveSessionId((currentSessionId) =>
             currentSessionId ?? event.session.sessionId,
           );
+          if (event.type === 'session-failed') {
+            showDiagnostic(event.diagnostic);
+          }
           return;
         }
 
@@ -294,10 +340,19 @@ export function AgentChatPanel({
           ) {
             return;
           }
-          showGenericDiagnostic();
+          showDiagnostic(event.diagnostic);
         }
       }),
-    [api, showGenericDiagnostic],
+    [api, showDiagnostic, workspaceRoot],
+  );
+
+  useEffect(
+    () => () => {
+      void api
+        .releaseWorkspaceSubscriptions({ workspaceRoot })
+        .catch(() => undefined);
+    },
+    [api, workspaceRoot],
   );
 
   useEffect(() => {
@@ -417,6 +472,8 @@ export function AgentChatPanel({
 
     const session = await ensureActiveSession();
     const messageAttachments = attachments;
+    const submittedMessage = trimmedMessage;
+    const submittedAttachments = messageAttachments;
 
     setComposerValue('');
     setAttachments([]);
@@ -428,14 +485,20 @@ export function AgentChatPanel({
     try {
       await api.sendMessage({
         attachments: messageAttachments,
-        content: trimmedMessage,
+        content: submittedMessage,
         contextManifest,
         modelName: contextManifest.modelName,
         sessionId: session.sessionId,
         workspaceRoot,
       });
     } catch {
-      showGenericDiagnostic();
+      setComposerValue((currentValue) =>
+        currentValue.trim() ? currentValue : submittedMessage,
+      );
+      setAttachments((currentAttachments) =>
+        currentAttachments.length > 0 ? currentAttachments : submittedAttachments,
+      );
+      showDiagnostic({ code: 'turn-failed' });
     } finally {
       setPendingSendSessionIds((currentSessionIds) => {
         const nextSessionIds = new Set(currentSessionIds);
@@ -446,7 +509,7 @@ export function AgentChatPanel({
   };
 
   const stopSession = async (): Promise<void> => {
-    if (!activeSession) {
+    if (!activeSession?.nativeSessionId) {
       return;
     }
 
@@ -463,118 +526,146 @@ export function AgentChatPanel({
       data-component-id={COMPONENT_IDS.agentChat.panel}
     >
       <header className="agent-chat-header">
-        <div>
-          <h2>{text('agentChat.title')}</h2>
+        <div className="agent-chat-session-stack">
+          <select
+            aria-label={text('agentChat.session')}
+            className="agent-chat-session-picker"
+            data-component-id={COMPONENT_IDS.agentChat.sessionPicker}
+            id="agent-chat-session-picker"
+            onChange={(event) => {
+              setActiveSessionId(event.target.value || null);
+            }}
+            value={activeSessionId ?? ''}
+          >
+            {sessions.length === 0 ? (
+              <option value="">{text('agentChat.untitledSession')}</option>
+            ) : null}
+            {sessions.map((session) => (
+              <option key={session.sessionId} value={session.sessionId}>
+                {createSessionLabel(session, text)}
+              </option>
+            ))}
+          </select>
         </div>
-        <button
-          aria-label={text('agentChat.close')}
-          className="agent-chat-icon-button"
-          data-component-id={COMPONENT_IDS.agentChat.closeButton}
-          onClick={onClose}
-          title={text('agentChat.close')}
-          type="button"
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
+        <div className="agent-chat-session-controls">
+          <button
+            aria-label={text('agentChat.newSession')}
+            className="agent-chat-icon-button"
+            data-component-id={COMPONENT_IDS.agentChat.newSessionButton}
+            onClick={() => {
+              void createDraftSession();
+            }}
+            title={text('agentChat.newSession')}
+            type="button"
+          >
+            <Plus aria-hidden="true" size={16} />
+          </button>
+          <button
+            aria-label={text('agentChat.close')}
+            className="agent-chat-icon-button"
+            data-component-id={COMPONENT_IDS.agentChat.closeButton}
+            onClick={onClose}
+            title={text('agentChat.close')}
+            type="button"
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
       </header>
-
-      <div className="agent-chat-session-row">
-        <select
-          aria-label={text('agentChat.session')}
-          className="agent-chat-session-picker"
-          data-component-id={COMPONENT_IDS.agentChat.sessionPicker}
-          onChange={(event) => {
-            setActiveSessionId(event.target.value || null);
-          }}
-          value={activeSessionId ?? ''}
-        >
-          {sessions.length === 0 ? (
-            <option value="">{text('agentChat.session')}</option>
-          ) : null}
-          {sessions.map((session) => (
-            <option key={session.sessionId} value={session.sessionId}>
-              {createSessionLabel(session, text)}
-            </option>
-          ))}
-        </select>
-        <button
-          className="agent-chat-icon-button"
-          data-component-id={COMPONENT_IDS.agentChat.newSessionButton}
-          onClick={() => {
-            void createDraftSession();
-          }}
-          title={text('agentChat.newSession')}
-          type="button"
-        >
-          <Plus aria-hidden="true" size={16} />
-          <span>{text('agentChat.newSession')}</span>
-        </button>
-      </div>
-
-      <section
-        className="agent-chat-context-preview"
-        data-component-id={COMPONENT_IDS.agentChat.contextPreview}
-      >
-        <p>{text('agentChat.contextPreview')}</p>
-        {contextManifest.currentDocumentPath ? (
-          <strong>{contextManifest.currentDocumentPath}</strong>
-        ) : null}
-        <span>{text('agentChat.maxPermission')}</span>
-        {contextManifest.selectedText ? (
-          <blockquote>{contextManifest.selectedText}</blockquote>
-        ) : null}
-      </section>
 
       <section
         aria-live="polite"
-        className="agent-chat-message-list"
-        data-component-id={COMPONENT_IDS.agentChat.messageList}
+        className="agent-chat-body"
       >
-        {visibleMessages.length > 0 ? (
-          visibleMessages.map((message) => (
-            <article
-              className={`agent-chat-message is-${message.role}`}
-              data-component-id={COMPONENT_IDS.agentChat.messageItem}
-              key={message.messageId}
-            >
-              <p>{message.content}</p>
-            </article>
-          ))
-        ) : (
-          <p className="agent-chat-empty">{text('agentChat.noMessages')}</p>
-        )}
-      </section>
-
-      {changedFilesSummary?.available && changedFilesSummary.files.length > 0 ? (
-        <section
-          className="agent-chat-changed-files"
-          data-component-id={COMPONENT_IDS.agentChat.changedFiles}
+        <div
+          className="agent-chat-message-list"
+          data-component-id={COMPONENT_IDS.agentChat.messageList}
         >
-          <h3>{text('agentChat.changedFiles')}</h3>
-          <ul>
-            {changedFilesSummary.files.map((file) => (
-              <li
-                data-component-id={COMPONENT_IDS.agentChat.changedFileRow}
-                key={`${file.changeType}:${file.path}`}
+          {visibleMessages.length > 0 ? (
+            visibleMessages.map((message) => (
+              <article
+                className={`agent-chat-message is-${message.role}`}
+                data-component-id={COMPONENT_IDS.agentChat.messageItem}
+                key={message.messageId}
               >
-                <span>{text(getChangeTypeLabelKey(file.changeType))}</span>
-                <strong>{file.path}</strong>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                <span
+                  aria-hidden="true"
+                  className={`agent-chat-avatar is-${message.role}`}
+                >
+                  {text(getMessageRoleAvatarKey(message.role))}
+                </span>
+                <div className="agent-chat-bubble">
+                  <div className="agent-chat-bubble-head">
+                    <strong>{text(getMessageRoleNameKey(message.role))}</strong>
+                  </div>
+                  <div className="agent-chat-bubble-content">
+                    <p>{message.content}</p>
+                  </div>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="agent-chat-empty">{text('agentChat.noMessages')}</p>
+          )}
+          {isActiveSessionSending ? (
+            <article className="agent-chat-message is-assistant is-streaming">
+              <span aria-hidden="true" className="agent-chat-avatar is-assistant">
+                {text('agentChat.assistantAvatar')}
+              </span>
+              <div className="agent-chat-bubble">
+                <div className="agent-chat-bubble-head">
+                  <strong>{text('agentChat.assistantName')}</strong>
+                </div>
+                <div className="agent-chat-bubble-content is-stream">
+                  <p
+                    className="agent-chat-thinking"
+                    data-component-id={COMPONENT_IDS.agentChat.thinkingStatus}
+                    role="status"
+                  >
+                    <LoaderCircle aria-hidden="true" size={14} />
+                    <span>{text('agentChat.thinking')}</span>
+                  </p>
+                </div>
+              </div>
+            </article>
+          ) : null}
+        </div>
 
-      {isActiveSessionSending ? (
-        <p
-          className="agent-chat-thinking"
-          data-component-id={COMPONENT_IDS.agentChat.thinkingStatus}
-          role="status"
-        >
-          <LoaderCircle aria-hidden="true" size={14} />
-          <span>{text('agentChat.thinking')}</span>
-        </p>
-      ) : null}
+        {changedFilesSummary?.available &&
+        changedFilesSummary.files.length > 0 ? (
+          <section
+            className="agent-chat-changed-files"
+            data-component-id={COMPONENT_IDS.agentChat.changedFiles}
+          >
+            <header>
+              <h3>{text('agentChat.changedFiles')}</h3>
+            </header>
+            <ul>
+              {changedFilesSummary.files.map((file) => (
+                <li
+                  data-component-id={COMPONENT_IDS.agentChat.changedFileRow}
+                  key={`${file.changeType}:${file.path}`}
+                >
+                  <span>{text(getChangeTypeLabelKey(file.changeType))}</span>
+                  <strong>{file.path}</strong>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : changedFilesSummary?.available === false ? (
+          <section
+            className="agent-chat-changed-files"
+            data-component-id={COMPONENT_IDS.agentChat.changedFiles}
+          >
+            <header>
+              <h3>{text('agentChat.changedFiles')}</h3>
+            </header>
+            <p className="agent-chat-changed-files-note">
+              {text('agentChat.changedFilesUnavailable')}
+            </p>
+          </section>
+        ) : null}
+      </section>
 
       {diagnosticMessage ? (
         <p className="agent-chat-diagnostic" role="alert">
@@ -589,91 +680,140 @@ export function AgentChatPanel({
           void sendMessage(event);
         }}
       >
-        {attachments.length > 0 ? (
-          <div className="agent-chat-attachments">
-            {attachments.map((attachment) => (
-              <span
-                className="agent-chat-attachment-chip"
-                data-component-id={COMPONENT_IDS.agentChat.attachmentChip}
-                key={attachment.attachmentId}
-              >
-                {attachment.fileName}
-                <button
-                  aria-label={text('agentChat.removeAttachment', {
-                    fileName: attachment.fileName,
-                  })}
-                  data-component-id={COMPONENT_IDS.agentChat.attachmentRemoveButton}
-                  onClick={() => {
-                    setAttachments((currentAttachments) =>
-                      currentAttachments.filter(
-                        (item) =>
-                          item.attachmentId !== attachment.attachmentId,
-                      ),
-                    );
-                  }}
-                  type="button"
-                >
-                  <X aria-hidden="true" size={13} />
-                </button>
-              </span>
-            ))}
+        <details
+          className="agent-chat-context-preview"
+          data-component-id={COMPONENT_IDS.agentChat.contextPreview}
+        >
+          <summary>
+            <span>{text('agentChat.contextAndPermission')}</span>
+            <span>{text('agentChat.contextSummary')}</span>
+          </summary>
+          <div className="agent-chat-context-grid">
+            <div className="agent-chat-context-item">
+              <span>{text('agentChat.workspace')}</span>
+              <strong>{contextManifest.workspaceRoot}</strong>
+            </div>
+            <div className="agent-chat-context-item">
+              <span>{text('agentChat.document')}</span>
+              <strong>
+                {contextManifest.currentDocumentPath ??
+                  text('agentChat.noDocument')}
+              </strong>
+            </div>
+            <div className="agent-chat-context-item">
+              <span>{text('agentChat.selection')}</span>
+              <strong>
+                {contextManifest.selectedText || text('agentChat.noSelection')}
+              </strong>
+            </div>
+            <div className="agent-chat-context-item">
+              <span>{text('agentChat.permission')}</span>
+              <strong>{text('agentChat.maxPermission')}</strong>
+            </div>
           </div>
-        ) : null}
-        <textarea
-          aria-label={text('agentChat.messageField')}
-          data-component-id={COMPONENT_IDS.agentChat.messageField}
-          onChange={(event) => {
-            setComposerValue(event.target.value);
-          }}
-          onPaste={pasteImages}
-          placeholder={text('agentChat.composerPlaceholder')}
-          rows={3}
-          value={composerValue}
-        />
-        <div className="agent-chat-composer-actions">
-          <button
-            aria-label={text('agentChat.attachImage')}
-            className="agent-chat-icon-button"
-            data-component-id={COMPONENT_IDS.agentChat.attachImageButton}
-            onClick={() => {
-              fileInputRef.current?.click();
+        </details>
+        <div
+          className="agent-chat-message-box"
+          data-component-id={COMPONENT_IDS.agentChat.messageBox}
+        >
+          {attachments.length > 0 ? (
+            <div className="agent-chat-attachments">
+              {attachments.map((attachment) => (
+                <div
+                  className="agent-chat-attachment-chip"
+                  data-component-id={COMPONENT_IDS.agentChat.attachmentChip}
+                  key={attachment.attachmentId}
+                >
+                  <span className="agent-chat-attachment-meta">
+                    <span aria-hidden="true" className="agent-chat-attachment-mini" />
+                    <span>
+                      <strong>{attachment.fileName}</strong>
+                      <span>{attachment.mimeType}</span>
+                    </span>
+                  </span>
+                  <button
+                    aria-label={text('agentChat.removeAttachment', {
+                      fileName: attachment.fileName,
+                    })}
+                    data-component-id={COMPONENT_IDS.agentChat.attachmentRemoveButton}
+                    onClick={() => {
+                      setAttachments((currentAttachments) =>
+                        currentAttachments.filter(
+                          (item) =>
+                            item.attachmentId !== attachment.attachmentId,
+                        ),
+                      );
+                    }}
+                    type="button"
+                  >
+                    <X aria-hidden="true" size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <textarea
+            aria-label={text('agentChat.messageField')}
+            data-component-id={COMPONENT_IDS.agentChat.messageField}
+            onChange={(event) => {
+              setComposerValue(event.target.value);
             }}
-            title={text('agentChat.attachImage')}
-            type="button"
-          >
-            <ImagePlus aria-hidden="true" size={16} />
-            <span>{text('agentChat.attachImage')}</span>
-          </button>
-          <input
-            accept="image/*"
-            className="agent-chat-hidden-input"
-            multiple
-            onChange={attachSelectedImages}
-            ref={fileInputRef}
-            type="file"
+            onPaste={pasteImages}
+            placeholder={text('agentChat.composerPlaceholder')}
+            rows={3}
+            value={composerValue}
           />
-          <button
-            className="agent-chat-icon-button"
-            data-component-id={COMPONENT_IDS.agentChat.stopButton}
-            disabled={!activeSession || !isActiveSessionSending}
-            onClick={() => {
-              void stopSession();
-            }}
-            title={text('agentChat.stop')}
-            type="button"
-          >
-            <Square aria-hidden="true" size={14} />
-            <span>{text('agentChat.stop')}</span>
-          </button>
-          <button
-            className="agent-chat-send-button"
-            data-component-id={COMPONENT_IDS.agentChat.sendButton}
-            disabled={isActiveSessionSending}
-            type="submit"
-          >
-            <Send aria-hidden="true" size={15} />
-            <span>{text('agentChat.send')}</span>
-          </button>
+          <div className="agent-chat-message-box-actions">
+            <button
+              aria-label={text('agentChat.attachImage')}
+              className="agent-chat-icon-button"
+              data-component-id={COMPONENT_IDS.agentChat.attachImageButton}
+              onClick={() => {
+                fileInputRef.current?.click();
+              }}
+              title={text('agentChat.attachImage')}
+              type="button"
+            >
+              <ImagePlus aria-hidden="true" size={16} />
+            </button>
+            <input
+              accept="image/*"
+              className="agent-chat-hidden-input"
+              multiple
+              onChange={attachSelectedImages}
+              ref={fileInputRef}
+              type="file"
+            />
+            <button
+              className="agent-chat-send-button"
+              data-component-id={COMPONENT_IDS.agentChat.sendButton}
+              disabled={isActiveSessionSending && !canStopActiveSession}
+              onClick={
+                isActiveSessionSending && canStopActiveSession
+                  ? () => {
+                      void stopSession();
+                    }
+                  : undefined
+              }
+              title={
+                isActiveSessionSending
+                  ? text('agentChat.stop')
+                  : text('agentChat.send')
+              }
+              type={isActiveSessionSending ? 'button' : 'submit'}
+            >
+              {isActiveSessionSending ? (
+                <Square aria-hidden="true" size={14} />
+              ) : (
+                <Send aria-hidden="true" size={15} />
+              )}
+              <span>
+                {isActiveSessionSending
+                  ? text('agentChat.stop')
+                  : text('agentChat.send')}
+              </span>
+            </button>
+          </div>
         </div>
       </form>
     </aside>

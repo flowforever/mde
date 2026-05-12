@@ -5,10 +5,12 @@ export type {
   AgentChatChangedFilesSummary,
   AgentChatContextManifest,
   AgentChatCreateDraftSessionRequest,
+  AgentChatDiagnostic,
   AgentChatEngineId,
   AgentChatEvent,
   AgentChatListSessionsRequest,
   AgentChatMessage,
+  AgentChatReleaseWorkspaceSubscriptionsRequest,
   AgentChatResumeSessionRequest,
   AgentChatSaveAttachmentRequest,
   AgentChatSendMessageRequest,
@@ -23,6 +25,7 @@ import type {
   AgentChatCreateDraftSessionRequest,
   AgentChatEvent,
   AgentChatListSessionsRequest,
+  AgentChatReleaseWorkspaceSubscriptionsRequest,
   AgentChatResumeSessionRequest,
   AgentChatSaveAttachmentRequest,
   AgentChatSendMessageRequest,
@@ -41,6 +44,9 @@ export interface AgentChatApi {
     request: AgentChatListSessionsRequest
   ) => Promise<readonly AgentChatSession[]>
   readonly onEvent: (listener: (event: AgentChatEvent) => void) => () => void
+  readonly releaseWorkspaceSubscriptions: (
+    request: AgentChatReleaseWorkspaceSubscriptionsRequest
+  ) => Promise<void>
   readonly resumeSession: (
     request: AgentChatResumeSessionRequest
   ) => Promise<AgentChatSession>

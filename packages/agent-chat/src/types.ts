@@ -141,6 +141,7 @@ export interface AgentChatNativeSession {
 }
 
 export interface AgentChatWorkspaceFileSnapshot {
+  readonly changeType?: 'added' | 'deleted' | 'modified'
   readonly hash: string
   readonly path: string
 }
@@ -280,6 +281,10 @@ export interface AgentChatCreateDraftSessionRequest {
 
 export interface AgentChatListSessionsRequest {
   readonly selectedEngineId: AgentChatEngineId
+  readonly workspaceRoot: string
+}
+
+export interface AgentChatReleaseWorkspaceSubscriptionsRequest {
   readonly workspaceRoot: string
 }
 

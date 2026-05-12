@@ -72,6 +72,16 @@ const normalizeOptionalText = (value?: string): string | undefined => {
   return normalized
 }
 
+const createSessionTitleFromMessage = (content: string): string | undefined => {
+  const normalized = content.trim().replace(/\s+/g, ' ')
+
+  if (!normalized) {
+    return undefined
+  }
+
+  return normalized.length > 64 ? `${normalized.slice(0, 61)}...` : normalized
+}
+
 const getSession = (
   state: AgentChatState,
   sessionId: string,
@@ -523,9 +533,12 @@ export const createAgentChatRuntime = (
         type: 'message-created'
       })
 
+      const nextSessionTitle =
+        session.title ?? createSessionTitleFromMessage(request.content)
       const startingSession = updateSession({
         ...session,
         state: 'native-starting',
+        ...(nextSessionTitle ? { title: nextSessionTitle } : {}),
         updatedAt: options.now()
       })
 

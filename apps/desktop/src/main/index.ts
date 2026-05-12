@@ -1,8 +1,6 @@
 import { execFile as nodeExecFile, spawn as nodeSpawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import {
   mkdir,
-  readdir,
   readFile,
   realpath,
   rm,
@@ -69,10 +67,9 @@ import {
   type AgentChatFileStore,
   type AgentChatMetadataStorage,
   type AgentChatProcessRunner,
-  type AgentChatSessionBinding,
-  type AgentChatWorkspaceFileSnapshot,
-  type AgentChatWorkspaceSnapshotProvider
+  type AgentChatSessionBinding
 } from '@mde/agent-chat'
+import { createWorkspaceSnapshotProvider } from './services/agentChatWorkspaceSnapshot'
 
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
@@ -275,79 +272,6 @@ const createWorkspaceMetadataStorage = (): AgentChatMetadataStorage => {
     }
   }
 }
-
-const hashWorkspaceFile = async (
-  workspaceRoot: string,
-  relativePath: string
-): Promise<AgentChatWorkspaceFileSnapshot | undefined> => {
-  try {
-    const bytes = await readFile(join(workspaceRoot, relativePath))
-    return {
-      hash: createHash('sha256').update(bytes).digest('hex'),
-      path: relativePath
-    }
-  } catch {
-    return undefined
-  }
-}
-
-const scanWorkspaceFiles = async (
-  workspaceRoot: string,
-  currentDirectory = workspaceRoot
-): Promise<readonly string[]> => {
-  const ignoredNames = new Set(['.git', '.mde', 'coverage', 'node_modules', 'out'])
-  const entries = await readdir(currentDirectory, { withFileTypes: true })
-  const paths = await Promise.all(
-    entries.flatMap(async (entry) => {
-      if (ignoredNames.has(entry.name)) {
-        return []
-      }
-      const absolutePath = join(currentDirectory, entry.name)
-      const relativePath = absolutePath.slice(workspaceRoot.length + 1)
-      if (entry.isDirectory()) {
-        return scanWorkspaceFiles(workspaceRoot, absolutePath)
-      }
-      if (entry.isFile()) {
-        return [relativePath]
-      }
-      return []
-    })
-  )
-
-  return paths.flat()
-}
-
-const createWorkspaceSnapshotProvider = (
-  processRunner: AgentChatProcessRunner
-): AgentChatWorkspaceSnapshotProvider => ({
-  captureSnapshot: async (workspaceRoot) => {
-    let relativePaths: readonly string[]
-    try {
-      const result = await processRunner.execFile(
-        'git',
-        ['-C', workspaceRoot, 'ls-files', '-co', '--exclude-standard'],
-        { timeoutMs: 10_000 }
-      )
-      relativePaths = result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-    } catch {
-      relativePaths = await scanWorkspaceFiles(workspaceRoot)
-    }
-
-    const snapshots = await Promise.all(
-      relativePaths.map((relativePath) =>
-        hashWorkspaceFile(workspaceRoot, relativePath)
-      )
-    )
-
-    return snapshots.filter(
-      (snapshot): snapshot is AgentChatWorkspaceFileSnapshot =>
-        snapshot !== undefined
-    )
-  }
-})
 
 const getStartupDiagnostics = (): StartupDiagnostics | undefined => {
   if (process.env[CAPTURE_STARTUP_DIAGNOSTICS_ENV] !== '1') {

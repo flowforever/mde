@@ -338,6 +338,9 @@ const clipboardTextContainsPath = (
 const EXPLORER_WIDTH_DEFAULT = 288;
 const EXPLORER_WIDTH_MIN = 220;
 const EXPLORER_WIDTH_MAX = 440;
+const AGENT_CHAT_PANEL_WIDTH_DEFAULT = 420;
+const AGENT_CHAT_PANEL_WIDTH_MIN = 380;
+const AGENT_CHAT_PANEL_WIDTH_MAX = 560;
 const AUTO_SAVE_IDLE_DELAY_MS = 5000;
 export const EXTERNAL_FILE_SYNC_INTERVAL_MS = 5000;
 const SYSTEM_DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
@@ -358,6 +361,11 @@ interface ScopedAiErrorMessage {
   readonly message: string;
 }
 
+interface ScopedAgentChatAvailability {
+  readonly key: string;
+  readonly response: AgentChatAvailabilityResponse;
+}
+
 interface EditorSearchState {
   readonly activeMatchIndex: number;
   readonly matchCount: number;
@@ -371,6 +379,21 @@ interface ExplorerCopiedEntry {
 
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)));
+
+const clampAgentChatPanelWidth = (width: number): number =>
+  Math.min(
+    AGENT_CHAT_PANEL_WIDTH_MAX,
+    Math.max(AGENT_CHAT_PANEL_WIDTH_MIN, Math.round(width)),
+  );
+
+const createAgentChatAvailabilityKey = (input: {
+  readonly modelName?: string;
+  readonly selectedEngineId: AgentChatEngineId;
+  readonly workspaceRoot: string;
+}): string =>
+  [input.workspaceRoot, input.selectedEngineId, input.modelName ?? ""].join(
+    "\u0000",
+  );
 
 const removeAiDocumentEntry = <Value,>(
   entries: Readonly<Record<string, Value>>,
@@ -455,6 +478,7 @@ export const App = (): React.JSX.Element => {
     readSystemThemeFamily,
   );
   const [isResizingExplorer, setIsResizingExplorer] = useState(false);
+  const [isResizingAgentChat, setIsResizingAgentChat] = useState(false);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [hasResolvedInitialLaunchPath, setHasResolvedInitialLaunchPath] =
     useState(() => !window.editorApi);
@@ -480,10 +504,13 @@ export const App = (): React.JSX.Element => {
     null,
   );
   const [agentChatAvailability, setAgentChatAvailability] =
-    useState<AgentChatAvailabilityResponse | null>(null);
+    useState<ScopedAgentChatAvailability | null>(null);
   const [agentChatContextManifest, setAgentChatContextManifest] =
     useState<AgentChatContextManifest | null>(null);
   const [isAgentChatPanelOpen, setIsAgentChatPanelOpen] = useState(false);
+  const [agentChatPanelWidth, setAgentChatPanelWidth] = useState(
+    AGENT_CHAT_PANEL_WIDTH_DEFAULT,
+  );
   const [aiErrorMessage, setAiErrorMessage] =
     useState<ScopedAiErrorMessage | null>(null);
   const [aiBusyStatesByDocument, setAiBusyStatesByDocument] = useState<
@@ -937,6 +964,19 @@ export const App = (): React.JSX.Element => {
     [],
   );
 
+  const updateAgentChatPanelWidthFromPointer = useCallback(
+    (clientX: number): void => {
+      const shellBounds = appShellRef.current?.getBoundingClientRect();
+      const shellRight =
+        shellBounds && shellBounds.width > 0
+          ? shellBounds.right
+          : globalThis.innerWidth;
+
+      setAgentChatPanelWidth(clampAgentChatPanelWidth(shellRight - clientX));
+    },
+    [],
+  );
+
   useEffect(() => {
     document.title = getWindowTitle(state.workspace, state.loadedFile?.path);
   }, [state.loadedFile?.path, state.workspace]);
@@ -1091,6 +1131,31 @@ export const App = (): React.JSX.Element => {
       window.removeEventListener("pointercancel", stopResizing);
     };
   }, [isResizingExplorer, updateExplorerWidthFromPointer]);
+
+  useEffect(() => {
+    if (!isResizingAgentChat) {
+      return;
+    }
+
+    const updateWidth = (event: PointerEvent): void => {
+      updateAgentChatPanelWidthFromPointer(event.clientX);
+    };
+    const stopResizing = (): void => {
+      setIsResizingAgentChat(false);
+    };
+
+    document.body.classList.add("is-resizing-agent-chat");
+    window.addEventListener("pointermove", updateWidth);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+
+    return () => {
+      document.body.classList.remove("is-resizing-agent-chat");
+      window.removeEventListener("pointermove", updateWidth);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+  }, [isResizingAgentChat, updateAgentChatPanelWidthFromPointer]);
 
   const openWorkspace = async (): Promise<void> => {
     dispatch({ type: "workspace/open-started" });
@@ -2401,6 +2466,14 @@ export const App = (): React.JSX.Element => {
     setIsResizingExplorer(true);
   };
 
+  const beginAgentChatResize = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    event.preventDefault();
+    updateAgentChatPanelWidthFromPointer(event.clientX);
+    setIsResizingAgentChat(true);
+  };
+
   const clearDropTarget = useCallback((): void => {
     dropTargetDepthRef.current = 0;
     setIsDropTargetActive(false);
@@ -2510,6 +2583,28 @@ export const App = (): React.JSX.Element => {
     }
   };
 
+  const resizeAgentChatPanelFromKeyboard = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ): void => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setAgentChatPanelWidth((currentWidth) =>
+        clampAgentChatPanelWidth(currentWidth + 16),
+      );
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setAgentChatPanelWidth((currentWidth) =>
+        clampAgentChatPanelWidth(currentWidth - 16),
+      );
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setAgentChatPanelWidth(AGENT_CHAT_PANEL_WIDTH_MIN);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setAgentChatPanelWidth(AGENT_CHAT_PANEL_WIDTH_MAX);
+    }
+  };
+
   const checkForUpdatesFromSettings =
     useCallback(async (): Promise<UpdateCheckResult> => {
       const updateApi = window.updateApi;
@@ -2612,7 +2707,9 @@ export const App = (): React.JSX.Element => {
     setUpdateStatus(null);
   };
 
-  const appShellStyle: CSSProperties & Record<"--explorer-width", string> = {
+  const appShellStyle: CSSProperties &
+    Record<"--agent-chat-width" | "--explorer-width", string> = {
+    "--agent-chat-width": `${agentChatPanelWidth}px`,
     "--explorer-width": `${explorerWidth}px`,
   };
   const isEditorFullWidth = editorViewMode === "full-width";
@@ -2653,9 +2750,21 @@ export const App = (): React.JSX.Element => {
   const hasAgentChatPrerequisites = Boolean(
     window.agentChatApi && state.loadedFile && state.workspace && agentChatEngineId,
   );
-  const activeAgentChatAvailability = hasAgentChatPrerequisites
-    ? agentChatAvailability
-    : null;
+  const agentChatAvailabilityKey =
+    hasAgentChatPrerequisites && state.workspace && agentChatEngineId
+      ? createAgentChatAvailabilityKey({
+          ...(normalizedAgentChatModelName
+            ? { modelName: normalizedAgentChatModelName }
+            : {}),
+          selectedEngineId: agentChatEngineId,
+          workspaceRoot: state.workspace.rootPath,
+        })
+      : null;
+  const activeAgentChatAvailability =
+    agentChatAvailabilityKey &&
+    agentChatAvailability?.key === agentChatAvailabilityKey
+      ? agentChatAvailability.response
+      : null;
   const shouldShowAgentChatAction =
     shouldShowAgentChatEntry(activeAgentChatAvailability) &&
     Boolean(window.agentChatApi && state.loadedFile && state.workspace);
@@ -2692,6 +2801,9 @@ export const App = (): React.JSX.Element => {
   const editorWorkspaceTreeRef = useRef<readonly TreeNode[]>(
     state.workspace?.tree ?? [],
   );
+  const editorLoadedFilePathRef = useRef<string | null>(
+    state.loadedFile?.path ?? null,
+  );
   const editorDraftMarkdownRef = useRef(state.draftMarkdown);
   const editorLoadedFileContentsRef = useRef(state.loadedFile?.contents);
   const saveCurrentFileRef = useRef(saveCurrentFile);
@@ -2704,7 +2816,8 @@ export const App = (): React.JSX.Element => {
   useEffect(() => {
     editorDraftMarkdownRef.current = state.draftMarkdown;
     editorLoadedFileContentsRef.current = state.loadedFile?.contents;
-  }, [state.draftMarkdown, state.loadedFile?.contents]);
+    editorLoadedFilePathRef.current = state.loadedFile?.path ?? null;
+  }, [state.draftMarkdown, state.loadedFile?.contents, state.loadedFile?.path]);
 
   useEffect(() => {
     saveCurrentFileRef.current = saveCurrentFile;
@@ -2726,6 +2839,7 @@ export const App = (): React.JSX.Element => {
       selectedEngineId: agentChatEngineId,
       workspaceRoot,
     };
+    const availabilityKey = createAgentChatAvailabilityKey(availabilityRequest);
 
     void agentChatApi
       .getAvailability(availabilityRequest)
@@ -2734,14 +2848,21 @@ export const App = (): React.JSX.Element => {
           return;
         }
 
-        setAgentChatAvailability(availability);
+        setAgentChatAvailability({
+          key: availabilityKey,
+          response: availability,
+        });
         if (!shouldShowAgentChatEntry(availability)) {
           setIsAgentChatPanelOpen(false);
         }
       })
       .catch(() => {
         if (!isCancelled) {
-          setAgentChatAvailability(null);
+          setAgentChatAvailability((currentAvailability) =>
+            currentAvailability?.key === availabilityKey
+              ? null
+              : currentAvailability,
+          );
           setIsAgentChatPanelOpen(false);
         }
       });
@@ -2790,17 +2911,26 @@ export const App = (): React.JSX.Element => {
       state.loadedFile,
       state.workspace?.rootPath,
     ]);
+  const isCurrentAgentChatContextManifest = useCallback(
+    (contextManifest: AgentChatContextManifest): boolean =>
+      contextManifest.workspaceRoot === editorWorkspaceRootRef.current &&
+      contextManifest.currentDocumentPath === editorLoadedFilePathRef.current,
+    [],
+  );
 
   const openAgentChatPanel = useCallback(async (): Promise<void> => {
     const contextManifest = await createAgentChatContextManifest();
 
-    if (!contextManifest) {
+    if (
+      !contextManifest ||
+      !isCurrentAgentChatContextManifest(contextManifest)
+    ) {
       return;
     }
 
     setAgentChatContextManifest(contextManifest);
     setIsAgentChatPanelOpen(true);
-  }, [createAgentChatContextManifest]);
+  }, [createAgentChatContextManifest, isCurrentAgentChatContextManifest]);
 
   useEffect(() => {
     if (!isAgentChatPanelOpen) {
@@ -2810,7 +2940,11 @@ export const App = (): React.JSX.Element => {
     let isCancelled = false;
     const refreshAgentChatContextManifest = (): void => {
       void createAgentChatContextManifest().then((contextManifest) => {
-        if (!isCancelled && contextManifest) {
+        if (
+          !isCancelled &&
+          contextManifest &&
+          isCurrentAgentChatContextManifest(contextManifest)
+        ) {
           setAgentChatContextManifest(contextManifest);
         }
       });
@@ -2829,7 +2963,11 @@ export const App = (): React.JSX.Element => {
         refreshAgentChatContextManifest,
       );
     };
-  }, [createAgentChatContextManifest, isAgentChatPanelOpen]);
+  }, [
+    createAgentChatContextManifest,
+    isAgentChatPanelOpen,
+    isCurrentAgentChatContextManifest,
+  ]);
 
   const createCurrentDesktopEditorHost = useCallback(
     () =>
@@ -3497,13 +3635,27 @@ export const App = (): React.JSX.Element => {
     historyVersions,
     historyFilterId,
   );
+  const activeAgentChatContextManifest =
+    state.workspace &&
+    agentChatContextManifest?.workspaceRoot === state.workspace.rootPath
+      ? agentChatContextManifest
+      : null;
+  const shouldRenderAgentChatPanel = Boolean(
+    isAgentChatPanelOpen &&
+      shouldShowAgentChatAction &&
+      activeAgentChatContextManifest &&
+      window.agentChatApi &&
+      state.workspace,
+  );
 
   return (
     <main
       className={[
         "app-shell",
         isExplorerCollapsed ? "is-explorer-collapsed" : "",
+        shouldRenderAgentChatPanel ? "is-agent-chat-open" : "",
         isResizingExplorer ? "is-resizing-explorer" : "",
+        isResizingAgentChat ? "is-resizing-agent-chat" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -3653,9 +3805,6 @@ export const App = (): React.JSX.Element => {
           "editor-pane",
           isEditorFullWidth ? "is-editor-full-width" : "",
           currentAiResult ? "is-ai-result-active" : "",
-          isAgentChatPanelOpen && shouldShowAgentChatAction
-            ? "is-agent-chat-open"
-            : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -3806,21 +3955,6 @@ export const App = (): React.JSX.Element => {
               </div>
             )}
           </div>
-          {isAgentChatPanelOpen &&
-          shouldShowAgentChatAction &&
-          agentChatContextManifest &&
-          window.agentChatApi &&
-          state.workspace ? (
-            <AgentChatPanel
-              api={window.agentChatApi}
-              contextManifest={agentChatContextManifest}
-              onClose={() => {
-                setIsAgentChatPanelOpen(false);
-              }}
-              text={text}
-              workspaceRoot={state.workspace.rootPath}
-            />
-          ) : null}
         </div>
         {state.isDocumentHistoryPanelVisible ? (
           <aside
@@ -3899,6 +4033,36 @@ export const App = (): React.JSX.Element => {
           </aside>
         ) : null}
       </section>
+      {shouldRenderAgentChatPanel ? (
+        <div
+          aria-label={text("agentChat.resizePanel")}
+          aria-orientation="vertical"
+          aria-valuemax={AGENT_CHAT_PANEL_WIDTH_MAX}
+          aria-valuemin={AGENT_CHAT_PANEL_WIDTH_MIN}
+          aria-valuenow={agentChatPanelWidth}
+          className="agent-chat-resize-handle"
+          data-component-id={COMPONENT_IDS.agentChat.resizeHandle}
+          onKeyDown={resizeAgentChatPanelFromKeyboard}
+          onPointerDown={beginAgentChatResize}
+          role="separator"
+          tabIndex={0}
+        />
+      ) : null}
+      {shouldRenderAgentChatPanel &&
+      activeAgentChatContextManifest &&
+      window.agentChatApi &&
+      state.workspace ? (
+        <AgentChatPanel
+          api={window.agentChatApi}
+          contextManifest={activeAgentChatContextManifest}
+          key={state.workspace.rootPath}
+          onClose={() => {
+            setIsAgentChatPanelOpen(false);
+          }}
+          text={text}
+          workspaceRoot={state.workspace.rootPath}
+        />
+      ) : null}
       {availableUpdate && updateStatus && !isUpdateDismissed ? (
         <UpdateDialog
           errorMessage={updateErrorMessage}

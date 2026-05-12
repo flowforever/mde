@@ -27,6 +27,21 @@ export interface CaptureChangedFilesAroundTurnResult<T> {
 const describeError = (error: unknown): string | undefined =>
   error instanceof Error ? error.message : undefined
 
+const getFallbackChangeType = (
+  snapshot: AgentChatWorkspaceFileSnapshot | undefined,
+  fallback: AgentChatChangedFile['changeType']
+): AgentChatChangedFile['changeType'] => snapshot?.changeType ?? fallback
+
+const getDisappearedPathChangeType = (
+  snapshot: AgentChatWorkspaceFileSnapshot | undefined
+): AgentChatChangedFile['changeType'] => {
+  if (!snapshot?.changeType) {
+    return 'deleted'
+  }
+
+  return snapshot.changeType === 'added' ? 'deleted' : 'modified'
+}
+
 export const summarizeChangedFiles = (
   input: SummarizeChangedFilesInput
 ): AgentChatChangedFilesSummary => {
@@ -44,24 +59,33 @@ export const summarizeChangedFiles = (
   }
 
   const before = new Map(
-    (input.before ?? []).map((snapshot) => [snapshot.path, snapshot.hash] as const)
+    (input.before ?? []).map((snapshot) => [snapshot.path, snapshot] as const)
   )
   const after = new Map(
-    (input.after ?? []).map((snapshot) => [snapshot.path, snapshot.hash] as const)
+    (input.after ?? []).map((snapshot) => [snapshot.path, snapshot] as const)
   )
   const paths = [...new Set([...before.keys(), ...after.keys()])].sort()
   const files: readonly AgentChatChangedFile[] = Object.freeze(
     paths.flatMap<AgentChatChangedFile>((path) => {
-      const beforeHash = before.get(path)
-      const afterHash = after.get(path)
+      const beforeSnapshot = before.get(path)
+      const afterSnapshot = after.get(path)
+      const beforeHash = beforeSnapshot?.hash
+      const afterHash = afterSnapshot?.hash
       if (beforeHash === undefined && afterHash !== undefined) {
-        return [{ changeType: 'added', path }]
+        return [{ changeType: getFallbackChangeType(afterSnapshot, 'added'), path }]
       }
       if (beforeHash !== undefined && afterHash === undefined) {
-        return [{ changeType: 'deleted', path }]
+        return [{ changeType: getDisappearedPathChangeType(beforeSnapshot), path }]
       }
       if (beforeHash !== afterHash) {
-        return [{ changeType: 'modified', path }]
+        return [
+          {
+            changeType:
+              afterSnapshot?.changeType ??
+              getFallbackChangeType(beforeSnapshot, 'modified'),
+            path
+          }
+        ]
       }
       return []
     })

@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AgentChatPanel } from '../../src/renderer/src/agentChat/AgentChatPanel'
+import { COMPONENT_IDS } from '../../src/renderer/src/componentIds'
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText
@@ -56,6 +57,9 @@ const createAgentChatApi = () => {
 
       return vi.fn()
     }),
+    releaseWorkspaceSubscriptions: vi.fn<
+      AgentChatApi['releaseWorkspaceSubscriptions']
+    >(() => Promise.resolve()),
     resumeSession: vi.fn<AgentChatApi['resumeSession']>(() =>
       Promise.resolve(session)
     ),
@@ -79,7 +83,7 @@ const createAgentChatApi = () => {
   }
 }
 
-const renderPanel = (api: AgentChatApi): void => {
+const renderPanel = (api: AgentChatApi): ReturnType<typeof render> =>
   render(
     <AgentChatPanel
       api={api}
@@ -89,7 +93,6 @@ const renderPanel = (api: AgentChatApi): void => {
       workspaceRoot="/workspace"
     />
   )
-}
 
 afterEach(() => {
   cleanup()
@@ -104,7 +107,58 @@ describe('AgentChatPanel', () => {
     expect(await screen.findByRole('button', { name: 'New session' })).toBeInTheDocument()
     expect(screen.getByText('Max permission')).toBeInTheDocument()
     expect(screen.getByText('docs/example.md')).toBeInTheDocument()
+    expect(screen.queryByText('Session')).not.toBeInTheDocument()
+    expect(screen.queryByText('Codex sustained chat')).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: /engine/i })).not.toBeInTheDocument()
+  })
+
+  it('matches the shared chat prototype structure with bottom composer context', async () => {
+    const { api } = createAgentChatApi()
+    const { container } = renderPanel(api)
+
+    await screen.findByRole('button', { name: 'New session' })
+
+    const panel = screen.getByRole('complementary', { name: 'Agent Chat' })
+    const body = container.querySelector<HTMLElement>('.agent-chat-body')
+    const composer = container.querySelector<HTMLElement>(
+      `[data-component-id="${COMPONENT_IDS.agentChat.composer}"]`
+    )
+    const contextDetails = screen
+      .getByText('Context & permission')
+      .closest<HTMLDetailsElement>('details')
+    const messageList = container.querySelector<HTMLElement>(
+      `[data-component-id="${COMPONENT_IDS.agentChat.messageList}"]`
+    )
+    const messageField = screen.getByLabelText('Message Agent Chat')
+    const messageBox = container.querySelector<HTMLElement>('.agent-chat-message-box')
+    const attachButton = screen.getByRole('button', { name: 'Attach image' })
+    const sendButton = screen.getByRole('button', { name: 'Send' })
+
+    expect(panel).toHaveClass('agent-chat-panel')
+    expect(body).toContainElement(messageList)
+    expect(composer).toContainElement(contextDetails)
+    expect(messageBox).toContainElement(messageField)
+    expect(messageBox).toContainElement(attachButton)
+    expect(messageBox).toContainElement(sendButton)
+    expect(contextDetails).toContainElement(screen.getByText('docs/example.md'))
+    expect(contextDetails).toContainElement(screen.getByText('Selected body'))
+    expect(contextDetails?.compareDocumentPosition(messageField)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+  })
+
+  it('releases workspace subscriptions when the panel unmounts', async () => {
+    const { api } = createAgentChatApi()
+    const { unmount } = renderPanel(api)
+
+    await screen.findByRole('button', { name: 'New session' })
+    unmount()
+
+    await waitFor(() => {
+      expect(api.releaseWorkspaceSubscriptions).toHaveBeenCalledWith({
+        workspaceRoot: '/workspace'
+      })
+    })
   })
 
   it('sends current document context through the selected draft session', async () => {
@@ -112,6 +166,7 @@ describe('AgentChatPanel', () => {
 
     renderPanel(api)
     fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Message Agent Chat'), {
       target: { value: 'What changed?' }
     })
@@ -131,7 +186,7 @@ describe('AgentChatPanel', () => {
 
   it('clears the composer immediately and shows thinking state while a send is in flight', async () => {
     let resolveSend: (() => void) | undefined
-    const { api: baseApi } = createAgentChatApi()
+    const { api: baseApi, emit, session } = createAgentChatApi()
     const api = {
       ...baseApi,
       sendMessage: vi.fn<AgentChatApi['sendMessage']>(
@@ -154,6 +209,34 @@ describe('AgentChatPanel', () => {
     })
     expect(screen.getByLabelText('Message Agent Chat')).toHaveValue('')
     expect(screen.getByText('Thinking...')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.agentChat.sendButton
+    )
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeDisabled()
+
+    act(() => {
+      emit({
+        session: {
+          ...session,
+          nativeSessionId: 'thread-1',
+          state: 'active'
+        },
+        type: 'session-started'
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    await waitFor(() => {
+      expect(api.stopSession).toHaveBeenCalledWith({
+        sessionId: 'mde-chat-1',
+        workspaceRoot: '/workspace'
+      })
+    })
 
     act(() => {
       resolveSend?.()
@@ -195,7 +278,7 @@ describe('AgentChatPanel', () => {
     })
   })
 
-  it('uses native session titles in the picker before falling back to ids', async () => {
+  it('uses native session titles in the picker without falling back to ids', async () => {
     const { api: baseApi, session } = createAgentChatApi()
     const nativeSession = {
       ...session,
@@ -216,9 +299,11 @@ describe('AgentChatPanel', () => {
     expect(
       await screen.findByRole('option', { name: 'Summarize README' })
     ).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /thread-1/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /mde-native-thread-1/ })).not.toBeInTheDocument()
   })
 
-  it('clears the submitted draft and attachments when sending fails', async () => {
+  it('restores the submitted draft and attachments when sending fails', async () => {
     const { api: baseApi } = createAgentChatApi()
     const png = new File([new Uint8Array([1, 2, 3])], 'paste.png', {
       type: 'image/png'
@@ -246,9 +331,38 @@ describe('AgentChatPanel', () => {
     await waitFor(() => {
       expect(api.sendMessage).toHaveBeenCalled()
     })
-    expect(screen.getByLabelText('Message Agent Chat')).toHaveValue('')
-    expect(screen.queryByText('paste.png')).not.toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('Agent Chat diagnostic')
+    expect(screen.getByLabelText('Message Agent Chat')).toHaveValue('What changed?')
+    expect(screen.getByText('paste.png')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Agent Chat turn failed. Check Codex and try again.'
+    )
+  })
+
+  it('shows a specific turn failure diagnostic for failed session events', async () => {
+    const { api, emit, session } = createAgentChatApi()
+
+    renderPanel(api)
+    fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+
+    act(() => {
+      emit({
+        diagnostic: {
+          code: 'turn-failed',
+          message: 'Raw adapter failure with private details',
+          recoverable: true
+        },
+        session: {
+          ...session,
+          state: 'failed'
+        },
+        type: 'session-failed'
+      })
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Agent Chat turn failed. Check Codex and try again.'
+    )
+    expect(screen.getByRole('alert')).not.toHaveTextContent('private details')
   })
 
   it('renders the image attachment picker as a keyboard-focusable control', async () => {
@@ -376,7 +490,7 @@ describe('AgentChatPanel', () => {
     expect(within(changedFiles!).getByText('docs/example.md')).toBeInTheDocument()
   })
 
-  it('does not show a generic diagnostic for recoverable changed-file summaries', async () => {
+  it('shows changed-file summary status without generic diagnostics', async () => {
     const { api, emit, session } = createAgentChatApi()
 
     renderPanel(api)
@@ -387,17 +501,24 @@ describe('AgentChatPanel', () => {
 
     act(() => {
       emit({
-        diagnostic: {
-          code: 'changed-files-unavailable',
-          message: 'Changed files unavailable',
-          recoverable: true
-        },
         sessionId: session.sessionId,
-        type: 'diagnostic'
+        summary: {
+          available: false,
+          diagnostic: {
+            code: 'changed-files-unavailable',
+            message: 'Changed files unavailable',
+            recoverable: true
+          },
+          files: []
+        },
+        type: 'changed-files-updated'
       })
     })
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Changed-file summary unavailable for this turn.')
+    ).toBeInTheDocument()
   })
 
   it('hides stale changed files when an empty summary is emitted', async () => {

@@ -16,6 +16,7 @@ describe('createAgentChatApi', () => {
       'getAvailability',
       'listSessions',
       'onEvent',
+      'releaseWorkspaceSubscriptions',
       'resumeSession',
       'saveAttachment',
       'sendMessage',

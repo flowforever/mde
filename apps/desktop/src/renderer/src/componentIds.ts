@@ -52,6 +52,11 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "agentChat.contextPreview",
     standardName: "Agent Chat Context Preview",
   },
+  agentChatMessageBox: {
+    componentId: "agent-chat.message-box",
+    constantPath: "agentChat.messageBox",
+    standardName: "Agent Chat Message Box",
+  },
   agentChatMessageField: {
     componentId: "agent-chat.message-field",
     constantPath: "agentChat.messageField",
@@ -77,6 +82,11 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "agentChat.panel",
     standardName: "Agent Chat Panel",
   },
+  agentChatResizeHandle: {
+    componentId: "agent-chat.resize-handle",
+    constantPath: "agentChat.resizeHandle",
+    standardName: "Agent Chat Resize Handle",
+  },
   agentChatSendButton: {
     componentId: "agent-chat.send-button",
     constantPath: "agentChat.sendButton",
@@ -86,11 +96,6 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "agent-chat.session-picker",
     constantPath: "agentChat.sessionPicker",
     standardName: "Agent Chat Session Picker",
-  },
-  agentChatStopButton: {
-    componentId: "agent-chat.stop-button",
-    constantPath: "agentChat.stopButton",
-    standardName: "Agent Chat Stop Button",
   },
   agentChatThinkingStatus: {
     componentId: "agent-chat.thinking-status",
@@ -843,15 +848,16 @@ export const COMPONENT_IDS = {
     closeButton: COMPONENT_NAME_ID_MAP.agentChatCloseButton.componentId,
     composer: COMPONENT_NAME_ID_MAP.agentChatComposer.componentId,
     contextPreview: COMPONENT_NAME_ID_MAP.agentChatContextPreview.componentId,
+    messageBox: COMPONENT_NAME_ID_MAP.agentChatMessageBox.componentId,
     messageField: COMPONENT_NAME_ID_MAP.agentChatMessageField.componentId,
     messageItem: COMPONENT_NAME_ID_MAP.agentChatMessageItem.componentId,
     messageList: COMPONENT_NAME_ID_MAP.agentChatMessageList.componentId,
     newSessionButton:
       COMPONENT_NAME_ID_MAP.agentChatNewSessionButton.componentId,
     panel: COMPONENT_NAME_ID_MAP.agentChatPanel.componentId,
+    resizeHandle: COMPONENT_NAME_ID_MAP.agentChatResizeHandle.componentId,
     sendButton: COMPONENT_NAME_ID_MAP.agentChatSendButton.componentId,
     sessionPicker: COMPONENT_NAME_ID_MAP.agentChatSessionPicker.componentId,
-    stopButton: COMPONENT_NAME_ID_MAP.agentChatStopButton.componentId,
     thinkingStatus: COMPONENT_NAME_ID_MAP.agentChatThinkingStatus.componentId,
   },
   automation: {

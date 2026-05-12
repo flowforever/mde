@@ -494,4 +494,111 @@ describe('createCodexAgentChatAdapter', () => {
       }
     ])
   })
+
+  it('queues stop requests that arrive before Codex reports the active turn id', async () => {
+    let firstPush: PushLine | undefined
+    let turnStartPush: PushLine | undefined
+    const turnChild = createScriptedChild((request, push) => {
+      firstPush = push
+      if (request.method === 'thread/start') {
+        push({
+          id: request.id,
+          result: {
+            thread: { cwd: '/workspace', id: 'thread-1' }
+          }
+        })
+        return
+      }
+
+      if (request.method === 'turn/start') {
+        turnStartPush = push
+        return
+      }
+
+      if (request.method === 'turn/interrupt') {
+        push({
+          id: request.id,
+          result: {}
+        })
+      }
+    })
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => turnChild.child)
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+    const session = {
+      ...createSession(),
+      nativeSessionId: 'thread-1'
+    }
+
+    const iterator = adapter.startSession({
+      attachments: [],
+      content: 'Run',
+      contextManifest,
+      session,
+      workspaceRoot: '/workspace'
+    })[Symbol.asyncIterator]()
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: {
+        nativeSessionId: 'thread-1',
+        type: 'session-started'
+      }
+    })
+    const pendingTurn = iterator.next()
+    await waitFor(() =>
+      turnChild.requests.some((request) => request.method === 'turn/start')
+    )
+
+    const stopEvents = []
+    for await (const event of adapter.stopSession({
+      nativeSessionId: 'thread-1',
+      session,
+      workspaceRoot: '/workspace'
+    })) {
+      stopEvents.push(event)
+    }
+
+    expect(stopEvents).toEqual([
+      {
+        nativeSessionId: 'thread-1',
+        sessionId: 'mde-chat-1',
+        type: 'session-stopped'
+      }
+    ])
+    expect(
+      turnChild.requests.some((request) => request.method === 'turn/interrupt')
+    ).toBe(false)
+
+    turnStartPush?.({
+      id: turnChild.requests.find((request) => request.method === 'turn/start')
+        ?.id,
+      result: {
+        turn: { id: 'turn-1' }
+      }
+    })
+    await waitFor(() =>
+      turnChild.requests.some((request) => request.method === 'turn/interrupt')
+    )
+    firstPush?.({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread-1',
+        turn: { id: 'turn-1' }
+      }
+    })
+    await expect(pendingTurn).resolves.toMatchObject({
+      done: true
+    })
+
+    expect(
+      turnChild.requests.find((request) => request.method === 'turn/interrupt')
+        ?.params
+    ).toEqual({
+      threadId: 'thread-1',
+      turnId: 'turn-1'
+    })
+  })
 })

@@ -50,6 +50,7 @@ export const AGENT_CHAT_CHANNELS = Object.freeze({
   event: "agent-chat:event",
   getAvailability: "agent-chat:get-availability",
   listSessions: "agent-chat:list-sessions",
+  releaseWorkspaceSubscriptions: "agent-chat:release-workspace-subscriptions",
   resumeSession: "agent-chat:resume-session",
   saveAttachment: "agent-chat:save-attachment",
   sendMessage: "agent-chat:send-message",
