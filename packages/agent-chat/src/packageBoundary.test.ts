@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
@@ -11,7 +12,7 @@ describe('@mde/agent-chat package boundary', () => {
   })
 
   it('does not import Electron, React, or desktop app modules', () => {
-    const sourceRoot = join(process.cwd(), 'src')
+    const sourceRoot = dirname(fileURLToPath(import.meta.url))
     const files = ['index.ts', 'types.ts'].map((file) =>
       readFileSync(join(sourceRoot, file), 'utf8')
     )

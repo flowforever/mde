@@ -2322,13 +2322,25 @@ describe("App shell", () => {
 
     render(<App />);
 
-    const agentChatButton = await screen.findByRole("button", {
-      name: /agent chat/i,
-    });
+    await waitFor(
+      () =>
+        expect(agentChatApi.getAvailability).toHaveBeenCalledWith({
+          selectedEngineId: "codex",
+          workspaceRoot: "/workspace",
+        }),
+      { timeout: 5000 },
+    );
 
-    expect(agentChatApi.getAvailability).toHaveBeenCalledWith({
-      selectedEngineId: "codex",
-      workspaceRoot: "/workspace",
+    const agentChatButton = await screen.findByRole(
+      "button",
+      {
+        name: /^Agent Chat$/,
+      },
+      { timeout: 5000 },
+    );
+
+    await waitFor(() => {
+      expect(agentChatButton).toBeEnabled();
     });
 
     await user.click(agentChatButton);

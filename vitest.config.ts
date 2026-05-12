@@ -160,6 +160,28 @@ export default defineConfig({
           environment: 'node',
           include: ['apps/desktop/tests/integration/**/*.test.ts']
         }
+      }),
+      defineProject({
+        resolve: {
+          alias: packageAliases
+        },
+        test: {
+          alias: packageAliases,
+          name: 'agent-chat-unit',
+          environment: 'node',
+          include: ['packages/agent-chat/src/**/*.test.ts']
+        }
+      }),
+      defineProject({
+        resolve: {
+          alias: packageAliases
+        },
+        test: {
+          alias: packageAliases,
+          name: 'agent-chat-integration',
+          environment: 'node',
+          include: ['packages/agent-chat/src/**/*.integration.test.ts']
+        }
       })
     ]
   }
