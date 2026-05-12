@@ -9,7 +9,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ImagePlus, LoaderCircle, Plus, Send, Square, X } from 'lucide-react';
+import { ImagePlus, LoaderCircle, Pin, Plus, Send, Square, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import type {
   AgentChatApi,
@@ -167,6 +169,10 @@ const getChangeTypeLabelKey = (
 const getMessageRoleNameKey = (
   role: AgentChatMessage['role'],
 ): AppTextKey => {
+  if (role === 'thinking') {
+    return 'agentChat.thinking';
+  }
+
   if (role === 'user') {
     return 'agentChat.userName';
   }
@@ -181,6 +187,10 @@ const getMessageRoleNameKey = (
 const getMessageRoleAvatarKey = (
   role: AgentChatMessage['role'],
 ): AppTextKey => {
+  if (role === 'thinking') {
+    return 'agentChat.assistantAvatar';
+  }
+
   if (role === 'user') {
     return 'agentChat.userAvatar';
   }
@@ -190,6 +200,81 @@ const getMessageRoleAvatarKey = (
   }
 
   return 'agentChat.assistantAvatar';
+};
+
+const AgentChatMarkdownContent = ({
+  content,
+}: {
+  readonly content: string;
+}): JSX.Element => (
+  <div className="agent-chat-markdown">
+    <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+      {content}
+    </ReactMarkdown>
+  </div>
+);
+
+type AgentChatContextItemId = 'document' | 'selection';
+
+type AgentChatEnabledContextItems = Readonly<Record<AgentChatContextItemId, boolean>>;
+
+interface AgentChatPinnedSelectionState {
+  readonly scopeKey: string;
+  readonly selections: readonly string[];
+}
+
+const DEFAULT_ENABLED_CONTEXT_ITEMS: AgentChatEnabledContextItems = {
+  document: true,
+  selection: true,
+};
+const EMPTY_PINNED_SELECTIONS: readonly string[] = [];
+
+const trimSelectionParts = (
+  parts: readonly string[],
+): readonly string[] =>
+  Array.from(
+    new Set(
+      parts
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    ),
+  );
+
+const createSendContextManifest = (input: {
+  readonly contextManifest: AgentChatContextManifest;
+  readonly enabledContextItems: AgentChatEnabledContextItems;
+  readonly pinnedSelections: readonly string[];
+}): AgentChatContextManifest => {
+  const baseManifest = input.enabledContextItems.document
+    ? input.contextManifest
+    : {
+        ...(input.contextManifest.modelName
+          ? { modelName: input.contextManifest.modelName }
+          : {}),
+        currentDocumentSnapshot: input.contextManifest.currentDocumentSnapshot,
+        permissionMode: input.contextManifest.permissionMode,
+        selectedBlockIds: input.contextManifest.selectedBlockIds,
+        selectedText: input.contextManifest.selectedText,
+        sessionPurpose: input.contextManifest.sessionPurpose,
+        workspaceRoot: input.contextManifest.workspaceRoot,
+      };
+  const selectionParts = input.enabledContextItems.selection
+    ? trimSelectionParts([
+        ...input.pinnedSelections,
+        input.contextManifest.selectedText,
+      ])
+    : [];
+
+  return {
+    ...baseManifest,
+    currentDocumentSnapshot: input.enabledContextItems.document
+      ? input.contextManifest.currentDocumentSnapshot
+      : '',
+    selectedBlockIds: input.enabledContextItems.selection
+      ? input.contextManifest.selectedBlockIds
+      : [],
+    selectedText: selectionParts.join('\n\n'),
+  };
 };
 
 export function AgentChatPanel({
@@ -209,6 +294,13 @@ export function AgentChatPanel({
   const [changedFilesBySession, setChangedFilesBySession] = useState<
     Readonly<Record<string, AgentChatChangedFilesSummary>>
   >({});
+  const [enabledContextItems, setEnabledContextItems] =
+    useState<AgentChatEnabledContextItems>(DEFAULT_ENABLED_CONTEXT_ITEMS);
+  const [pinnedSelectionState, setPinnedSelectionState] =
+    useState<AgentChatPinnedSelectionState>({
+      scopeKey: '',
+      selections: [],
+    });
   const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null);
   const [pendingSendSessionIds, setPendingSendSessionIds] = useState<
     ReadonlySet<string>
@@ -250,6 +342,27 @@ export function AgentChatPanel({
   const isActiveSessionSending =
     activeSessionId !== null && pendingSendSessionIds.has(activeSessionId);
   const canStopActiveSession = Boolean(activeSession?.nativeSessionId);
+  const currentSelectionText = contextManifest.selectedText.trim();
+  const pinnedSelectionScopeKey = [
+    contextManifest.workspaceRoot,
+    contextManifest.currentDocumentPath ?? '',
+  ].join('\u0000');
+  const pinnedSelections = useMemo(
+    () =>
+      pinnedSelectionState.scopeKey === pinnedSelectionScopeKey
+        ? pinnedSelectionState.selections
+        : EMPTY_PINNED_SELECTIONS,
+    [pinnedSelectionScopeKey, pinnedSelectionState],
+  );
+  const sendContextManifest = useMemo(
+    () =>
+      createSendContextManifest({
+        contextManifest,
+        enabledContextItems,
+        pinnedSelections,
+      }),
+    [contextManifest, enabledContextItems, pinnedSelections],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -319,6 +432,13 @@ export function AgentChatPanel({
         }
 
         if (event.type === 'assistant-message-completed') {
+          setMessages((currentMessages) =>
+            upsertMessage(currentMessages, event.message),
+          );
+          return;
+        }
+
+        if (event.type === 'thinking-updated') {
           setMessages((currentMessages) =>
             upsertMessage(currentMessages, event.message),
           );
@@ -416,6 +536,40 @@ export function AgentChatPanel({
     return createDraftSession();
   }, [activeSession, createDraftSession]);
 
+  const toggleContextItem = (
+    itemId: AgentChatContextItemId,
+    enabled: boolean,
+  ): void => {
+    setEnabledContextItems((currentItems) => ({
+      ...currentItems,
+      [itemId]: enabled,
+    }));
+  };
+
+  const pinCurrentSelection = (): void => {
+    if (!currentSelectionText) {
+      return;
+    }
+
+    setEnabledContextItems((currentItems) => ({
+      ...currentItems,
+      selection: true,
+    }));
+    setPinnedSelectionState((currentState) => {
+      const currentSelections =
+        currentState.scopeKey === pinnedSelectionScopeKey
+          ? currentState.selections
+          : [];
+
+      return {
+        scopeKey: pinnedSelectionScopeKey,
+        selections: currentSelections.includes(currentSelectionText)
+          ? currentSelections
+          : [...currentSelections, currentSelectionText],
+      };
+    });
+  };
+
   const saveImageFiles = useCallback(
     async (files: readonly File[]): Promise<void> => {
       const imageFiles = files.filter(isImageFile);
@@ -486,8 +640,8 @@ export function AgentChatPanel({
       await api.sendMessage({
         attachments: messageAttachments,
         content: submittedMessage,
-        contextManifest,
-        modelName: contextManifest.modelName,
+        contextManifest: sendContextManifest,
+        modelName: sendContextManifest.modelName,
         sessionId: session.sessionId,
         workspaceRoot,
       });
@@ -595,12 +749,31 @@ export function AgentChatPanel({
                   {text(getMessageRoleAvatarKey(message.role))}
                 </span>
                 <div className="agent-chat-bubble">
-                  <div className="agent-chat-bubble-head">
-                    <strong>{text(getMessageRoleNameKey(message.role))}</strong>
-                  </div>
-                  <div className="agent-chat-bubble-content">
-                    <p>{message.content}</p>
-                  </div>
+                  {message.role === 'thinking' ? (
+                    <details
+                      className="agent-chat-thinking-details"
+                      open={message.isStreaming ? true : undefined}
+                    >
+                      <summary>
+                        {message.isStreaming ? (
+                          <LoaderCircle aria-hidden="true" size={14} />
+                        ) : null}
+                        <span>{text('agentChat.thinking')}</span>
+                      </summary>
+                      <div className="agent-chat-bubble-content">
+                        <AgentChatMarkdownContent content={message.content} />
+                      </div>
+                    </details>
+                  ) : (
+                    <>
+                      <div className="agent-chat-bubble-head">
+                        <strong>{text(getMessageRoleNameKey(message.role))}</strong>
+                      </div>
+                      <div className="agent-chat-bubble-content">
+                        <AgentChatMarkdownContent content={message.content} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </article>
             ))
@@ -694,17 +867,86 @@ export function AgentChatPanel({
               <strong>{contextManifest.workspaceRoot}</strong>
             </div>
             <div className="agent-chat-context-item">
-              <span>{text('agentChat.document')}</span>
-              <strong>
+              <label className="agent-chat-context-toggle">
+                <input
+                  aria-label={text('agentChat.includeDocumentContext')}
+                  checked={enabledContextItems.document}
+                  data-component-id={COMPONENT_IDS.agentChat.contextDocumentToggle}
+                  onChange={(event) => {
+                    toggleContextItem('document', event.target.checked);
+                  }}
+                  type="checkbox"
+                />
+                <span>{text('agentChat.document')}</span>
+              </label>
+              <strong className="agent-chat-context-value">
                 {contextManifest.currentDocumentPath ??
                   text('agentChat.noDocument')}
               </strong>
             </div>
             <div className="agent-chat-context-item">
-              <span>{text('agentChat.selection')}</span>
-              <strong>
-                {contextManifest.selectedText || text('agentChat.noSelection')}
-              </strong>
+              <label className="agent-chat-context-toggle">
+                <input
+                  aria-label={text('agentChat.includeSelectionContext')}
+                  checked={enabledContextItems.selection}
+                  data-component-id={COMPONENT_IDS.agentChat.contextSelectionToggle}
+                  onChange={(event) => {
+                    toggleContextItem('selection', event.target.checked);
+                  }}
+                  type="checkbox"
+                />
+                <span>{text('agentChat.selection')}</span>
+              </label>
+              <div className="agent-chat-context-value-row">
+                <strong className="agent-chat-context-value">
+                  {currentSelectionText || text('agentChat.noSelection')}
+                </strong>
+                <button
+                  aria-label={text('agentChat.pinSelection')}
+                  className="agent-chat-pin-button"
+                  data-component-id={
+                    COMPONENT_IDS.agentChat.contextSelectionPinButton
+                  }
+                  disabled={!currentSelectionText}
+                  onClick={pinCurrentSelection}
+                  title={text('agentChat.pinSelection')}
+                  type="button"
+                >
+                  <Pin aria-hidden="true" size={13} />
+                </button>
+              </div>
+              {pinnedSelections.length > 0 ? (
+                <ul className="agent-chat-pinned-selections">
+                  {pinnedSelections.map((selection, index) => (
+                    <li key={`${index}:${selection}`}>
+                      <span>{selection}</span>
+                      <button
+                        aria-label={text('agentChat.removePinnedSelection', {
+                          index: index + 1,
+                        })}
+                        data-component-id={
+                          COMPONENT_IDS.agentChat.pinnedSelectionRemoveButton
+                        }
+                        onClick={() => {
+                          setPinnedSelectionState((currentState) => ({
+                            scopeKey: pinnedSelectionScopeKey,
+                            selections: (
+                              currentState.scopeKey === pinnedSelectionScopeKey
+                                ? currentState.selections
+                                : []
+                            ).filter(
+                              (_selection, selectionIndex) => selectionIndex !== index,
+                            ),
+                          }));
+                        }}
+                        type="button"
+                      >
+                        <X aria-hidden="true" size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
             <div className="agent-chat-context-item">
               <span>{text('agentChat.permission')}</span>

@@ -90,7 +90,7 @@ export const createCodexAppServerClient = (
 export interface CodexNotificationMapper {
   readonly map: (
     notification: CodexServerNotification
-  ) => AgentChatEngineEvent | undefined
+  ) => readonly AgentChatEngineEvent[]
 }
 
 export const createCodexNotificationMapper = (input: {
@@ -98,16 +98,36 @@ export const createCodexNotificationMapper = (input: {
   readonly sessionId: string
 }): CodexNotificationMapper => {
   const contentByItemId = new Map<string, string>()
+  const reasoningContentByItemId = new Map<string, string>()
+  const streamingReasoningItemIds = new Set<string>()
   let lastMessageId: string | undefined
+
+  const createThinkingEvent = (
+    itemId: string,
+    isStreaming: boolean
+  ): AgentChatEngineEvent => ({
+    message: {
+      attachments: [],
+      content: reasoningContentByItemId.get(itemId) ?? '',
+      createdAt: input.now(),
+      isStreaming,
+      messageId: itemId,
+      role: 'thinking',
+      sessionId: input.sessionId
+    },
+    type: 'thinking-updated'
+  })
 
   return {
     map: (notification) => {
       if (notification.method === 'thread/started') {
-        return {
-          nativeSessionId: notification.params.thread.id,
-          sessionId: input.sessionId,
-          type: 'session-started'
-        }
+        return [
+          {
+            nativeSessionId: notification.params.thread.id,
+            sessionId: input.sessionId,
+            type: 'session-started'
+          }
+        ]
       }
 
       if (notification.method === 'item/agentMessage/delta') {
@@ -118,17 +138,37 @@ export const createCodexNotificationMapper = (input: {
             notification.params.delta
           }`
         )
-        return {
-          createdAt: input.now(),
-          delta: notification.params.delta,
-          messageId: notification.params.itemId,
-          sessionId: input.sessionId,
-          type: 'assistant-message-delta'
-        }
+        return [
+          {
+            createdAt: input.now(),
+            delta: notification.params.delta,
+            messageId: notification.params.itemId,
+            sessionId: input.sessionId,
+            type: 'assistant-message-delta'
+          }
+        ]
+      }
+
+      if (
+        notification.method === 'item/reasoning/summaryTextDelta' ||
+        notification.method === 'item/reasoning/textDelta'
+      ) {
+        reasoningContentByItemId.set(
+          notification.params.itemId,
+          `${reasoningContentByItemId.get(notification.params.itemId) ?? ''}${
+            notification.params.delta
+          }`
+        )
+        streamingReasoningItemIds.add(notification.params.itemId)
+        return [createThinkingEvent(notification.params.itemId, true)]
       }
 
       if (notification.method === 'turn/completed' && lastMessageId) {
-        return {
+        const events: AgentChatEngineEvent[] = Array.from(
+          streamingReasoningItemIds
+        ).map((itemId) => createThinkingEvent(itemId, false))
+        streamingReasoningItemIds.clear()
+        events.push({
           message: {
             attachments: [],
             content: contentByItemId.get(lastMessageId) ?? '',
@@ -138,10 +178,19 @@ export const createCodexNotificationMapper = (input: {
             sessionId: input.sessionId
           },
           type: 'assistant-message-completed'
-        }
+        })
+        return events
       }
 
-      return undefined
+      if (notification.method === 'turn/completed') {
+        const events: AgentChatEngineEvent[] = Array.from(
+          streamingReasoningItemIds
+        ).map((itemId) => createThinkingEvent(itemId, false))
+        streamingReasoningItemIds.clear()
+        return events
+      }
+
+      return []
     }
   }
 }

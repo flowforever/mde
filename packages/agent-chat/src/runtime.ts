@@ -207,7 +207,17 @@ export const createAgentChatRuntime = (
       return session
     }
 
+    if (event.type === 'message-created') {
+      emit(event)
+      return session
+    }
+
     if (event.type === 'assistant-message-completed') {
+      emit(event)
+      return session
+    }
+
+    if (event.type === 'thinking-updated') {
       emit(event)
       return session
     }
@@ -396,26 +406,42 @@ export const createAgentChatRuntime = (
           session.workspaceRoot === request.workspaceRoot &&
           session.engineId === request.selectedEngineId
       )
-      const allNativeSessions = adapter
-        ? await adapter.listNativeSessions({
-            workspaceRoot: request.workspaceRoot
-          })
-        : []
       const bindings = await metadataStorage.listBindings(request.workspaceRoot)
       const bindingByNativeSessionId = new Map(
         bindings.map((binding) => [binding.nativeSessionId, binding] as const)
       )
+      const allNativeSessions = adapter
+        ? await adapter
+            .listNativeSessions({
+              workspaceRoot: request.workspaceRoot
+            })
+            .catch(() => [])
+        : []
       const cwdMatchedNativeSessionIds = new Set(
         filterNativeSessionsForWorkspace({
           sessions: allNativeSessions,
           workspaceRoot: request.workspaceRoot
         }).map((session) => session.nativeSessionId)
       )
-      const nativeSessions = allNativeSessions.filter(
-        (session) =>
-          cwdMatchedNativeSessionIds.has(session.nativeSessionId) ||
-          bindingByNativeSessionId.has(session.nativeSessionId)
-      )
+      const nativeSessions = [
+        ...allNativeSessions.filter(
+          (session) =>
+            cwdMatchedNativeSessionIds.has(session.nativeSessionId) ||
+            bindingByNativeSessionId.has(session.nativeSessionId)
+        ),
+        ...bindings
+          .filter(
+            (binding) =>
+              !allNativeSessions.some(
+                (session) => session.nativeSessionId === binding.nativeSessionId
+              )
+          )
+          .map((binding) => ({
+            nativeSessionId: binding.nativeSessionId,
+            title: undefined,
+            updatedAt: binding.updatedAt
+          }))
+      ]
       const existingSessionIds = new Set(localSessions.map((session) => session.sessionId))
       const nativeBackedSessions = nativeSessions.flatMap((nativeSession) => {
         const binding = bindingByNativeSessionId.get(nativeSession.nativeSessionId)

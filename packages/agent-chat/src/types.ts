@@ -13,7 +13,7 @@ export type AgentChatSessionState =
   | 'stopped'
   | 'failed'
 
-export type AgentChatMessageRole = 'user' | 'assistant' | 'system'
+export type AgentChatMessageRole = 'user' | 'assistant' | 'system' | 'thinking'
 
 export interface AgentChatAttachment {
   readonly attachmentId: string
@@ -27,6 +27,7 @@ export interface AgentChatMessage {
   readonly attachments: readonly AgentChatAttachment[]
   readonly content: string
   readonly createdAt: string
+  readonly isStreaming?: boolean
   readonly messageId: string
   readonly role: AgentChatMessageRole
   readonly sessionId: string
@@ -113,7 +114,10 @@ export type AgentChatEvent =
     }
   | {
       readonly message: AgentChatMessage
-      readonly type: 'message-created' | 'assistant-message-completed'
+      readonly type:
+        | 'message-created'
+        | 'assistant-message-completed'
+        | 'thinking-updated'
     }
   | {
       readonly createdAt: string
@@ -204,6 +208,10 @@ export type AgentChatEngineEvent =
       readonly type: 'session-started'
     }
   | {
+      readonly message: AgentChatMessage
+      readonly type: 'message-created'
+    }
+  | {
       readonly createdAt: string
       readonly delta: string
       readonly messageId: string
@@ -213,6 +221,10 @@ export type AgentChatEngineEvent =
   | {
       readonly message: AgentChatMessage
       readonly type: 'assistant-message-completed'
+    }
+  | {
+      readonly message: AgentChatMessage
+      readonly type: 'thinking-updated'
     }
   | {
       readonly diagnostic: AgentChatDiagnostic

@@ -47,10 +47,25 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "agentChat.composer",
     standardName: "Agent Chat Composer",
   },
+  agentChatContextDocumentToggle: {
+    componentId: "agent-chat.context-document-toggle",
+    constantPath: "agentChat.contextDocumentToggle",
+    standardName: "Agent Chat Context Document Toggle",
+  },
   agentChatContextPreview: {
     componentId: "agent-chat.context-preview",
     constantPath: "agentChat.contextPreview",
     standardName: "Agent Chat Context Preview",
+  },
+  agentChatContextSelectionPinButton: {
+    componentId: "agent-chat.context-selection-pin-button",
+    constantPath: "agentChat.contextSelectionPinButton",
+    standardName: "Agent Chat Context Selection Pin Button",
+  },
+  agentChatContextSelectionToggle: {
+    componentId: "agent-chat.context-selection-toggle",
+    constantPath: "agentChat.contextSelectionToggle",
+    standardName: "Agent Chat Context Selection Toggle",
   },
   agentChatMessageBox: {
     componentId: "agent-chat.message-box",
@@ -81,6 +96,11 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "agent-chat.panel",
     constantPath: "agentChat.panel",
     standardName: "Agent Chat Panel",
+  },
+  agentChatPinnedSelectionRemoveButton: {
+    componentId: "agent-chat.pinned-selection-remove-button",
+    constantPath: "agentChat.pinnedSelectionRemoveButton",
+    standardName: "Agent Chat Pinned Selection Remove Button",
   },
   agentChatResizeHandle: {
     componentId: "agent-chat.resize-handle",
@@ -847,7 +867,13 @@ export const COMPONENT_IDS = {
     changedFiles: COMPONENT_NAME_ID_MAP.agentChatChangedFiles.componentId,
     closeButton: COMPONENT_NAME_ID_MAP.agentChatCloseButton.componentId,
     composer: COMPONENT_NAME_ID_MAP.agentChatComposer.componentId,
+    contextDocumentToggle:
+      COMPONENT_NAME_ID_MAP.agentChatContextDocumentToggle.componentId,
     contextPreview: COMPONENT_NAME_ID_MAP.agentChatContextPreview.componentId,
+    contextSelectionPinButton:
+      COMPONENT_NAME_ID_MAP.agentChatContextSelectionPinButton.componentId,
+    contextSelectionToggle:
+      COMPONENT_NAME_ID_MAP.agentChatContextSelectionToggle.componentId,
     messageBox: COMPONENT_NAME_ID_MAP.agentChatMessageBox.componentId,
     messageField: COMPONENT_NAME_ID_MAP.agentChatMessageField.componentId,
     messageItem: COMPONENT_NAME_ID_MAP.agentChatMessageItem.componentId,
@@ -855,6 +881,8 @@ export const COMPONENT_IDS = {
     newSessionButton:
       COMPONENT_NAME_ID_MAP.agentChatNewSessionButton.componentId,
     panel: COMPONENT_NAME_ID_MAP.agentChatPanel.componentId,
+    pinnedSelectionRemoveButton:
+      COMPONENT_NAME_ID_MAP.agentChatPinnedSelectionRemoveButton.componentId,
     resizeHandle: COMPONENT_NAME_ID_MAP.agentChatResizeHandle.componentId,
     sendButton: COMPONENT_NAME_ID_MAP.agentChatSendButton.componentId,
     sessionPicker: COMPONENT_NAME_ID_MAP.agentChatSessionPicker.componentId,

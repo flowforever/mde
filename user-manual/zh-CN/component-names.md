@@ -207,13 +207,17 @@ Agent Chat 区域覆盖编辑器入口、右侧会话面板、上下文预览、
 | Agent Chat Changed Files | `agent-chat.changed-files` | Agent Chat 变更文件摘要 | Agent Chat 面板 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 展示一次 Agent turn 后检测到的工作区文件变更。 |
 | Agent Chat Close Button | `agent-chat.close-button` | Agent Chat 关闭按钮 | Agent Chat 面板标题栏 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 关闭右侧 Agent Chat 面板。 |
 | Agent Chat Composer | `agent-chat.composer` | Agent Chat 输入区 | Agent Chat 面板底部 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 输入消息、粘贴图片并发送到当前会话。 |
+| Agent Chat Context Document Toggle | `agent-chat.context-document-toggle` | Agent Chat 当前文档开关 | Agent Chat 上下文预览 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 控制当前 Markdown 文档是否随消息发送。 |
 | Agent Chat Context Preview | `agent-chat.context-preview` | Agent Chat 上下文预览 | Agent Chat 面板 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 显示当前文档、权限模式和选区摘要。 |
+| Agent Chat Context Selection Pin Button | `agent-chat.context-selection-pin-button` | Agent Chat 固定选区按钮 | Agent Chat 上下文预览 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 固定当前编辑器选区，供后续消息继续引用。 |
+| Agent Chat Context Selection Toggle | `agent-chat.context-selection-toggle` | Agent Chat 选区开关 | Agent Chat 上下文预览 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 控制当前或固定选区是否随消息发送。 |
 | Agent Chat Message Box | `agent-chat.message-box` | Agent Chat 消息框 | Agent Chat 输入区 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 容纳消息输入框、图片按钮和发送/停止主按钮。 |
 | Agent Chat Message Field | `agent-chat.message-field` | Agent Chat 消息输入框 | Agent Chat 输入区 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 输入发送给当前会话的消息。 |
 | Agent Chat Message Item | `agent-chat.message-item` | Agent Chat 消息项 | Agent Chat 消息列表 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 显示一条用户或助手消息。 |
 | Agent Chat Message List | `agent-chat.message-list` | Agent Chat 消息列表 | Agent Chat 面板 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 展示用户和助手消息。 |
 | Agent Chat New Session Button | `agent-chat.new-session-button` | Agent Chat 新建会话按钮 | Agent Chat 会话栏 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 创建新的 MDE draft 会话。 |
 | Agent Chat Panel | `agent-chat.panel` | Agent Chat 面板 | 编辑器右侧 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | Codex Agent Chat 的右侧面板容器。 |
+| Agent Chat Pinned Selection Remove Button | `agent-chat.pinned-selection-remove-button` | Agent Chat 移除固定选区按钮 | Agent Chat 上下文预览 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 清除已固定的编辑器选区。 |
 | Agent Chat Resize Handle | `agent-chat.resize-handle` | Agent Chat 宽度调整柄 | 编辑器与 Agent Chat 面板之间 | `apps/desktop/src/renderer/src/app/App.tsx` | 通过拖拽或键盘调整右侧 Agent Chat 面板宽度。 |
 | Agent Chat Send Button | `agent-chat.send-button` | Agent Chat 发送/停止按钮 | Agent Chat 消息框 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 空闲时发送当前输入和附件，发送中请求停止当前会话。 |
 | Agent Chat Session Picker | `agent-chat.session-picker` | Agent Chat 会话选择器 | Agent Chat 会话栏 | `apps/desktop/src/renderer/src/agentChat/AgentChatPanel.tsx` | 在当前工作区的 Agent Chat 会话之间切换。 |

@@ -97,6 +97,144 @@ const mapThread = (thread: CodexThread): AgentChatNativeSession => ({
   updatedAt: thread.updatedAt ? new Date(thread.updatedAt * 1000).toISOString() : undefined
 })
 
+const getTimestamp = (
+  timestampSeconds: number | null | undefined,
+  nowProvider: () => string
+): string =>
+  typeof timestampSeconds === 'number' && Number.isFinite(timestampSeconds)
+    ? new Date(timestampSeconds * 1000).toISOString()
+    : nowProvider()
+
+interface CodexTextContent {
+  readonly text?: string
+  readonly type: string
+}
+
+const isCodexTextContent = (item: unknown): item is CodexTextContent =>
+  typeof item === 'object' &&
+  item !== null &&
+  'type' in item &&
+  typeof (item as { readonly type?: unknown }).type === 'string'
+
+const getStringItems = (value: readonly unknown[] | undefined): readonly string[] =>
+  (value ?? []).filter((item): item is string => typeof item === 'string')
+
+const getHistoryUserContent = (
+  content: readonly CodexTextContent[]
+): string => {
+  const text = content
+    .filter((item) => item.type === 'text')
+    .map((item) => item.text ?? '')
+    .join('\n\n')
+    .trim()
+
+  if (!text) {
+    return ''
+  }
+
+  const separatedMarker = '\n\nUser message:\n'
+  const separatedMarkerIndex = text.lastIndexOf(separatedMarker)
+  if (separatedMarkerIndex >= 0) {
+    return text.slice(separatedMarkerIndex + separatedMarker.length).trim()
+  }
+
+  const leadingMarker = 'User message:\n'
+  if (text.startsWith(leadingMarker)) {
+    return text.slice(leadingMarker.length).trim()
+  }
+
+  return text
+}
+
+const getHistoryReasoningContent = (input: {
+  readonly content?: readonly unknown[]
+  readonly summary?: readonly unknown[]
+}): string =>
+  [...getStringItems(input.summary), ...getStringItems(input.content)]
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join('\n\n')
+
+const createHistoryEvents = function* (
+  thread: CodexThread,
+  sessionId: string,
+  nowProvider: () => string
+): Iterable<AgentChatEngineEvent> {
+  for (const turn of thread.turns ?? []) {
+    const userCreatedAt = getTimestamp(turn.startedAt, nowProvider)
+    const assistantCreatedAt = getTimestamp(
+      turn.completedAt ?? turn.startedAt,
+      nowProvider
+    )
+
+    for (const item of turn.items ?? []) {
+      if (
+        item.type === 'userMessage' &&
+        typeof item.id === 'string' &&
+        Array.isArray(item.content)
+      ) {
+        const content = getHistoryUserContent(
+          item.content.filter(isCodexTextContent)
+        )
+        if (!content) {
+          continue
+        }
+        yield {
+          message: {
+            attachments: [],
+            content,
+            createdAt: userCreatedAt,
+            messageId: item.id,
+            role: 'user',
+            sessionId
+          },
+          type: 'message-created'
+        }
+        continue
+      }
+
+      if (item.type === 'reasoning' && typeof item.id === 'string') {
+        const content = getHistoryReasoningContent(item)
+        if (!content) {
+          continue
+        }
+        yield {
+          message: {
+            attachments: [],
+            content,
+            createdAt: assistantCreatedAt,
+            isStreaming: false,
+            messageId: item.id,
+            role: 'thinking',
+            sessionId
+          },
+          type: 'thinking-updated'
+        }
+        continue
+      }
+
+      if (
+        item.type === 'agentMessage' &&
+        typeof item.id === 'string' &&
+        typeof item.text === 'string' &&
+        item.text.trim()
+      ) {
+        yield {
+          message: {
+            attachments: [],
+            content: item.text,
+            createdAt: assistantCreatedAt,
+            messageId: item.id,
+            role: 'assistant',
+            sessionId
+          },
+          type: 'assistant-message-completed'
+        }
+      }
+    }
+  }
+}
+
 const getContextManifest = (
   input: AgentChatEngineStartInput | AgentChatEngineSendInput | AgentChatEngineResumeInput
 ): AgentChatContextManifest =>
@@ -153,8 +291,7 @@ const runTurn = async function* (
       onTurnStarted(notification.params.threadId, notification.params.turn.id, client)
     }
 
-    const event = mapper.map(notification)
-    if (event) {
+    for (const event of mapper.map(notification)) {
       enqueue({ event, type: 'event' })
     }
 
@@ -327,7 +464,7 @@ export const createCodexAgentChatAdapter = (
       const response = await client.threadResume({
         approvalPolicy: 'never',
         cwd: input.workspaceRoot,
-        excludeTurns: true,
+        excludeTurns: false,
         ...modelParams(input.modelName),
         persistExtendedHistory: false,
         sandbox: 'danger-full-access',
@@ -342,6 +479,7 @@ export const createCodexAgentChatAdapter = (
           : {}),
         type: 'session-started'
       }
+      yield* createHistoryEvents(response.thread, input.session.sessionId, nowProvider)
 
       if (input.content) {
         yield* runTurn(client, input, nativeSessionId, nowProvider, rememberTurn, forgetTurn)

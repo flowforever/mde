@@ -1,6 +1,6 @@
 {
   "name": "@mde/desktop",
-  "version": "1.5.16",
+  "version": "1.5.17",
   "description": "MDE Electron desktop app.",
   "productName": "MDE",
   "private": true,
@@ -43,7 +43,9 @@
     "electron-updater": "^6.8.3",
     "lucide-react": "^1.12.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",

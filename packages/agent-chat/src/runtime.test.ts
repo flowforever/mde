@@ -272,6 +272,41 @@ describe('createAgentChatRuntime', () => {
     ])
   })
 
+  it('lists metadata-bound native sessions when native history listing fails', async () => {
+    const adapter: AgentChatEngineAdapter = {
+      ...createRecordingAdapter({}),
+      listNativeSessions: vi.fn(() =>
+        Promise.reject(new Error('native history unavailable'))
+      )
+    }
+    const metadataStorage = createMemoryAgentChatMetadataStorage()
+    await metadataStorage.bindNativeSession({
+      nativeSessionId: 'thread-1',
+      sessionId: 'mde-chat-bound',
+      updatedAt: '2026-05-12T00:00:00.000Z',
+      workspaceRoot: '/workspace'
+    })
+    const runtime = createAgentChatRuntime({
+      adapters: [adapter],
+      fileStore: createTestFileStore(),
+      metadataStorage,
+      now: () => '2026-05-12T00:00:00.000Z'
+    })
+
+    await expect(
+      runtime.listSessions({
+        selectedEngineId: 'codex',
+        workspaceRoot: '/workspace'
+      })
+    ).resolves.toMatchObject([
+      {
+        nativeSessionId: 'thread-1',
+        sessionId: 'mde-chat-bound',
+        state: 'stopped'
+      }
+    ])
+  })
+
   it('preserves native session titles when listing sessions', async () => {
     const adapter: AgentChatEngineAdapter = {
       ...createRecordingAdapter({}),

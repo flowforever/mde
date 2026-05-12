@@ -72,6 +72,22 @@ export interface CodexTurnInterruptParams {
 
 export type CodexUserInput = AgentChatCodexUserInputItem
 
+export interface CodexThreadItem {
+  readonly content?: readonly unknown[]
+  readonly id?: string
+  readonly summary?: readonly unknown[]
+  readonly text?: string
+  readonly type: string
+}
+
+export interface CodexThreadTurn {
+  readonly completedAt?: number | null
+  readonly id: string
+  readonly items?: readonly CodexThreadItem[]
+  readonly startedAt?: number | null
+  readonly status?: string
+}
+
 export type CodexClientRequest =
   | {
       readonly id: CodexRequestId
@@ -109,6 +125,7 @@ export interface CodexThread {
   readonly id: string
   readonly name?: string | null
   readonly preview?: string
+  readonly turns?: readonly CodexThreadTurn[]
   readonly updatedAt?: number
 }
 
@@ -151,6 +168,35 @@ export type CodexServerNotification =
   | {
       readonly method: 'item/agentMessage/delta'
       readonly params: {
+        readonly delta: string
+        readonly itemId: string
+        readonly threadId: string
+        readonly turnId: string
+      }
+    }
+  | {
+      readonly method: 'item/reasoning/summaryTextDelta'
+      readonly params: {
+        readonly delta: string
+        readonly itemId: string
+        readonly summaryIndex: number
+        readonly threadId: string
+        readonly turnId: string
+      }
+    }
+  | {
+      readonly method: 'item/reasoning/summaryPartAdded'
+      readonly params: {
+        readonly itemId: string
+        readonly summaryIndex: number
+        readonly threadId: string
+        readonly turnId: string
+      }
+    }
+  | {
+      readonly method: 'item/reasoning/textDelta'
+      readonly params: {
+        readonly contentIndex: number
         readonly delta: string
         readonly itemId: string
         readonly threadId: string

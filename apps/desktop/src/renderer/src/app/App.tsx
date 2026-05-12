@@ -340,7 +340,7 @@ const EXPLORER_WIDTH_MIN = 220;
 const EXPLORER_WIDTH_MAX = 440;
 const AGENT_CHAT_PANEL_WIDTH_DEFAULT = 420;
 const AGENT_CHAT_PANEL_WIDTH_MIN = 380;
-const AGENT_CHAT_PANEL_WIDTH_MAX = 560;
+const AGENT_CHAT_PANEL_MAIN_AREA_MIN = 320;
 const AUTO_SAVE_IDLE_DELAY_MS = 5000;
 export const EXTERNAL_FILE_SYNC_INTERVAL_MS = 5000;
 const SYSTEM_DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
@@ -366,6 +366,13 @@ interface ScopedAgentChatAvailability {
   readonly response: AgentChatAvailabilityResponse;
 }
 
+interface AgentChatSelectionSnapshot {
+  readonly currentDocumentPath: string;
+  readonly selectedBlockIds: readonly string[];
+  readonly selectedText: string;
+  readonly workspaceRoot: string;
+}
+
 interface EditorSearchState {
   readonly activeMatchIndex: number;
   readonly matchCount: number;
@@ -380,9 +387,18 @@ interface ExplorerCopiedEntry {
 const clampExplorerWidth = (width: number): number =>
   Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(width)));
 
-const clampAgentChatPanelWidth = (width: number): number =>
+const getAgentChatPanelWidthMax = (shellWidth: number): number =>
+  Math.max(
+    AGENT_CHAT_PANEL_WIDTH_MIN,
+    Math.round(shellWidth - AGENT_CHAT_PANEL_MAIN_AREA_MIN),
+  );
+
+const clampAgentChatPanelWidth = (
+  width: number,
+  maxWidth: number = getAgentChatPanelWidthMax(globalThis.innerWidth),
+): number =>
   Math.min(
-    AGENT_CHAT_PANEL_WIDTH_MAX,
+    maxWidth,
     Math.max(AGENT_CHAT_PANEL_WIDTH_MIN, Math.round(width)),
   );
 
@@ -553,6 +569,8 @@ export const App = (): React.JSX.Element => {
   const copiedExplorerEntryRef = useRef<ExplorerCopiedEntry | null>(null);
   const appShellRef = useRef<HTMLElement | null>(null);
   const editorRef = useRef<MarkdownBlockEditorHandle | null>(null);
+  const lastAgentChatSelectionSnapshotRef =
+    useRef<AgentChatSelectionSnapshot | null>(null);
   const editorSearchShellRef = useRef<HTMLDivElement | null>(null);
   const editorSearchInputRef = useRef<HTMLInputElement | null>(null);
   const hasConsumedInitialLaunchPathRef = useRef(false);
@@ -971,8 +989,17 @@ export const App = (): React.JSX.Element => {
         shellBounds && shellBounds.width > 0
           ? shellBounds.right
           : globalThis.innerWidth;
+      const shellWidth =
+        shellBounds && shellBounds.width > 0
+          ? shellBounds.width
+          : globalThis.innerWidth;
 
-      setAgentChatPanelWidth(clampAgentChatPanelWidth(shellRight - clientX));
+      setAgentChatPanelWidth(
+        clampAgentChatPanelWidth(
+          shellRight - clientX,
+          getAgentChatPanelWidthMax(shellWidth),
+        ),
+      );
     },
     [],
   );
@@ -2601,7 +2628,12 @@ export const App = (): React.JSX.Element => {
       setAgentChatPanelWidth(AGENT_CHAT_PANEL_WIDTH_MIN);
     } else if (event.key === "End") {
       event.preventDefault();
-      setAgentChatPanelWidth(AGENT_CHAT_PANEL_WIDTH_MAX);
+      setAgentChatPanelWidth(
+        getAgentChatPanelWidthMax(
+          appShellRef.current?.getBoundingClientRect().width ??
+            globalThis.innerWidth,
+        ),
+      );
     }
   };
 
@@ -2820,6 +2852,10 @@ export const App = (): React.JSX.Element => {
   }, [state.draftMarkdown, state.loadedFile?.contents, state.loadedFile?.path]);
 
   useEffect(() => {
+    lastAgentChatSelectionSnapshotRef.current = null;
+  }, [state.loadedFile?.path, state.workspace?.rootPath]);
+
+  useEffect(() => {
     saveCurrentFileRef.current = saveCurrentFile;
   }, [saveCurrentFile]);
 
@@ -2876,8 +2912,8 @@ export const App = (): React.JSX.Element => {
     state.workspace?.rootPath,
   ]);
 
-  const createAgentChatContextManifest =
-    useCallback(async (): Promise<AgentChatContextManifest | null> => {
+  const captureAgentChatSelectionSnapshot =
+    useCallback(async (): Promise<AgentChatSelectionSnapshot | null> => {
       const workspaceRoot = state.workspace?.rootPath;
       const loadedFile = state.loadedFile;
 
@@ -2890,6 +2926,51 @@ export const App = (): React.JSX.Element => {
           selectedBlockIds: [],
           selectedText: "",
         };
+      const selectedText = selectionContext.selectedText.trim();
+
+      if (!selectedText && selectionContext.selectedBlockIds.length === 0) {
+        return null;
+      }
+
+      const snapshot = {
+        currentDocumentPath: loadedFile.path,
+        selectedBlockIds: selectionContext.selectedBlockIds,
+        selectedText,
+        workspaceRoot,
+      } satisfies AgentChatSelectionSnapshot;
+
+      lastAgentChatSelectionSnapshotRef.current = snapshot;
+
+      return snapshot;
+    }, [state.loadedFile, state.workspace?.rootPath]);
+
+  const createAgentChatContextManifest =
+    useCallback(async (): Promise<AgentChatContextManifest | null> => {
+      const workspaceRoot = state.workspace?.rootPath;
+      const loadedFile = state.loadedFile;
+
+      if (!workspaceRoot || !loadedFile) {
+        return null;
+      }
+
+      const currentSelectionContext =
+        (await editorRef.current?.getSelectionContext()) ?? {
+          selectedBlockIds: [],
+          selectedText: "",
+        };
+      const selectionSnapshot =
+        currentSelectionContext.selectedText.trim() ||
+        currentSelectionContext.selectedBlockIds.length > 0
+          ? await captureAgentChatSelectionSnapshot()
+          : lastAgentChatSelectionSnapshotRef.current;
+      const selectionContext =
+        selectionSnapshot?.workspaceRoot === workspaceRoot &&
+        selectionSnapshot.currentDocumentPath === loadedFile.path
+          ? {
+              selectedBlockIds: selectionSnapshot.selectedBlockIds,
+              selectedText: selectionSnapshot.selectedText,
+            }
+          : currentSelectionContext;
 
       return {
         currentDocumentPath: loadedFile.path,
@@ -2905,6 +2986,7 @@ export const App = (): React.JSX.Element => {
         workspaceRoot,
       };
     }, [
+      captureAgentChatSelectionSnapshot,
       editorMarkdown,
       normalizedAgentChatModelName,
       state.draftMarkdown,
@@ -2933,12 +3015,12 @@ export const App = (): React.JSX.Element => {
   }, [createAgentChatContextManifest, isCurrentAgentChatContextManifest]);
 
   useEffect(() => {
-    if (!isAgentChatPanelOpen) {
-      return;
-    }
-
     let isCancelled = false;
     const refreshAgentChatContextManifest = (): void => {
+      if (!isAgentChatPanelOpen) {
+        return;
+      }
+
       void createAgentChatContextManifest().then((contextManifest) => {
         if (
           !isCancelled &&
@@ -2949,21 +3031,29 @@ export const App = (): React.JSX.Element => {
         }
       });
     };
+    const refreshAgentChatSelectionContext = (): void => {
+      void captureAgentChatSelectionSnapshot().then((selectionSnapshot) => {
+        if (!isCancelled && selectionSnapshot && isAgentChatPanelOpen) {
+          refreshAgentChatContextManifest();
+        }
+      });
+    };
 
     refreshAgentChatContextManifest();
     document.addEventListener(
       "selectionchange",
-      refreshAgentChatContextManifest,
+      refreshAgentChatSelectionContext,
     );
 
     return () => {
       isCancelled = true;
       document.removeEventListener(
         "selectionchange",
-        refreshAgentChatContextManifest,
+        refreshAgentChatSelectionContext,
       );
     };
   }, [
+    captureAgentChatSelectionSnapshot,
     createAgentChatContextManifest,
     isAgentChatPanelOpen,
     isCurrentAgentChatContextManifest,
@@ -4037,7 +4127,7 @@ export const App = (): React.JSX.Element => {
         <div
           aria-label={text("agentChat.resizePanel")}
           aria-orientation="vertical"
-          aria-valuemax={AGENT_CHAT_PANEL_WIDTH_MAX}
+          aria-valuemax={getAgentChatPanelWidthMax(globalThis.innerWidth)}
           aria-valuemin={AGENT_CHAT_PANEL_WIDTH_MIN}
           aria-valuenow={agentChatPanelWidth}
           className="agent-chat-resize-handle"

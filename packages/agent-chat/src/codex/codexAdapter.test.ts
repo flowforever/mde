@@ -372,6 +372,146 @@ describe('createCodexAgentChatAdapter', () => {
     expect(inputItem.text).toContain('Current Markdown snapshot:\n# Example')
   })
 
+  it('streams Codex reasoning as thinking messages and finalizes them on completion', async () => {
+    const scripted = createScriptedChild((request, push) => {
+      if (request.method === 'thread/start') {
+        push({
+          id: request.id,
+          result: {
+            thread: { cwd: '/workspace', id: 'thread-1' }
+          }
+        })
+        return
+      }
+
+      if (request.method === 'turn/start') {
+        push({
+          id: request.id,
+          result: {
+            turn: { id: 'turn-1' }
+          }
+        })
+        push({
+          method: 'item/reasoning/summaryTextDelta',
+          params: {
+            delta: 'Checking context',
+            itemId: 'reasoning-1',
+            summaryIndex: 0,
+            threadId: 'thread-1',
+            turnId: 'turn-1'
+          }
+        })
+        push({
+          method: 'item/reasoning/textDelta',
+          params: {
+            contentIndex: 0,
+            delta: ' and selecting evidence.',
+            itemId: 'reasoning-1',
+            threadId: 'thread-1',
+            turnId: 'turn-1'
+          }
+        })
+        push({
+          method: 'item/agentMessage/delta',
+          params: {
+            delta: 'Done',
+            itemId: 'message-1',
+            threadId: 'thread-1',
+            turnId: 'turn-1'
+          }
+        })
+        push({
+          method: 'turn/completed',
+          params: {
+            threadId: 'thread-1',
+            turn: { id: 'turn-1' }
+          }
+        })
+      }
+    })
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => scripted.child)
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      now: () => '2026-05-12T00:00:00.000Z',
+      processRunner
+    })
+
+    const events = []
+    for await (const event of adapter.startSession({
+      attachments: [],
+      content: 'Explain',
+      contextManifest,
+      session: createSession(),
+      workspaceRoot: '/workspace'
+    })) {
+      events.push(event)
+    }
+
+    expect(events).toEqual([
+      {
+        nativeSessionId: 'thread-1',
+        sessionId: 'mde-chat-1',
+        type: 'session-started'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'Checking context',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          isStreaming: true,
+          messageId: 'reasoning-1',
+          role: 'thinking',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'thinking-updated'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'Checking context and selecting evidence.',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          isStreaming: true,
+          messageId: 'reasoning-1',
+          role: 'thinking',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'thinking-updated'
+      },
+      {
+        createdAt: '2026-05-12T00:00:00.000Z',
+        delta: 'Done',
+        messageId: 'message-1',
+        sessionId: 'mde-chat-1',
+        type: 'assistant-message-delta'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'Checking context and selecting evidence.',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          isStreaming: false,
+          messageId: 'reasoning-1',
+          role: 'thinking',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'thinking-updated'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'Done',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          messageId: 'message-1',
+          role: 'assistant',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'assistant-message-completed'
+      }
+    ])
+  })
+
   it('interrupts an active turn using the tracked Codex turn id', async () => {
     let firstPush: PushLine | undefined
     const turnChild = createScriptedChild((request, push) => {
@@ -600,5 +740,131 @@ describe('createCodexAgentChatAdapter', () => {
       threadId: 'thread-1',
       turnId: 'turn-1'
     })
+  })
+
+  it('hydrates historical user and assistant messages when resuming a native session', async () => {
+    const scripted = createScriptedChild((request, push) => {
+      if (request.method === 'thread/resume') {
+        push({
+          id: request.id,
+          result: {
+            thread: {
+              cwd: '/workspace',
+              id: 'thread-1',
+              name: 'History title',
+              turns: [
+                {
+                  completedAt: 1778544001,
+                  durationMs: 1000,
+                  error: null,
+                  id: 'turn-1',
+                  items: [
+                    {
+                      content: [
+                        {
+                          text: 'Current Markdown snapshot:\n# Example\n\nUser message:\nExplain this section',
+                          text_elements: [],
+                          type: 'text'
+                        }
+                      ],
+                      id: 'user-item-1',
+                      type: 'userMessage'
+                    },
+                    {
+                      content: ['Detailed reasoning text'],
+                      id: 'reasoning-item-1',
+                      summary: ['Read the selected Markdown'],
+                      type: 'reasoning'
+                    },
+                    {
+                      id: 'assistant-item-1',
+                      memoryCitation: null,
+                      phase: null,
+                      text: 'This section introduces the feature.',
+                      type: 'agentMessage'
+                    }
+                  ],
+                  itemsView: 'full',
+                  startedAt: 1778544000,
+                  status: 'completed'
+                }
+              ],
+              updatedAt: 1778544001
+            }
+          }
+        })
+      }
+    })
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => scripted.child)
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      now: () => '2026-05-12T00:00:00.000Z',
+      processRunner
+    })
+
+    const events = []
+    for await (const event of adapter.resumeSession({
+      nativeSessionId: 'thread-1',
+      session: {
+        ...createSession(),
+        nativeSessionId: 'thread-1',
+        state: 'stopped'
+      },
+      workspaceRoot: '/workspace'
+    })) {
+      events.push(event)
+    }
+
+    expect(scripted.requests.find((request) => request.method === 'thread/resume'))
+      .toMatchObject({
+        params: {
+          excludeTurns: false,
+          threadId: 'thread-1'
+        }
+      })
+    expect(events).toEqual([
+      {
+        nativeSessionId: 'thread-1',
+        sessionId: 'mde-chat-1',
+        title: 'History title',
+        type: 'session-started'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'Explain this section',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          messageId: 'user-item-1',
+          role: 'user',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'message-created'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'Read the selected Markdown\n\nDetailed reasoning text',
+          createdAt: '2026-05-12T00:00:01.000Z',
+          isStreaming: false,
+          messageId: 'reasoning-item-1',
+          role: 'thinking',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'thinking-updated'
+      },
+      {
+        message: {
+          attachments: [],
+          content: 'This section introduces the feature.',
+          createdAt: '2026-05-12T00:00:01.000Z',
+          messageId: 'assistant-item-1',
+          role: 'assistant',
+          sessionId: 'mde-chat-1'
+        },
+        type: 'assistant-message-completed'
+      }
+    ])
   })
 })

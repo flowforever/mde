@@ -20,12 +20,24 @@ describe('Agent Chat component ids', () => {
     expect(COMPONENT_IDS.agentChat.changedFiles).toBe('agent-chat.changed-files')
     expect(COMPONENT_IDS.agentChat.closeButton).toBe('agent-chat.close-button')
     expect(COMPONENT_IDS.agentChat.composer).toBe('agent-chat.composer')
+    expect(COMPONENT_IDS.agentChat.contextDocumentToggle).toBe(
+      'agent-chat.context-document-toggle'
+    )
+    expect(COMPONENT_IDS.agentChat.contextSelectionPinButton).toBe(
+      'agent-chat.context-selection-pin-button'
+    )
+    expect(COMPONENT_IDS.agentChat.contextSelectionToggle).toBe(
+      'agent-chat.context-selection-toggle'
+    )
     expect(COMPONENT_IDS.agentChat.messageField).toBe(
       'agent-chat.message-field'
     )
     expect(COMPONENT_IDS.agentChat.messageBox).toBe('agent-chat.message-box')
     expect(COMPONENT_IDS.agentChat.messageItem).toBe('agent-chat.message-item')
     expect(COMPONENT_IDS.agentChat.panel).toBe('agent-chat.panel')
+    expect(COMPONENT_IDS.agentChat.pinnedSelectionRemoveButton).toBe(
+      'agent-chat.pinned-selection-remove-button'
+    )
     expect(COMPONENT_IDS.agentChat.resizeHandle).toBe(
       'agent-chat.resize-handle'
     )
@@ -45,6 +57,14 @@ describe('Agent Chat component ids', () => {
       agentChatCloseButton: {
         componentId: 'agent-chat.close-button',
         standardName: 'Agent Chat Close Button'
+      },
+      agentChatContextDocumentToggle: {
+        componentId: 'agent-chat.context-document-toggle',
+        standardName: 'Agent Chat Context Document Toggle'
+      },
+      agentChatContextSelectionPinButton: {
+        componentId: 'agent-chat.context-selection-pin-button',
+        standardName: 'Agent Chat Context Selection Pin Button'
       },
       agentChatMessageBox: {
         componentId: 'agent-chat.message-box',

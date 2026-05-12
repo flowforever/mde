@@ -165,12 +165,15 @@ describe('createCodexAppServerClient', () => {
       }
     }
 
-    expect(mapper.map(deltaNotification)).toMatchObject({
+    const [deltaEvent] = mapper.map(deltaNotification)
+    const [completedEvent] = mapper.map(completedNotification)
+
+    expect(deltaEvent).toMatchObject({
       delta: 'hello',
       messageId: 'item-1',
       type: 'assistant-message-delta'
     })
-    expect(mapper.map(completedNotification)).toMatchObject({
+    expect(completedEvent).toMatchObject({
       message: {
         content: 'hello',
         messageId: 'item-1',

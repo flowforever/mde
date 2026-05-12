@@ -2796,6 +2796,17 @@ describe("App shell", () => {
     expect(
       await screen.findByText("Selected paragraph for context testing."),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Message Agent Chat"));
+    mockEditorState.selectedBlockIds = [];
+    mockEditorState.selectedText = "";
+    act(() => {
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+
+    expect(
+      screen.getByText("Selected paragraph for context testing."),
+    ).toBeInTheDocument();
   });
 
   it("hides the Agent Chat editor action when the Codex sustained protocol is unavailable", async () => {

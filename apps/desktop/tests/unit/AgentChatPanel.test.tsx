@@ -303,6 +303,228 @@ describe('AgentChatPanel', () => {
     expect(screen.queryByRole('option', { name: /mde-native-thread-1/ })).not.toBeInTheDocument()
   })
 
+  it('loads history messages when switching to a native session from the picker', async () => {
+    const { api: baseApi, emit, session } = createAgentChatApi()
+    const firstSession = {
+      ...session,
+      nativeSessionId: 'thread-1',
+      sessionId: 'mde-native-thread-1',
+      state: 'stopped' as const,
+      title: 'First chat'
+    }
+    const secondSession = {
+      ...session,
+      nativeSessionId: 'thread-2',
+      sessionId: 'mde-native-thread-2',
+      state: 'stopped' as const,
+      title: 'Second chat'
+    }
+    const api = {
+      ...baseApi,
+      listSessions: vi.fn<AgentChatApi['listSessions']>(() =>
+        Promise.resolve([firstSession, secondSession])
+      ),
+      resumeSession: vi.fn<AgentChatApi['resumeSession']>((request) => {
+        const resumedSession =
+          request.sessionId === secondSession.sessionId
+            ? secondSession
+            : firstSession
+
+        return Promise.resolve({
+          ...resumedSession,
+          state: 'active'
+        })
+      })
+    } satisfies AgentChatApi
+
+    renderPanel(api)
+
+    await waitFor(() => {
+      expect(api.resumeSession).toHaveBeenCalledWith({
+        nativeSessionId: 'thread-1',
+        sessionId: 'mde-native-thread-1',
+        workspaceRoot: '/workspace'
+      })
+    })
+    act(() => {
+      emit({
+        message: {
+          attachments: [],
+          content: 'History for First chat',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          messageId: 'mde-native-thread-1-message',
+          role: 'assistant',
+          sessionId: firstSession.sessionId
+        },
+        type: 'assistant-message-completed'
+      })
+    })
+    expect(await screen.findByText('History for First chat')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Session'), {
+      target: { value: secondSession.sessionId }
+    })
+
+    await waitFor(() => {
+      expect(api.resumeSession).toHaveBeenCalledWith({
+        nativeSessionId: 'thread-2',
+        sessionId: 'mde-native-thread-2',
+        workspaceRoot: '/workspace'
+      })
+    })
+    act(() => {
+      emit({
+        message: {
+          attachments: [],
+          content: 'History for Second chat',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          messageId: 'mde-native-thread-2-message',
+          role: 'assistant',
+          sessionId: secondSession.sessionId
+        },
+        type: 'assistant-message-completed'
+      })
+    })
+    expect(await screen.findByText('History for Second chat')).toBeInTheDocument()
+    expect(screen.queryByText('History for First chat')).not.toBeInTheDocument()
+  })
+
+  it('renders assistant markdown as structured message content', async () => {
+    const { api, emit, session } = createAgentChatApi()
+
+    renderPanel(api)
+    fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+
+    act(() => {
+      emit({
+        message: {
+          attachments: [],
+          content: [
+            '# Summary',
+            '',
+            '- First item',
+            '- Second item',
+            '',
+            '```ts',
+            'const ok = true',
+            '```'
+          ].join('\n'),
+          createdAt: '2026-05-12T00:00:00.000Z',
+          messageId: 'assistant-markdown-1',
+          role: 'assistant',
+          sessionId: session.sessionId
+        },
+        type: 'assistant-message-completed'
+      })
+    })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Summary' })
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.getByText('First item')).toBeInTheDocument()
+    expect(screen.getByText('Second item')).toBeInTheDocument()
+    expect(screen.getByText('const ok = true')).toBeInTheDocument()
+  })
+
+  it('renders live thinking expanded and history thinking collapsed', async () => {
+    const { api, emit, session } = createAgentChatApi()
+
+    renderPanel(api)
+    fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+
+    act(() => {
+      emit({
+        message: {
+          attachments: [],
+          content: 'Checking context',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          isStreaming: true,
+          messageId: 'thinking-live',
+          role: 'thinking',
+          sessionId: session.sessionId
+        },
+        type: 'thinking-updated'
+      })
+      emit({
+        message: {
+          attachments: [],
+          content: 'Historical reasoning',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          isStreaming: false,
+          messageId: 'thinking-history',
+          role: 'thinking',
+          sessionId: session.sessionId
+        },
+        type: 'thinking-updated'
+      })
+    })
+
+    expect(await screen.findByText('Checking context')).toBeInTheDocument()
+    expect(screen.queryByText('Historical reasoning')).not.toBeVisible()
+    expect(screen.getByText('Checking context').closest('details')?.open).toBe(
+      true
+    )
+    expect(screen.getByText('Historical reasoning').closest('details')?.open).toBe(
+      false
+    )
+  })
+
+  it('sends only enabled context items', async () => {
+    const { api } = createAgentChatApi()
+
+    renderPanel(api)
+    fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+    fireEvent.click(screen.getByLabelText('Include document context'))
+    fireEvent.click(screen.getByLabelText('Include selection context'))
+    fireEvent.change(screen.getByLabelText('Message Agent Chat'), {
+      target: { value: 'Use less context' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(api.sendMessage).toHaveBeenCalled()
+    })
+    const sendRequest = api.sendMessage.mock.calls.at(-1)?.[0]
+
+    expect(sendRequest?.contextManifest.currentDocumentPath).toBeUndefined()
+    expect(sendRequest?.contextManifest.currentDocumentSnapshot).toBe('')
+    expect(sendRequest?.contextManifest.selectedBlockIds).toEqual([])
+    expect(sendRequest?.contextManifest.selectedText).toBe('')
+  })
+
+  it('keeps pinned selections available after the live editor selection is gone', async () => {
+    const { api } = createAgentChatApi()
+    const { rerender } = renderPanel(api)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pin selection' }))
+
+    rerender(
+      <AgentChatPanel
+        api={api}
+        contextManifest={{
+          ...contextManifest,
+          selectedBlockIds: [],
+          selectedText: ''
+        }}
+        onClose={vi.fn()}
+        text={text}
+        workspaceRoot="/workspace"
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Message Agent Chat'), {
+      target: { value: 'Use pinned context' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(api.sendMessage).toHaveBeenCalled()
+    })
+    expect(api.sendMessage.mock.calls.at(-1)?.[0].contextManifest.selectedText).toBe(
+      'Selected body'
+    )
+  })
+
   it('restores the submitted draft and attachments when sending fails', async () => {
     const { api: baseApi } = createAgentChatApi()
     const png = new File([new Uint8Array([1, 2, 3])], 'paste.png', {

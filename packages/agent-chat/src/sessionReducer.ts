@@ -30,6 +30,20 @@ const replaceSession = (
     )
   )
 
+const upsertMessage = (
+  messages: readonly AgentChatMessage[],
+  nextMessage: AgentChatMessage
+): readonly AgentChatMessage[] =>
+  Object.freeze(
+    messages.some((message) => message.messageId === nextMessage.messageId)
+      ? messages.map((message) =>
+          message.messageId === nextMessage.messageId
+            ? freezeMessage(nextMessage)
+            : message
+        )
+      : [...messages, freezeMessage(nextMessage)]
+  )
+
 export const createDraftAgentChatSession = (
   input: AgentChatCreateDraftSessionRequest & {
     readonly now: () => string
@@ -73,9 +87,13 @@ export const reduceAgentChatState = (
     })
   }
 
-  if (event.type === 'message-created' || event.type === 'assistant-message-completed') {
+  if (
+    event.type === 'message-created' ||
+    event.type === 'assistant-message-completed' ||
+    event.type === 'thinking-updated'
+  ) {
     return Object.freeze({
-      messages: Object.freeze([...state.messages, freezeMessage(event.message)]),
+      messages: upsertMessage(state.messages, event.message),
       sessions: state.sessions
     })
   }
