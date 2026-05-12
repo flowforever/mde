@@ -18,6 +18,7 @@ export { MarkdownBlockEditor } from './MarkdownBlockEditor'
 export type {
   CreateVisibleLinkWorkspaceTree,
   MarkdownBlockEditorHandle,
+  MarkdownBlockEditorSelectionContext,
   MarkdownBlockEditorProps
 } from './MarkdownBlockEditor'
 

@@ -1,0 +1,19 @@
+{
+  "name": "@mde/agent-chat",
+  "version": "1.5.15",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fake": "./src/fakeAdapter.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "cd ../.. && eslint packages/agent-chat --max-warnings=0",
+    "test": "vitest run --config vitest.config.ts --testTimeout=30000",
+    "test:unit": "vitest run --config vitest.config.ts --project unit --testTimeout=30000",
+    "test:integration": "vitest run --config vitest.config.ts --project integration --testTimeout=30000"
+  }
+}

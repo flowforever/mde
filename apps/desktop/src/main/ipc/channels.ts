@@ -45,6 +45,17 @@ export const AI_CHANNELS = Object.freeze({
   translateMarkdown: "ai:translate-markdown",
 });
 
+export const AGENT_CHAT_CHANNELS = Object.freeze({
+  createDraftSession: "agent-chat:create-draft-session",
+  event: "agent-chat:event",
+  getAvailability: "agent-chat:get-availability",
+  listSessions: "agent-chat:list-sessions",
+  resumeSession: "agent-chat:resume-session",
+  saveAttachment: "agent-chat:save-attachment",
+  sendMessage: "agent-chat:send-message",
+  stopSession: "agent-chat:stop-session",
+});
+
 export const AUTOMATION_CHANNELS = Object.freeze({
   archiveFlow: "automation:archive-flow",
   cancelRun: "automation:cancel-run",

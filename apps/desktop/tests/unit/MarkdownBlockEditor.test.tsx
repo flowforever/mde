@@ -8,7 +8,12 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { FormEventHandler, KeyboardEventHandler, ReactNode } from "react";
+import {
+  createRef,
+  type FormEventHandler,
+  type KeyboardEventHandler,
+  type ReactNode,
+} from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
@@ -17,6 +22,7 @@ import {
   createSearchRanges,
   isEditorSearchMutationRelevant,
   MarkdownBlockEditor,
+  type MarkdownBlockEditorHandle,
 } from "@mde/editor-react";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
@@ -240,6 +246,35 @@ describe("MarkdownBlockEditor accessibility", () => {
     expect(
       screen.queryByRole("button", { name: /save README\.md/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("exposes selected text and selected block ids for host context manifests", async () => {
+    const editorRef = createRef<MarkdownBlockEditorHandle>();
+
+    render(
+      <MarkdownBlockEditor
+        ref={editorRef}
+        colorScheme="light"
+        draftMarkdown="# Title\n\nBody"
+        errorMessage={null}
+        isDirty={false}
+        isSaving={false}
+        markdown="# Title\n\nBody"
+        onImageUpload={vi.fn()}
+        onMarkdownChange={vi.fn()}
+        onSaveRequest={vi.fn()}
+        path="README.md"
+        text={text}
+        workspaceRoot="/workspace"
+      />,
+    );
+
+    const context = await editorRef.current?.getSelectionContext();
+
+    expect(context).toEqual({
+      selectedBlockIds: [],
+      selectedText: "",
+    });
   });
 
   it("restores the current draft when app language text changes", async () => {

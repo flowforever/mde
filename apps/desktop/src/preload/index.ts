@@ -8,6 +8,7 @@ declare const require: (moduleName: 'electron') => Pick<
 import { createEditorApi } from './editorApi'
 import { createAutomationApi } from './automationApi'
 import { createAiApi } from './aiApi'
+import { createAgentChatApi } from './agentChatApi'
 import { createUpdateApi } from './updateApi'
 import { getWindowModeFromArgv } from '../shared/windowMode'
 import { WINDOW_CHANNELS, type MdeWindowApi } from '../shared/windowApi'
@@ -32,6 +33,7 @@ const mdeWindowApi: MdeWindowApi = {
 
 contextBridge.exposeInMainWorld('mdeWindow', mdeWindowApi)
 contextBridge.exposeInMainWorld('mdeAutomation', createAutomationApi(ipcRenderer))
+contextBridge.exposeInMainWorld('agentChatApi', createAgentChatApi(ipcRenderer))
 contextBridge.exposeInMainWorld('editorApi', createEditorApi(ipcRenderer, webUtils))
 contextBridge.exposeInMainWorld('aiApi', createAiApi(ipcRenderer))
 contextBridge.exposeInMainWorld('updateApi', createUpdateApi(ipcRenderer))

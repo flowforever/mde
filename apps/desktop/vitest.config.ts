@@ -6,6 +6,10 @@ const workspaceRoot = resolve(__dirname, '../..')
 
 const packageAliases = [
   {
+    find: /^@mde\/agent-chat$/,
+    replacement: resolve(workspaceRoot, 'packages/agent-chat/src/index.ts')
+  },
+  {
     find: /^@mde\/automation-flow$/,
     replacement: resolve(workspaceRoot, 'packages/automation-flow/src/index.ts')
   },
@@ -108,6 +112,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
+        'packages/agent-chat/src/**/*.ts',
         'packages/automation-flow/src/**/*.ts',
         'packages/editor-core/src/**/*.ts',
         'packages/editor-host/src/**/*.ts',

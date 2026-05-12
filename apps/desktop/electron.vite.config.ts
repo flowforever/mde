@@ -5,6 +5,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
 const workspaceRoot = resolve(__dirname, '../..')
 const internalWorkspacePackages = [
+  '@mde/agent-chat',
   '@mde/automation-flow',
   '@mde/editor-core',
   '@mde/editor-host',
@@ -12,6 +13,10 @@ const internalWorkspacePackages = [
 ]
 
 const packageAliases = [
+  {
+    find: /^@mde\/agent-chat$/,
+    replacement: resolve(workspaceRoot, 'packages/agent-chat/src/index.ts')
+  },
   {
     find: /^@mde\/automation-flow$/,
     replacement: resolve(workspaceRoot, 'packages/automation-flow/src/index.ts')

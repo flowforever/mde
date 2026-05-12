@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ForwardedRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
@@ -34,105 +35,144 @@ interface MockMarkdownBlockEditorProps {
   readonly searchQuery?: string;
 }
 
+interface MockMarkdownBlockEditorHandle {
+  readonly getMarkdown: () => Promise<string>;
+  readonly getSelectionContext: () => Promise<{
+    readonly selectedBlockIds: readonly string[];
+    readonly selectedText: string;
+  }>;
+}
+
 const mockEditorState = vi.hoisted(() => ({
   changeIndex: 0,
+  selectedBlockIds: [] as readonly string[],
+  selectedText: "",
 }));
 
 vi.mock("@mde/editor-react", async (importOriginal) => {
   const actual = await importOriginal();
-  const MockMarkdownBlockEditor = (props: MockMarkdownBlockEditorProps) => (
-    <section
-      aria-label="Mock editor"
-      onDrop={(event) => {
-        event.stopPropagation();
-      }}
-    >
-      <span>{props.path}</span>
-      <span>{props.markdown}</span>
-      <span data-testid="mock-editor-color-scheme">{props.colorScheme}</span>
-      <span data-testid="mock-editor-line-spacing">
-        {props.lineSpacing ?? "standard"}
-      </span>
-      {props.searchQuery ? (
-        <span data-testid="mock-editor-search-query">{props.searchQuery}</span>
-      ) : null}
-      {props.pinnedSearchQueries && props.pinnedSearchQueries.length > 0 ? (
-        <span data-testid="mock-editor-pinned-search-queries">
-          {props.pinnedSearchQueries.join(",")}
-        </span>
-      ) : null}
-      {props.isReadOnly ? (
-        <span data-testid="mock-editor-readonly">read-only</span>
-      ) : null}
-      {props.isDirty ? <span>Unsaved changes</span> : null}
-      {props.isSaving ? <span>Saving...</span> : null}
-      {props.errorMessage ? <p role="alert">{props.errorMessage}</p> : null}
-      <button
-        onClick={() => {
-          if (props.isReadOnly) {
-            return;
-          }
+  const React = await import("react");
+  const MockMarkdownBlockEditor = React.forwardRef(
+    (
+      props: MockMarkdownBlockEditorProps,
+      ref: ForwardedRef<MockMarkdownBlockEditorHandle>,
+    ) => {
+      React.useImperativeHandle(
+        ref,
+        () => ({
+          getMarkdown: () => Promise.resolve(props.markdown),
+          getSelectionContext: () =>
+            Promise.resolve({
+              selectedBlockIds: mockEditorState.selectedBlockIds,
+              selectedText: mockEditorState.selectedText,
+            }),
+        }),
+        [props.markdown],
+      );
 
-          mockEditorState.changeIndex += 1;
-          props.onMarkdownChange(`# Changed ${mockEditorState.changeIndex}`);
-        }}
-        type="button"
-      >
-        Change mock markdown
-      </button>
-      <button
-        onClick={() => {
-          if (props.isReadOnly) {
-            return;
-          }
+      return (
+        <section
+          aria-label="Mock editor"
+          onDrop={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <span>{props.path}</span>
+          <span>{props.markdown}</span>
+          <span data-testid="mock-editor-color-scheme">
+            {props.colorScheme}
+          </span>
+          <span data-testid="mock-editor-line-spacing">
+            {props.lineSpacing ?? "standard"}
+          </span>
+          {props.searchQuery ? (
+            <span data-testid="mock-editor-search-query">
+              {props.searchQuery}
+            </span>
+          ) : null}
+          {props.pinnedSearchQueries && props.pinnedSearchQueries.length > 0 ? (
+            <span data-testid="mock-editor-pinned-search-queries">
+              {props.pinnedSearchQueries.join(",")}
+            </span>
+          ) : null}
+          {props.isReadOnly ? (
+            <span data-testid="mock-editor-readonly">read-only</span>
+          ) : null}
+          {props.isDirty ? <span>Unsaved changes</span> : null}
+          {props.isSaving ? <span>Saving...</span> : null}
+          {props.errorMessage ? (
+            <p role="alert">{props.errorMessage}</p>
+          ) : null}
+          <button
+            onClick={() => {
+              if (props.isReadOnly) {
+                return;
+              }
 
-          props.onMarkdownChange("");
-        }}
-        type="button"
-      >
-        Clear mock markdown
-      </button>
-      <button
-        onClick={() => {
-          props.onExitHistoryPreview?.();
-        }}
-        type="button"
-      >
-        Exit preview
-      </button>
-      <button
-        onClick={() => {
-          props.onRestoreHistoryPreview?.();
-        }}
-        type="button"
-      >
-        Restore this version
-      </button>
-      <button
-        onClick={() => {
-          props.onOpenLink?.("docs/intro.md");
-        }}
-        type="button"
-      >
-        Open mock workspace link
-      </button>
-      <button
-        onClick={() => {
-          props.onOpenLink?.("https://example.com/docs");
-        }}
-        type="button"
-      >
-        Open mock external link
-      </button>
-      <button
-        onClick={() => {
-          props.onOpenLink?.("/other-workspace/docs/guide.md");
-        }}
-        type="button"
-      >
-        Open mock known workspace link
-      </button>
-    </section>
+              mockEditorState.changeIndex += 1;
+              props.onMarkdownChange(
+                `# Changed ${mockEditorState.changeIndex}`,
+              );
+            }}
+            type="button"
+          >
+            Change mock markdown
+          </button>
+          <button
+            onClick={() => {
+              if (props.isReadOnly) {
+                return;
+              }
+
+              props.onMarkdownChange("");
+            }}
+            type="button"
+          >
+            Clear mock markdown
+          </button>
+          <button
+            onClick={() => {
+              props.onExitHistoryPreview?.();
+            }}
+            type="button"
+          >
+            Exit preview
+          </button>
+          <button
+            onClick={() => {
+              props.onRestoreHistoryPreview?.();
+            }}
+            type="button"
+          >
+            Restore this version
+          </button>
+          <button
+            onClick={() => {
+              props.onOpenLink?.("docs/intro.md");
+            }}
+            type="button"
+          >
+            Open mock workspace link
+          </button>
+          <button
+            onClick={() => {
+              props.onOpenLink?.("https://example.com/docs");
+            }}
+            type="button"
+          >
+            Open mock external link
+          </button>
+          <button
+            onClick={() => {
+              props.onOpenLink?.("/other-workspace/docs/guide.md");
+            }}
+            type="button"
+          >
+            Open mock known workspace link
+          </button>
+        </section>
+      );
+    },
   );
 
   return { ...(actual as object), MarkdownBlockEditor: MockMarkdownBlockEditor };
@@ -142,6 +182,7 @@ import { App } from "../../src/renderer/src/app/App";
 import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
 import { WINDOW_WORKSPACE_SESSION_STORAGE_KEY } from "../../src/renderer/src/workspaces/recentWorkspaces";
 import type { AiApi, AiGenerationResult } from "../../src/shared/ai";
+import type { AgentChatApi } from "../../src/shared/agentChat";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { UpdateApi } from "../../src/shared/update";
 import type { EditorApi, Workspace } from "../../src/shared/workspace";
@@ -235,6 +276,7 @@ describe("App shell", () => {
     sessionStorage.clear();
     document.title = "MDE";
     Reflect.deleteProperty(window, "aiApi");
+    Reflect.deleteProperty(window, "agentChatApi");
     Reflect.deleteProperty(window, "editorApi");
     Reflect.deleteProperty(window, "updateApi");
     mockNavigatorLanguages(["en-US"]);
@@ -2204,6 +2246,251 @@ describe("App shell", () => {
     expect(localStorage.getItem("mde.appLanguagePreference")).toBe(
       "custom:spanish",
     );
+  });
+
+  it("shows the Agent Chat editor action only when Codex sustained chat is available", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+    const agentChatApi = {
+      createDraftSession: vi.fn(),
+      getAvailability: vi.fn().mockResolvedValue({
+        available: true,
+        engineId: "codex",
+      }),
+      listSessions: vi.fn().mockResolvedValue([]),
+      onEvent: vi.fn(() => vi.fn()),
+      resumeSession: vi.fn(),
+      saveAttachment: vi.fn(),
+      sendMessage: vi.fn(),
+      stopSession: vi.fn(),
+    } satisfies AgentChatApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+    Object.defineProperty(window, "agentChatApi", {
+      configurable: true,
+      value: agentChatApi,
+    });
+
+    render(<App />);
+
+    const agentChatButton = await screen.findByRole("button", {
+      name: /agent chat/i,
+    });
+
+    expect(agentChatApi.getAvailability).toHaveBeenCalledWith({
+      selectedEngineId: "codex",
+      workspaceRoot: "/workspace",
+    });
+
+    await user.click(agentChatButton);
+
+    expect(
+      await screen.findByRole("complementary", { name: /agent chat/i }),
+    ).toBeInTheDocument();
+    expect(agentChatApi.listSessions).toHaveBeenCalledWith({
+      selectedEngineId: "codex",
+      workspaceRoot: "/workspace",
+    });
+  });
+
+  it("refreshes the Agent Chat context preview when editor selection changes while open", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+    const agentChatApi = {
+      createDraftSession: vi.fn(),
+      getAvailability: vi.fn().mockResolvedValue({
+        available: true,
+        engineId: "codex",
+      }),
+      listSessions: vi.fn().mockResolvedValue([]),
+      onEvent: vi.fn(() => vi.fn()),
+      resumeSession: vi.fn(),
+      saveAttachment: vi.fn(),
+      sendMessage: vi.fn(),
+      stopSession: vi.fn(),
+    } satisfies AgentChatApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+    Object.defineProperty(window, "agentChatApi", {
+      configurable: true,
+      value: agentChatApi,
+    });
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /agent chat/i }),
+    );
+    expect(
+      await screen.findByRole("complementary", { name: /agent chat/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Selected paragraph for context testing."),
+    ).not.toBeInTheDocument();
+
+    mockEditorState.selectedBlockIds = ["block-selection"];
+    mockEditorState.selectedText = "Selected paragraph for context testing.";
+    act(() => {
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+
+    expect(
+      await screen.findByText("Selected paragraph for context testing."),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Agent Chat editor action when the Codex sustained protocol is unavailable", async () => {
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue("/workspace/README.md"),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn().mockResolvedValue({
+        filePath: "/workspace/README.md",
+        name: "README.md",
+        openedFilePath: "README.md",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "file",
+      }),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn(),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+    const aiApi = {
+      detectTools: vi.fn().mockResolvedValue({
+        tools: [{ commandPath: "/fake/codex", id: "codex", name: "Codex" }],
+      }),
+      summarizeMarkdown: vi.fn(),
+      translateMarkdown: vi.fn(),
+    } satisfies AiApi;
+    const agentChatApi = {
+      createDraftSession: vi.fn(),
+      getAvailability: vi.fn().mockResolvedValue({
+        available: false,
+        engineId: "codex",
+        reason: "protocol-unsupported",
+      }),
+      listSessions: vi.fn().mockResolvedValue([]),
+      onEvent: vi.fn(() => vi.fn()),
+      resumeSession: vi.fn(),
+      saveAttachment: vi.fn(),
+      sendMessage: vi.fn(),
+      stopSession: vi.fn(),
+    } satisfies AgentChatApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "aiApi", {
+      configurable: true,
+      value: aiApi,
+    });
+    Object.defineProperty(window, "agentChatApi", {
+      configurable: true,
+      value: agentChatApi,
+    });
+
+    render(<App />);
+
+    await screen.findByText("# Original");
+    await waitFor(() => {
+      expect(agentChatApi.getAvailability).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryByRole("button", { name: /agent chat/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("marks custom app languages and updates the selected pack through AI", async () => {

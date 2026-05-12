@@ -19,6 +19,7 @@ import {
   ChevronRight,
   FolderOpen,
   History,
+  MessageSquare,
   Pin,
   PinOff,
   Search,
@@ -27,6 +28,12 @@ import {
 } from "lucide-react";
 
 import type { AiApi, AiGenerationResult, AiTool } from "../../../shared/ai";
+import type {
+  AgentChatApi,
+  AgentChatAvailabilityResponse,
+  AgentChatContextManifest,
+  AgentChatEngineId,
+} from "../../../shared/agentChat";
 import type { MdeWindowApi } from "../../../shared/windowApi";
 import {
   DOCUMENT_HISTORY_EVENT_LABEL_KEYS,
@@ -130,12 +137,15 @@ import {
   type AiActionBusyState,
 } from "../ai/AiActionMenu";
 import { AiResultPanel } from "../ai/AiResultPanel";
+import { AgentChatPanel } from "../agentChat/AgentChatPanel";
+import { shouldShowAgentChatEntry } from "../agentChat/agentChatViewModel";
 import {
   forgetCustomAiTranslationLanguage,
   readCustomAiTranslationLanguages,
   rememberCustomAiTranslationLanguage,
 } from "../ai/aiLanguages";
 import {
+  getEffectiveAiToolId,
   readAiCliSettings,
   resolveAiGenerationOptions,
   writeAiCliSettings,
@@ -158,6 +168,7 @@ import { COMPONENT_IDS } from "../componentIds";
 
 declare global {
   interface Window {
+    readonly agentChatApi?: AgentChatApi;
     readonly aiApi?: AiApi;
     readonly editorApi?: EditorApi;
     readonly mdeWindow?: MdeWindowApi;
@@ -468,6 +479,11 @@ export const App = (): React.JSX.Element => {
   const [aiResult, setAiResult] = useState<ScopedAiGenerationResult | null>(
     null,
   );
+  const [agentChatAvailability, setAgentChatAvailability] =
+    useState<AgentChatAvailabilityResponse | null>(null);
+  const [agentChatContextManifest, setAgentChatContextManifest] =
+    useState<AgentChatContextManifest | null>(null);
+  const [isAgentChatPanelOpen, setIsAgentChatPanelOpen] = useState(false);
   const [aiErrorMessage, setAiErrorMessage] =
     useState<ScopedAiErrorMessage | null>(null);
   const [aiBusyStatesByDocument, setAiBusyStatesByDocument] = useState<
@@ -2624,7 +2640,25 @@ export const App = (): React.JSX.Element => {
     currentAiDocumentKey && aiErrorMessage?.documentKey === currentAiDocumentKey
       ? aiErrorMessage.message
       : null;
+  const effectiveAiToolId = getEffectiveAiToolId(aiSettings, aiTools);
+  const agentChatEngineId: AgentChatEngineId | null =
+    effectiveAiToolId === "codex" ? "codex" : null;
+  const agentChatModelName =
+    effectiveAiToolId ? aiSettings.modelNames[effectiveAiToolId]?.trim() : "";
+  const normalizedAgentChatModelName =
+    agentChatModelName && agentChatModelName.length > 0
+      ? agentChatModelName
+      : undefined;
   const shouldShowAiActions = aiTools.length > 0 && Boolean(state.loadedFile);
+  const hasAgentChatPrerequisites = Boolean(
+    window.agentChatApi && state.loadedFile && state.workspace && agentChatEngineId,
+  );
+  const activeAgentChatAvailability = hasAgentChatPrerequisites
+    ? agentChatAvailability
+    : null;
+  const shouldShowAgentChatAction =
+    shouldShowAgentChatEntry(activeAgentChatAvailability) &&
+    Boolean(window.agentChatApi && state.loadedFile && state.workspace);
   const recentFilePaths = state.workspace
     ? getWorkspaceRecentFiles(workspaceFileHistory, state.workspace.rootPath)
     : [];
@@ -2675,6 +2709,127 @@ export const App = (): React.JSX.Element => {
   useEffect(() => {
     saveCurrentFileRef.current = saveCurrentFile;
   }, [saveCurrentFile]);
+
+  useEffect(() => {
+    const agentChatApi = window.agentChatApi;
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!agentChatApi || !workspaceRoot || !agentChatEngineId) {
+      return;
+    }
+
+    let isCancelled = false;
+    const availabilityRequest = {
+      ...(normalizedAgentChatModelName
+        ? { modelName: normalizedAgentChatModelName }
+        : {}),
+      selectedEngineId: agentChatEngineId,
+      workspaceRoot,
+    };
+
+    void agentChatApi
+      .getAvailability(availabilityRequest)
+      .then((availability) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setAgentChatAvailability(availability);
+        if (!shouldShowAgentChatEntry(availability)) {
+          setIsAgentChatPanelOpen(false);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setAgentChatAvailability(null);
+          setIsAgentChatPanelOpen(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    agentChatEngineId,
+    normalizedAgentChatModelName,
+    state.workspace?.rootPath,
+  ]);
+
+  const createAgentChatContextManifest =
+    useCallback(async (): Promise<AgentChatContextManifest | null> => {
+      const workspaceRoot = state.workspace?.rootPath;
+      const loadedFile = state.loadedFile;
+
+      if (!workspaceRoot || !loadedFile) {
+        return null;
+      }
+
+      const selectionContext =
+        (await editorRef.current?.getSelectionContext()) ?? {
+          selectedBlockIds: [],
+          selectedText: "",
+        };
+
+      return {
+        currentDocumentPath: loadedFile.path,
+        currentDocumentSnapshot:
+          state.draftMarkdown ?? editorMarkdown ?? loadedFile.contents,
+        ...(normalizedAgentChatModelName
+          ? { modelName: normalizedAgentChatModelName }
+          : {}),
+        permissionMode: "max-permission",
+        selectedBlockIds: selectionContext.selectedBlockIds,
+        selectedText: selectionContext.selectedText,
+        sessionPurpose: "document-chat",
+        workspaceRoot,
+      };
+    }, [
+      editorMarkdown,
+      normalizedAgentChatModelName,
+      state.draftMarkdown,
+      state.loadedFile,
+      state.workspace?.rootPath,
+    ]);
+
+  const openAgentChatPanel = useCallback(async (): Promise<void> => {
+    const contextManifest = await createAgentChatContextManifest();
+
+    if (!contextManifest) {
+      return;
+    }
+
+    setAgentChatContextManifest(contextManifest);
+    setIsAgentChatPanelOpen(true);
+  }, [createAgentChatContextManifest]);
+
+  useEffect(() => {
+    if (!isAgentChatPanelOpen) {
+      return;
+    }
+
+    let isCancelled = false;
+    const refreshAgentChatContextManifest = (): void => {
+      void createAgentChatContextManifest().then((contextManifest) => {
+        if (!isCancelled && contextManifest) {
+          setAgentChatContextManifest(contextManifest);
+        }
+      });
+    };
+
+    refreshAgentChatContextManifest();
+    document.addEventListener(
+      "selectionchange",
+      refreshAgentChatContextManifest,
+    );
+
+    return () => {
+      isCancelled = true;
+      document.removeEventListener(
+        "selectionchange",
+        refreshAgentChatContextManifest,
+      );
+    };
+  }, [createAgentChatContextManifest, isAgentChatPanelOpen]);
 
   const createCurrentDesktopEditorHost = useCallback(
     () =>
@@ -3100,6 +3255,26 @@ export const App = (): React.JSX.Element => {
           id: "ai-translate",
         }
       : null,
+    shouldShowAgentChatAction
+      ? {
+          element: (
+            <button
+              aria-label={text("agentChat.title")}
+              aria-pressed={isAgentChatPanelOpen}
+              className="editor-action-button"
+              data-component-id={COMPONENT_IDS.agentChat.actionButton}
+              onClick={() => {
+                void openAgentChatPanel();
+              }}
+              title={text("agentChat.title")}
+              type="button"
+            >
+              <MessageSquare aria-hidden="true" size={17} strokeWidth={2} />
+            </button>
+          ),
+          id: "agent-chat",
+        }
+      : null,
     state.loadedFile
       ? {
           element: (
@@ -3478,6 +3653,9 @@ export const App = (): React.JSX.Element => {
           "editor-pane",
           isEditorFullWidth ? "is-editor-full-width" : "",
           currentAiResult ? "is-ai-result-active" : "",
+          isAgentChatPanelOpen && shouldShowAgentChatAction
+            ? "is-agent-chat-open"
+            : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -3514,117 +3692,136 @@ export const App = (): React.JSX.Element => {
             <Fragment key={item.id}>{item.element}</Fragment>
           ))}
         </div>
-        {currentAiErrorMessage ? (
-          <p className="ai-result-error" role="alert">
-            {currentAiErrorMessage}
-          </p>
-        ) : null}
-        {imageAssetRepairNotice ? (
-          <p className="editor-notice" role="status">
-            {imageAssetRepairNotice}
-          </p>
-        ) : null}
-        {currentAiResult && !historyPreview ? (
-          <AiResultPanel
-            colorScheme={resolvedTheme.family}
-            isRegeneratingSummary={currentAiBusyState === "refining-summary"}
-            onClose={() => {
-              if (currentAiDocumentKey) {
-                clearAiDocumentResult(currentAiDocumentKey);
-              }
-            }}
-            onRegenerateSummary={(instruction) => {
-              void summarizeMarkdown(instruction);
-            }}
-            onSearchStateChange={setEditorSearchState}
-            pinnedSearchQueries={pinnedEditorSearchQueries}
-            result={currentAiResult}
-            searchQuery={editorSearchQuery}
-            searchState={editorSearchState}
-            text={text}
-            workspaceRoot={state.workspace?.rootPath ?? ""}
-          />
-        ) : state.loadedFile || historyPreview ? (
-          <MarkdownBlockEditor
-            key={
-              historyPreview
-                ? `${state.workspace?.rootPath ?? ""}:history:${historyPreview.version.id}`
-                : `${state.workspace?.rootPath ?? ""}:${state.loadedFile?.path ?? ""}`
-            }
-            colorScheme={resolvedTheme.family}
-            createVisibleLinkWorkspaceTree={createVisibleEditorLinkTree}
-            draftMarkdown={editorMarkdown}
-            errorMessage={state.fileErrorMessage}
-            historyPreview={historyPreviewDisplay}
-            isDirty={historyPreview ? false : state.isDirty}
-            isReadOnly={Boolean(historyPreview)}
-            isSaving={historyPreview ? false : state.isSavingFile}
-            lineSpacing={editorLineSpacing}
-            markdownFilePaths={
-              state.workspace
-                ? collectMarkdownFilePaths(state.workspace.tree)
-                : []
-            }
-            markdown={editorMarkdown}
-            markdownAssetResolver={editorMarkdownAssetResolver}
-            onCreateLinkedMarkdown={createLinkedMarkdownWithEditorHost}
-            onExitHistoryPreview={closeHistoryPreview}
-            onImageUpload={uploadImageWithEditorHost}
-            onOpenLink={(href) => {
-              void openLinkWithEditorHost(href).catch((error) => {
-                dispatch({
-                  message: getErrorMessage(
-                    error,
-                    text("errors.openEditorLinkFailed"),
-                  ),
-                  type: "workspace/operation-failed",
-                  workspaceRoot: state.workspace?.rootPath ?? "",
-                });
-              });
-            }}
-            onMarkdownChange={(contents) => {
-              const workspaceRoot = state.workspace?.rootPath;
-
-              if (!workspaceRoot || !state.loadedFile || historyPreview) {
-                return;
-              }
-
-              dispatch({
-                contents,
-                filePath: state.loadedFile.path,
-                type: "file/content-changed",
-                workspaceRoot,
-              });
-            }}
-            onRestoreHistoryPreview={() => {
-              void restoreHistoryPreview();
-            }}
-            onSaveRequest={saveMarkdownWithEditorHost}
-            onSearchStateChange={setEditorSearchState}
-            path={editorFilePath}
-            pinnedSearchQueries={pinnedEditorSearchQueries}
-            ref={editorRef}
-            searchQuery={editorSearchQuery}
-            text={text}
-            activeSearchMatchIndex={editorSearchState.activeMatchIndex}
-            workspaceTree={state.workspace?.tree ?? []}
-            workspaceRoot={state.workspace?.rootPath ?? ""}
-          />
-        ) : (
-          <div
-            className="editor-empty-state"
-            data-component-id={COMPONENT_IDS.editor.emptyState}
-          >
-            <p className="editor-kicker">MDE</p>
-            <h1>{state.selectedFilePath ?? text("editor.emptyTitle")}</h1>
-            {state.isLoadingFile ? <p>{text("common.loadingFile")}</p> : null}
-            {state.fileErrorMessage ? (
-              <p className="editor-error" role="alert">
-                {state.fileErrorMessage}
+        <div className="editor-content-shell">
+          <div className="editor-document-shell">
+            {currentAiErrorMessage ? (
+              <p className="ai-result-error" role="alert">
+                {currentAiErrorMessage}
               </p>
             ) : null}
+            {imageAssetRepairNotice ? (
+              <p className="editor-notice" role="status">
+                {imageAssetRepairNotice}
+              </p>
+            ) : null}
+            {currentAiResult && !historyPreview ? (
+              <AiResultPanel
+                colorScheme={resolvedTheme.family}
+                isRegeneratingSummary={currentAiBusyState === "refining-summary"}
+                onClose={() => {
+                  if (currentAiDocumentKey) {
+                    clearAiDocumentResult(currentAiDocumentKey);
+                  }
+                }}
+                onRegenerateSummary={(instruction) => {
+                  void summarizeMarkdown(instruction);
+                }}
+                onSearchStateChange={setEditorSearchState}
+                pinnedSearchQueries={pinnedEditorSearchQueries}
+                result={currentAiResult}
+                searchQuery={editorSearchQuery}
+                searchState={editorSearchState}
+                text={text}
+                workspaceRoot={state.workspace?.rootPath ?? ""}
+              />
+            ) : state.loadedFile || historyPreview ? (
+              <MarkdownBlockEditor
+                key={
+                  historyPreview
+                    ? `${state.workspace?.rootPath ?? ""}:history:${historyPreview.version.id}`
+                    : `${state.workspace?.rootPath ?? ""}:${state.loadedFile?.path ?? ""}`
+                }
+                colorScheme={resolvedTheme.family}
+                createVisibleLinkWorkspaceTree={createVisibleEditorLinkTree}
+                draftMarkdown={editorMarkdown}
+                errorMessage={state.fileErrorMessage}
+                historyPreview={historyPreviewDisplay}
+                isDirty={historyPreview ? false : state.isDirty}
+                isReadOnly={Boolean(historyPreview)}
+                isSaving={historyPreview ? false : state.isSavingFile}
+                lineSpacing={editorLineSpacing}
+                markdownFilePaths={
+                  state.workspace
+                    ? collectMarkdownFilePaths(state.workspace.tree)
+                    : []
+                }
+                markdown={editorMarkdown}
+                markdownAssetResolver={editorMarkdownAssetResolver}
+                onCreateLinkedMarkdown={createLinkedMarkdownWithEditorHost}
+                onExitHistoryPreview={closeHistoryPreview}
+                onImageUpload={uploadImageWithEditorHost}
+                onOpenLink={(href) => {
+                  void openLinkWithEditorHost(href).catch((error) => {
+                    dispatch({
+                      message: getErrorMessage(
+                        error,
+                        text("errors.openEditorLinkFailed"),
+                      ),
+                      type: "workspace/operation-failed",
+                      workspaceRoot: state.workspace?.rootPath ?? "",
+                    });
+                  });
+                }}
+                onMarkdownChange={(contents) => {
+                  const workspaceRoot = state.workspace?.rootPath;
+
+                  if (!workspaceRoot || !state.loadedFile || historyPreview) {
+                    return;
+                  }
+
+                  dispatch({
+                    contents,
+                    filePath: state.loadedFile.path,
+                    type: "file/content-changed",
+                    workspaceRoot,
+                  });
+                }}
+                onRestoreHistoryPreview={() => {
+                  void restoreHistoryPreview();
+                }}
+                onSaveRequest={saveMarkdownWithEditorHost}
+                onSearchStateChange={setEditorSearchState}
+                path={editorFilePath}
+                pinnedSearchQueries={pinnedEditorSearchQueries}
+                ref={editorRef}
+                searchQuery={editorSearchQuery}
+                text={text}
+                activeSearchMatchIndex={editorSearchState.activeMatchIndex}
+                workspaceTree={state.workspace?.tree ?? []}
+                workspaceRoot={state.workspace?.rootPath ?? ""}
+              />
+            ) : (
+              <div
+                className="editor-empty-state"
+                data-component-id={COMPONENT_IDS.editor.emptyState}
+              >
+                <p className="editor-kicker">MDE</p>
+                <h1>{state.selectedFilePath ?? text("editor.emptyTitle")}</h1>
+                {state.isLoadingFile ? <p>{text("common.loadingFile")}</p> : null}
+                {state.fileErrorMessage ? (
+                  <p className="editor-error" role="alert">
+                    {state.fileErrorMessage}
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
-        )}
+          {isAgentChatPanelOpen &&
+          shouldShowAgentChatAction &&
+          agentChatContextManifest &&
+          window.agentChatApi &&
+          state.workspace ? (
+            <AgentChatPanel
+              api={window.agentChatApi}
+              contextManifest={agentChatContextManifest}
+              onClose={() => {
+                setIsAgentChatPanelOpen(false);
+              }}
+              text={text}
+              workspaceRoot={state.workspace.rootPath}
+            />
+          ) : null}
+        </div>
         {state.isDocumentHistoryPanelVisible ? (
           <aside
             aria-label={text("history.versionHistory")}

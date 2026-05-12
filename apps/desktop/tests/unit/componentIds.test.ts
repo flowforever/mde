@@ -6,7 +6,7 @@ import {
 } from "../../src/renderer/src/componentIds";
 
 const kebabComponentIdPattern =
-  /^(app|workspace|explorer|editor|search|link|flowchart|ai|automation|settings|updates)\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  /^(app|workspace|explorer|editor|search|link|flowchart|ai|agent-chat|automation|settings|updates)\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 describe("componentIds", () => {
   it("keeps the top-level component name map sorted by key", () => {

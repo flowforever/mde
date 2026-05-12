@@ -1,6 +1,6 @@
 # MDE 用户手册
 
-MDE 是一个本地优先的 Markdown 编辑器，提供类 VS Code 的文件资源管理器、BlockNote 编辑体验、自动保存、搜索、内部链接、Mermaid 流程图、AI 摘要和翻译、Automation Center、多主题、应用语言切换、更新检查以及文档历史恢复。
+MDE 是一个本地优先的 Markdown 编辑器，提供类 VS Code 的文件资源管理器、BlockNote 编辑体验、自动保存、搜索、内部链接、Mermaid 流程图、AI 摘要、翻译和 Agent Chat、Automation Center、多主题、应用语言切换、更新检查以及文档历史恢复。
 
 ![MDE 编辑器主界面](/screenshots/zh-CN/editor-main.png)
 
@@ -19,6 +19,7 @@ MDE 直接读写你选择的本地 Markdown 文件。应用生成的辅助数据
 | --- | --- |
 | 粘贴图片 | `.mde/assets/` |
 | AI 摘要和翻译 | `.mde/translations/` |
+| Agent Chat 会话元数据和附件缓存 | `.mde/agent-chat/` |
 | Automation Center 工作区任务 | `.mde/docs/` |
 | Workspace automation-flow | `.mde/automation-flows/` |
 | 文档历史快照 | `.mde/history/` |

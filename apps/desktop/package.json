@@ -1,6 +1,6 @@
 {
   "name": "@mde/desktop",
-  "version": "1.5.14",
+  "version": "1.5.15",
   "description": "MDE Electron desktop app.",
   "productName": "MDE",
   "private": true,
@@ -21,6 +21,7 @@
     "test:unit": "cd ../.. && vitest run --config apps/desktop/vitest.config.ts --project unit --testTimeout=30000",
     "test:integration": "cd ../.. && vitest run --config apps/desktop/vitest.config.ts --project integration --testTimeout=30000",
     "test:e2e": "cd ../.. && playwright test --config apps/desktop/playwright.config.ts apps/desktop/tests/e2e/markdown-editor.e2e.test.ts apps/desktop/tests/e2e/automation-center.e2e.test.ts && node scripts/run-editor-performance-e2e.mjs smoke",
+    "test:e2e:agent-chat": "cd ../.. && playwright test --config apps/desktop/playwright.config.ts apps/desktop/tests/e2e/agent-chat.e2e.test.ts",
     "test:e2e:automation-center": "cd ../.. && playwright test --config apps/desktop/playwright.config.ts apps/desktop/tests/e2e/automation-center.e2e.test.ts",
     "test:e2e:performance": "cd ../.. && node scripts/run-editor-performance-e2e.mjs smoke",
     "test:e2e:performance:benchmark": "cd ../.. && node scripts/run-editor-performance-e2e.mjs benchmark",
@@ -34,6 +35,7 @@
     "@blocknote/react": "^0.49.0",
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
+    "@mde/agent-chat": "workspace:*",
     "@mde/automation-flow": "workspace:*",
     "@mde/editor-core": "workspace:*",
     "@mde/editor-host": "workspace:*",

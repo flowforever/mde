@@ -225,6 +225,26 @@ const getAutomationRunIds = async (
     )
   })
 
+const getProjectedTaskTitles = async (
+  automationWindow: Page
+): Promise<readonly string[]> =>
+  automationWindow.evaluate(async () => {
+    const automationApi = (
+      globalThis as typeof globalThis & {
+        readonly mdeAutomation?: {
+          readonly getProjection: () => Promise<{
+            readonly projection: {
+              readonly tasks: readonly { readonly title: string }[]
+            }
+          }>
+        }
+      }
+    ).mdeAutomation
+    const projection = await automationApi?.getProjection()
+
+    return projection?.projection.tasks.map((task) => task.title) ?? []
+  })
+
 test('opens Automation Center in a separate window and keeps the editor usable', async () => {
   const workspacePath = await createAutomationWorkspace()
   const { app, startupDiagnostics, window } = await launchElectronApp({
@@ -626,9 +646,16 @@ test('shows archived flows without re-enabling archived discovery', async () => 
     await expect(
       workspaceFlows.getByText('Archived Flow', { exact: true })
     ).toHaveCount(0)
+    await expect
+      .poll(() => getProjectedTaskTitles(automationWindow), {
+        timeout: E2E_UI_READY_TIMEOUT_MS
+      })
+      .toContain('READY Implement automation E2E')
     await expect(
       automationWindow.getByRole('region', { name: 'Ready' })
-    ).toContainText('READY Implement automation E2E')
+    ).toContainText('READY Implement automation E2E', {
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
 
     await automationWindow
       .getByRole('checkbox', { name: 'Show archived flows' })

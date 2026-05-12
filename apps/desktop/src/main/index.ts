@@ -1,4 +1,14 @@
-import { rm } from 'node:fs/promises'
+import { execFile as nodeExecFile, spawn as nodeSpawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile
+} from 'node:fs/promises'
+import { promisify } from 'node:util'
 import { dirname, join } from 'node:path'
 
 import type {
@@ -16,6 +26,7 @@ import {
 } from './ipc/registerWorkspaceHandlers'
 import { getLaunchPathFromArgv } from './launchArgs'
 import { registerAiHandlers } from './ipc/registerAiHandlers'
+import { registerAgentChatHandlers } from './ipc/registerAgentChatHandlers'
 import { registerAutomationHandlers } from './ipc/registerAutomationHandlers'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createAiService } from './services/aiService'
@@ -49,6 +60,19 @@ import {
 import { WINDOW_CHANNELS } from '../shared/windowApi'
 import { configureAutoUpdates, resolveAutoUpdater } from './autoUpdate'
 import { applyReadyToShowWindowMode } from './e2eWindowMode'
+import {
+  createAgentChatRuntime,
+  createCodexAgentChatAdapter,
+  createFakeAgentChatAdapter,
+  type AgentChatCapabilityCacheEntry,
+  type AgentChatChildProcess,
+  type AgentChatFileStore,
+  type AgentChatMetadataStorage,
+  type AgentChatProcessRunner,
+  type AgentChatSessionBinding,
+  type AgentChatWorkspaceFileSnapshot,
+  type AgentChatWorkspaceSnapshotProvider
+} from '@mde/agent-chat'
 
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
@@ -76,6 +100,8 @@ const startupDiagnosticPattern = /preload|security|unable to load preload/i
 const DEV_PRODUCT_NAME = `${APP_PRODUCT_NAME} Dev`
 const E2E_AUTOMATION_AUTONOMY_GATE_ENV = 'MDE_E2E_AUTOMATION_AUTONOMY_GATE'
 const E2E_AUTOMATION_JSONL_ADAPTER_ENV = 'MDE_E2E_AUTOMATION_JSONL_ADAPTER'
+const E2E_AGENT_CHAT_FAKE_CODEX_ENV = 'MDE_E2E_AGENT_CHAT_FAKE_CODEX'
+const execFileAsync = promisify(nodeExecFile)
 
 interface RuntimeIdentityApp {
   readonly isPackaged: boolean
@@ -116,6 +142,212 @@ export const createMoveEntryToTrash =
 
     await shell.trashItem(entryPath)
   }
+
+const createTextIterable = (
+  stream: NodeJS.ReadableStream | null
+): AsyncIterable<string> => ({
+  async *[Symbol.asyncIterator]() {
+    if (!stream) {
+      return
+    }
+    for await (const chunk of stream as AsyncIterable<Buffer | string>) {
+      yield typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+    }
+  }
+})
+
+const createNodeProcessRunner = (): AgentChatProcessRunner => ({
+  execFile: async (command, args, options) => {
+    const result = await execFileAsync(command, [...args], {
+      cwd: options?.cwd,
+      timeout: options?.timeoutMs
+    })
+
+    return {
+      stderr: result.stderr?.toString() ?? '',
+      stdout: result.stdout?.toString() ?? ''
+    }
+  },
+  spawn: (command, args, options): AgentChatChildProcess => {
+    const child = nodeSpawn(command, [...args], {
+      cwd: options?.cwd,
+      env: options?.env,
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+
+    return {
+      kill: () => {
+        child.kill()
+      },
+      stderr: createTextIterable(child.stderr),
+      stdin: {
+        end: () => {
+          child.stdin.end()
+        },
+        write: (chunk) => {
+          child.stdin.write(chunk)
+        }
+      },
+      stdout: createTextIterable(child.stdout)
+    }
+  }
+})
+
+const createNodeAgentChatFileStore = (): AgentChatFileStore => ({
+  mkdir: async (path) => {
+    await mkdir(path, { recursive: true })
+  },
+  realpath,
+  writeFile: async (path, bytes) => {
+    await writeFile(path, bytes)
+  }
+})
+
+const createWorkspaceMetadataStorage = (): AgentChatMetadataStorage => {
+  interface WorkspaceAgentChatMetadata {
+    readonly bindings?: readonly AgentChatSessionBinding[]
+    readonly capabilityReports?: readonly AgentChatCapabilityCacheEntry[]
+  }
+
+  const getMetadataPath = (workspaceRoot: string): string =>
+    join(workspaceRoot, '.mde', 'agent-chat', 'metadata.json')
+
+  const readMetadata = async (
+    workspaceRoot: string
+  ): Promise<WorkspaceAgentChatMetadata> => {
+    try {
+      const source = await readFile(getMetadataPath(workspaceRoot), 'utf8')
+      return JSON.parse(source) as WorkspaceAgentChatMetadata
+    } catch {
+      return {}
+    }
+  }
+
+  const writeMetadata = async (
+    workspaceRoot: string,
+    metadata: WorkspaceAgentChatMetadata
+  ): Promise<void> => {
+    const metadataPath = getMetadataPath(workspaceRoot)
+    await mkdir(dirname(metadataPath), { recursive: true })
+    await writeFile(
+      metadataPath,
+      `${JSON.stringify(metadata, null, 2)}\n`,
+      'utf8'
+    )
+  }
+
+  const readBindings = async (
+    workspaceRoot: string
+  ): Promise<readonly AgentChatSessionBinding[]> => {
+    const metadata = await readMetadata(workspaceRoot)
+    return metadata.bindings ?? []
+  }
+
+  return {
+    bindNativeSession: async (binding) => {
+      const metadata = await readMetadata(binding.workspaceRoot)
+      const bindings = metadata.bindings ?? []
+      await writeMetadata(binding.workspaceRoot, {
+        ...metadata,
+        bindings: [
+          ...bindings.filter((item) => item.sessionId !== binding.sessionId),
+          binding
+        ]
+      })
+    },
+    listBindings: readBindings,
+    readCapabilityReport: async ({ cacheKey, workspaceRoot }) => {
+      const metadata = await readMetadata(workspaceRoot)
+      return metadata.capabilityReports?.find(
+        (entry) => entry.cacheKey === cacheKey
+      )?.report
+    },
+    writeCapabilityReport: async (entry) => {
+      const metadata = await readMetadata(entry.workspaceRoot)
+      const capabilityReports = metadata.capabilityReports ?? []
+      await writeMetadata(entry.workspaceRoot, {
+        ...metadata,
+        capabilityReports: [
+          ...capabilityReports.filter((item) => item.cacheKey !== entry.cacheKey),
+          entry
+        ]
+      })
+    }
+  }
+}
+
+const hashWorkspaceFile = async (
+  workspaceRoot: string,
+  relativePath: string
+): Promise<AgentChatWorkspaceFileSnapshot | undefined> => {
+  try {
+    const bytes = await readFile(join(workspaceRoot, relativePath))
+    return {
+      hash: createHash('sha256').update(bytes).digest('hex'),
+      path: relativePath
+    }
+  } catch {
+    return undefined
+  }
+}
+
+const scanWorkspaceFiles = async (
+  workspaceRoot: string,
+  currentDirectory = workspaceRoot
+): Promise<readonly string[]> => {
+  const ignoredNames = new Set(['.git', '.mde', 'coverage', 'node_modules', 'out'])
+  const entries = await readdir(currentDirectory, { withFileTypes: true })
+  const paths = await Promise.all(
+    entries.flatMap(async (entry) => {
+      if (ignoredNames.has(entry.name)) {
+        return []
+      }
+      const absolutePath = join(currentDirectory, entry.name)
+      const relativePath = absolutePath.slice(workspaceRoot.length + 1)
+      if (entry.isDirectory()) {
+        return scanWorkspaceFiles(workspaceRoot, absolutePath)
+      }
+      if (entry.isFile()) {
+        return [relativePath]
+      }
+      return []
+    })
+  )
+
+  return paths.flat()
+}
+
+const createWorkspaceSnapshotProvider = (
+  processRunner: AgentChatProcessRunner
+): AgentChatWorkspaceSnapshotProvider => ({
+  captureSnapshot: async (workspaceRoot) => {
+    let relativePaths: readonly string[]
+    try {
+      const result = await processRunner.execFile(
+        'git',
+        ['-C', workspaceRoot, 'ls-files', '-co', '--exclude-standard'],
+        { timeoutMs: 10_000 }
+      )
+      relativePaths = result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+    } catch {
+      relativePaths = await scanWorkspaceFiles(workspaceRoot)
+    }
+
+    const snapshots = await Promise.all(
+      relativePaths.map((relativePath) =>
+        hashWorkspaceFile(workspaceRoot, relativePath)
+      )
+    )
+
+    return snapshots.filter(
+      (snapshot): snapshot is AgentChatWorkspaceFileSnapshot =>
+        snapshot !== undefined
+    )
+  }
+})
 
 const getStartupDiagnostics = (): StartupDiagnostics | undefined => {
   if (process.env[CAPTURE_STARTUP_DIAGNOSTICS_ENV] !== '1') {
@@ -423,6 +655,28 @@ const bootstrap = async (): Promise<void> => {
     aiService: createAiService(),
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain
+  })
+  const agentChatProcessRunner = createNodeProcessRunner()
+  const agentChatRuntime = createAgentChatRuntime({
+    adapters:
+      process.env[E2E_AGENT_CHAT_FAKE_CODEX_ENV] === '1'
+        ? [createFakeAgentChatAdapter({ engineId: 'codex' })]
+        : process.env[E2E_AGENT_CHAT_FAKE_CODEX_ENV] === 'unsupported'
+          ? [createFakeAgentChatAdapter({ engineId: 'codex', supported: false })]
+          : [
+              createCodexAgentChatAdapter({
+                processRunner: agentChatProcessRunner
+              })
+            ],
+    fileStore: createNodeAgentChatFileStore(),
+    metadataStorage: createWorkspaceMetadataStorage(),
+    now: () => new Date().toISOString(),
+    snapshotProvider: createWorkspaceSnapshotProvider(agentChatProcessRunner)
+  })
+  registerAgentChatHandlers({
+    getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
+    ipcMain,
+    runtime: agentChatRuntime
   })
   const automationAppDataPath = app.getPath('userData')
   const automationStore = createAutomationStore({

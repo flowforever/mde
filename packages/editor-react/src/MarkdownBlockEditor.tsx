@@ -147,6 +147,12 @@ export interface MarkdownBlockEditorProps {
 
 export interface MarkdownBlockEditorHandle {
   readonly getMarkdown: () => Promise<string>;
+  readonly getSelectionContext: () => Promise<MarkdownBlockEditorSelectionContext>;
+}
+
+export interface MarkdownBlockEditorSelectionContext {
+  readonly selectedBlockIds: readonly string[];
+  readonly selectedText: string;
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
@@ -162,6 +168,14 @@ interface HighlightRuntime {
     readonly highlights?: HighlightRegistry;
   };
   readonly Highlight?: new (...ranges: Range[]) => unknown;
+}
+
+interface BlockNoteSelectionRuntime {
+  readonly getSelection?: () =>
+    | {
+        readonly blocks?: readonly { readonly id?: unknown }[];
+      }
+    | undefined;
 }
 
 interface SaveMarkdownOptions {
@@ -405,6 +419,24 @@ export const MarkdownBlockEditor = forwardRef<
 
     return composeMarkdownWithFrontmatter(draftMarkdownDocument, bodyMarkdown);
   }, [draftMarkdownDocument, editor, markdownAssetResolver]);
+
+  const getSelectionContext = useCallback((): Promise<
+    MarkdownBlockEditorSelectionContext
+  > => {
+    const selectedText = editor.getSelectedText().trim();
+    const selection = (editor as unknown as BlockNoteSelectionRuntime).getSelection?.();
+    const selectedBlockIds =
+      selection?.blocks
+        ?.map((block) => block.id)
+        .filter((id): id is string => typeof id === "string") ?? [];
+
+    return Promise.resolve(
+      Object.freeze({
+        selectedBlockIds: Object.freeze(selectedBlockIds),
+        selectedText,
+      }),
+    );
+  }, [editor]);
 
   const saveMarkdown = useCallback(async (
     options: SaveMarkdownOptions = {},
@@ -739,8 +771,9 @@ export const MarkdownBlockEditor = forwardRef<
     ref,
     () => ({
       getMarkdown: serializeMarkdown,
+      getSelectionContext,
     }),
-    [serializeMarkdown],
+    [getSelectionContext, serializeMarkdown],
   );
 
   useEffect(() => {

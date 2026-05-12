@@ -7,6 +7,96 @@ interface ComponentNameIdEntry {
 }
 
 export const COMPONENT_NAME_ID_MAP = {
+  agentChatActionButton: {
+    componentId: "agent-chat.action-button",
+    constantPath: "agentChat.actionButton",
+    standardName: "Agent Chat Action Button",
+  },
+  agentChatAttachImageButton: {
+    componentId: "agent-chat.attach-image-button",
+    constantPath: "agentChat.attachImageButton",
+    standardName: "Agent Chat Attach Image Button",
+  },
+  agentChatAttachmentChip: {
+    componentId: "agent-chat.attachment-chip",
+    constantPath: "agentChat.attachmentChip",
+    standardName: "Agent Chat Attachment Chip",
+  },
+  agentChatAttachmentRemoveButton: {
+    componentId: "agent-chat.attachment-remove-button",
+    constantPath: "agentChat.attachmentRemoveButton",
+    standardName: "Agent Chat Attachment Remove Button",
+  },
+  agentChatChangedFileRow: {
+    componentId: "agent-chat.changed-file-row",
+    constantPath: "agentChat.changedFileRow",
+    standardName: "Agent Chat Changed File Row",
+  },
+  agentChatChangedFiles: {
+    componentId: "agent-chat.changed-files",
+    constantPath: "agentChat.changedFiles",
+    standardName: "Agent Chat Changed Files",
+  },
+  agentChatCloseButton: {
+    componentId: "agent-chat.close-button",
+    constantPath: "agentChat.closeButton",
+    standardName: "Agent Chat Close Button",
+  },
+  agentChatComposer: {
+    componentId: "agent-chat.composer",
+    constantPath: "agentChat.composer",
+    standardName: "Agent Chat Composer",
+  },
+  agentChatContextPreview: {
+    componentId: "agent-chat.context-preview",
+    constantPath: "agentChat.contextPreview",
+    standardName: "Agent Chat Context Preview",
+  },
+  agentChatMessageField: {
+    componentId: "agent-chat.message-field",
+    constantPath: "agentChat.messageField",
+    standardName: "Agent Chat Message Field",
+  },
+  agentChatMessageItem: {
+    componentId: "agent-chat.message-item",
+    constantPath: "agentChat.messageItem",
+    standardName: "Agent Chat Message Item",
+  },
+  agentChatMessageList: {
+    componentId: "agent-chat.message-list",
+    constantPath: "agentChat.messageList",
+    standardName: "Agent Chat Message List",
+  },
+  agentChatNewSessionButton: {
+    componentId: "agent-chat.new-session-button",
+    constantPath: "agentChat.newSessionButton",
+    standardName: "Agent Chat New Session Button",
+  },
+  agentChatPanel: {
+    componentId: "agent-chat.panel",
+    constantPath: "agentChat.panel",
+    standardName: "Agent Chat Panel",
+  },
+  agentChatSendButton: {
+    componentId: "agent-chat.send-button",
+    constantPath: "agentChat.sendButton",
+    standardName: "Agent Chat Send Button",
+  },
+  agentChatSessionPicker: {
+    componentId: "agent-chat.session-picker",
+    constantPath: "agentChat.sessionPicker",
+    standardName: "Agent Chat Session Picker",
+  },
+  agentChatStopButton: {
+    componentId: "agent-chat.stop-button",
+    constantPath: "agentChat.stopButton",
+    standardName: "Agent Chat Stop Button",
+  },
+  agentChatThinkingStatus: {
+    componentId: "agent-chat.thinking-status",
+    constantPath: "agentChat.thinkingStatus",
+    standardName: "Agent Chat Thinking Status",
+  },
   aiCustomTranslationLanguageField: {
     componentId: "ai.custom-translation-language-field",
     constantPath: "ai.customTranslationLanguageField",
@@ -740,6 +830,29 @@ export const COMPONENT_IDS = {
     translateMenu: COMPONENT_NAME_ID_MAP.aiTranslateMenu.componentId,
     translationLanguageMenuItem:
       COMPONENT_NAME_ID_MAP.aiTranslationLanguageMenuItem.componentId,
+  },
+  agentChat: {
+    actionButton: COMPONENT_NAME_ID_MAP.agentChatActionButton.componentId,
+    attachImageButton:
+      COMPONENT_NAME_ID_MAP.agentChatAttachImageButton.componentId,
+    attachmentChip: COMPONENT_NAME_ID_MAP.agentChatAttachmentChip.componentId,
+    attachmentRemoveButton:
+      COMPONENT_NAME_ID_MAP.agentChatAttachmentRemoveButton.componentId,
+    changedFileRow: COMPONENT_NAME_ID_MAP.agentChatChangedFileRow.componentId,
+    changedFiles: COMPONENT_NAME_ID_MAP.agentChatChangedFiles.componentId,
+    closeButton: COMPONENT_NAME_ID_MAP.agentChatCloseButton.componentId,
+    composer: COMPONENT_NAME_ID_MAP.agentChatComposer.componentId,
+    contextPreview: COMPONENT_NAME_ID_MAP.agentChatContextPreview.componentId,
+    messageField: COMPONENT_NAME_ID_MAP.agentChatMessageField.componentId,
+    messageItem: COMPONENT_NAME_ID_MAP.agentChatMessageItem.componentId,
+    messageList: COMPONENT_NAME_ID_MAP.agentChatMessageList.componentId,
+    newSessionButton:
+      COMPONENT_NAME_ID_MAP.agentChatNewSessionButton.componentId,
+    panel: COMPONENT_NAME_ID_MAP.agentChatPanel.componentId,
+    sendButton: COMPONENT_NAME_ID_MAP.agentChatSendButton.componentId,
+    sessionPicker: COMPONENT_NAME_ID_MAP.agentChatSessionPicker.componentId,
+    stopButton: COMPONENT_NAME_ID_MAP.agentChatStopButton.componentId,
+    thinkingStatus: COMPONENT_NAME_ID_MAP.agentChatThinkingStatus.componentId,
   },
   automation: {
     archivedToggle: COMPONENT_NAME_ID_MAP.automationArchivedToggle.componentId,

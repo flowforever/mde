@@ -12,6 +12,8 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "paths": {
+      "@mde/agent-chat": ["./packages/agent-chat/src/index.ts"],
+      "@mde/agent-chat/*": ["./packages/agent-chat/src/*"],
       "@mde/automation-flow": ["./packages/automation-flow/src/index.ts"],
       "@mde/automation-flow/*": ["./packages/automation-flow/src/*"],
       "@mde/editor-core": ["./packages/editor-core/src/index.ts"],

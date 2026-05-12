@@ -4,6 +4,14 @@ import { defineConfig, defineProject } from 'vitest/config'
 
 const packageAliases = [
   {
+    find: /^@mde\/agent-chat$/,
+    replacement: resolve(__dirname, 'packages/agent-chat/src/index.ts')
+  },
+  {
+    find: /^@mde\/agent-chat\/(.+)$/,
+    replacement: resolve(__dirname, 'packages/agent-chat/src/$1')
+  },
+  {
     find: /^@mde\/automation-flow$/,
     replacement: resolve(__dirname, 'packages/automation-flow/src/index.ts')
   },
@@ -103,6 +111,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
+        'packages/agent-chat/src/**/*.ts',
         'packages/automation-flow/src/**/*.ts',
         'packages/editor-core/src/**/*.ts',
         'packages/editor-host/src/**/*.ts',
