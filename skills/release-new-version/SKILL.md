@@ -9,6 +9,8 @@ description: Use when preparing, tagging, pushing, or verifying a new MDE releas
 
 Use this workflow when publishing a production-ready MDE feature or bug fix from the pnpm workspace. The release must include workspace version updates, complete release notes, local verification, an annotated tag, a branch-and-tag push, post-push GitHub release checks, and user manual handling.
 
+When this workflow is entered from `skills/execute-picked-task/SKILL.md` after Architecture ALL PASS, Review ALL PASS, and manual divergent testing ALL PASS, continue release preparation without asking for additional user confirmation unless the selected task explicitly blocks staging, committing, pushing, tagging, or releasing, or a real blocker remains.
+
 ## Preflight
 
 * Inspect `git status`, the current branch, recent commits, `package.json`, `apps/desktop/package.json`, changed `packages/*/package.json` files, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, and existing local and remote tags.
@@ -18,6 +20,8 @@ Use this workflow when publishing a production-ready MDE feature or bug fix from
 * Confirm the change is release-worthy. Do not release documentation-only, test-only, formatting-only, local-only, experimental, or internal configuration changes unless the user explicitly asks for a release.
 
 * Check whether this release changes user-visible behavior, UI flows, settings, AI actions, search, links, workspace handling, update behavior, or troubleshooting guidance. If yes, update `user-manual/` before tagging. If no, state why the manual is unaffected in the handoff or release notes.
+
+* For production runtime or user-visible changes, confirm the selected task source records at least one divergent Manual Testing round covering usability, performance, response speed, and visual quality. Every valid manual-testing finding must be fixed and manually retested before tagging.
 
 * If the user supplied an exact version, validate that it does not reuse an existing tag or move backwards. Call out any mismatch before publishing.
 
@@ -111,6 +115,8 @@ Do not ship empty, placeholder, or vague generated notes. If GitHub creates a re
 
    * Run `pnpm run docs:screenshots` when user manual screenshots need to be created or refreshed.
 
+   * Confirm the manual divergent testing gate from `skills/execute-picked-task/SKILL.md` is complete before tagging any production runtime or user-visible release.
+
 6. Commit the release-ready changes with the repository commit message style.
 
 7. Create an annotated tag from the release notes, preserving Markdown headings:
@@ -152,6 +158,8 @@ gh run list --workflow "Deploy User Manual" --limit 5
 
 * Do not create a release tag when a user-visible behavior change lacks a user manual update or an explicit note explaining why the manual is unaffected.
 
+* Do not create a release tag for production runtime or user-visible changes while required manual divergent testing findings are unresolved or unretested.
+
 * Keep release notes concrete and aligned with the actual version changes.
 
 * Keep release preparation pnpm-native. If `package-lock.json` appears in the worktree, stop and remove the unintended npm artifact before tagging.
@@ -164,6 +172,7 @@ gh run list --workflow "Deploy User Manual" --limit 5
 | -------------------------------------------------------------- | --------------------------------------------------- |
 | Production feature or bug fix is ready                         | Version, verify, tag, push, and check release       |
 | User-visible behavior changed                                  | Update `user-manual/` before tagging                |
+| Runtime or UI manual testing found issues                      | Fix every valid finding, rerun affected checks, manually retest fixes, then tag |
 | User gives exact version                                       | Validate tag uniqueness and monotonic version first |
 | Same code state already passed E2E and user says not to repeat | Skip local E2E only; still run release workflow     |
 | Remote tag already exists                                      | Stop and choose the next valid version              |
