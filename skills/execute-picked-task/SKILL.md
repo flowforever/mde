@@ -216,6 +216,28 @@ Before release/deploy:
 
 If release/deploy is blocked by task-specific instructions or missing credentials, keep the task source outside `done`, record the exact blocker, and include the verification state already achieved.
 
+## Release Fix Loop
+
+If the Release SubAgent discovers a required fix during `skills/release-new-version/SKILL.md`, classify the fix before changing files:
+
+* Release-only metadata fixes may stay inside the Release SubAgent. Examples: version metadata, release notes wording, tag-message preparation, release command retry notes, and release workflow status documentation.
+
+* Task-scope fixes must return to `execute-picked-task` before release continues. Examples: production code, tests, user manual content, runtime configuration, build/package behavior, packaging behavior, task acceptance criteria, or any change that could affect Architecture ALL PASS, Review ALL PASS, or manual divergent testing ALL PASS.
+
+For a task-scope release fix:
+
+1. Stop the release before tagging or pushing whenever possible.
+
+2. Record "Release fix required" on the selected task source with the exact release-stage finding, files or behavior likely affected, and any partial release state.
+
+3. Dispatch a fresh Task Work Fix SubAgent for the fix.
+
+4. After the fix lands, rerun the full required `execute-picked-task` lifecycle: Architecture review/fix-review to Architecture ALL PASS, general review/fix-review to Review ALL PASS, manual divergent testing to ALL PASS, Release Decision SubAgent, then a fresh Release SubAgent.
+
+5. Treat earlier Architecture ALL PASS, Review ALL PASS, and manual divergent testing ALL PASS as invalidated by the task-scope release fix. Do not reuse them as final gates for the changed code state.
+
+If the task-scope fix is discovered only after a tag or release push, do not delete, recreate, move, or force-push the existing tag. Record the blocker and release state, then return to `execute-picked-task` for the full fix loop and follow the release skill's tag-safety rules for any follow-up release.
+
 ## Completion
 
 Use one of these terminal status meanings in the task source so auto-pick can safely resume:
@@ -267,6 +289,7 @@ After recording a terminal completion, release, archive, blocker, or handoff sta
 | Runtime or user-visible task | Arrange at least one manual round covering usability, performance, response speed, and visual quality |
 | Manual testing finds valid issues | Dispatch a Task Work Fix SubAgent, require affected checks and manual retest evidence before completion |
 | Manual divergent testing ALL PASS | Arrange Release Decision SubAgent, then Release SubAgent with `skills/release-new-version/SKILL.md` when release-worthy |
+| Release discovers task-scope fix | Stop release if possible, dispatch Task Work Fix SubAgent, then rerun the full execute-picked-task lifecycle |
 | Completion, release, archive, blocked, or handoff recorded | Return control to the auto-pick main agent; do not pick the next task here |
 | Verification fails | Arrange a Task Work Fix SubAgent if caused by this task; otherwise record exact unrelated failure evidence |
 | Release/deploy fails | Keep source outside `done`, record blocker, and do not close GitHub issue |

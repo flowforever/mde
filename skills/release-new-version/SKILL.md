@@ -11,6 +11,8 @@ Use this workflow when publishing a production-ready MDE feature or bug fix from
 
 When this workflow is entered from `skills/execute-picked-task/SKILL.md` after Architecture ALL PASS, Review ALL PASS, and manual divergent testing ALL PASS, continue release preparation without asking for additional user confirmation unless the selected task explicitly blocks staging, committing, pushing, tagging, or releasing, or a real blocker remains.
 
+When release preparation, verification, tagging, pushing, or release automation uncovers a fix that changes task scope, return to `skills/execute-picked-task/SKILL.md` instead of fixing it inside this workflow. Only release-only metadata fixes stay in this workflow.
+
 ## Preflight
 
 * Inspect `git status`, the current branch, recent commits, `package.json`, `apps/desktop/package.json`, changed `packages/*/package.json` files, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, and existing local and remote tags.
@@ -152,6 +154,10 @@ gh run list --workflow "Deploy User Manual" --limit 5
 
 * Do not delete or recreate a tag after it has been pushed.
 
+* During release, only make release-only metadata fixes in this workflow, such as version metadata, release notes wording, tag-message preparation, release command retry notes, or release workflow status documentation.
+
+* If a release-stage finding requires production code, tests, user manual content, runtime configuration, build/package behavior, packaging behavior, task acceptance criteria, or any change that could affect Architecture ALL PASS, Review ALL PASS, or manual divergent testing ALL PASS, stop release work and return to `skills/execute-picked-task/SKILL.md` for the full release fix loop.
+
 * Do not move requirement or bug documents into `done` until the release succeeds.
 
 * Do not publish or force-add internal planning docs under `docs/requirements/` or `docs/bugs/` unless the user explicitly asks for those ignored files to be included.
@@ -173,6 +179,7 @@ gh run list --workflow "Deploy User Manual" --limit 5
 | Production feature or bug fix is ready                         | Version, verify, tag, push, and check release       |
 | User-visible behavior changed                                  | Update `user-manual/` before tagging                |
 | Runtime or UI manual testing found issues                      | Fix every valid finding, rerun affected checks, manually retest fixes, then tag |
+| Release finds task-scope issue                                 | Stop release if possible and return to `skills/execute-picked-task/SKILL.md` |
 | User gives exact version                                       | Validate tag uniqueness and monotonic version first |
 | Same code state already passed E2E and user says not to repeat | Skip local E2E only; still run release workflow     |
 | Remote tag already exists                                      | Stop and choose the next valid version              |
