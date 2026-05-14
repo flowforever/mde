@@ -2907,13 +2907,13 @@ test('saves pasted images beside the Markdown file', async () => {
     await expect
       .poll(
         async () =>
-          readdir(join(workspacePath, 'docs', '.mde', 'assets')).catch(() => []),
+          readdir(join(workspacePath, 'docs', 'mde-assets')).catch(() => []),
         { timeout: 10_000 }
       )
       .toContainEqual(expect.stringMatching(/^image-.+\.png$/))
     await expect
       .poll(async () => readFile(diagramPath, 'utf8'), { timeout: 10_000 })
-      .toContain('.mde/assets/image-')
+      .toContain('mde-assets/image-')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -2960,10 +2960,13 @@ test('repairs moved .mde image assets when opening Markdown', async () => {
     await expect
       .poll(
         async () =>
-          readFile(join(workspacePath, 'docs', '.mde', 'assets', 'moved.png')),
+          readFile(join(workspacePath, 'docs', 'mde-assets', 'moved.png')),
         { timeout: 10_000 }
       )
       .toEqual(pngBytes)
+    await expect
+      .poll(async () => readFile(movedPath, 'utf8'), { timeout: 10_000 })
+      .toBe('# Moved image\n\n![Moved asset](.mde/assets/moved.png)')
     await expect(window.locator('.markdown-editor-surface img').first()).toBeVisible()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
@@ -3815,9 +3818,9 @@ test('copies explorer Markdown files with image assets from the context menu', a
           readTextFileOrNull(join(workspacePath, 'archive', 'copy-source.md')),
         { timeout: 10_000 }
       )
-      .toBe('# Copy Source\n\n![Hero](.mde/assets/hero.png)')
+      .toBe('# Copy Source\n\n![Hero](mde-assets/hero.png)')
     await expect(
-      readFile(join(workspacePath, 'archive', '.mde', 'assets', 'hero.png'))
+      readFile(join(workspacePath, 'archive', 'mde-assets', 'hero.png'))
     ).resolves.toEqual(imageBytes)
     expect(startupDiagnostics.errors).toEqual([])
   } finally {

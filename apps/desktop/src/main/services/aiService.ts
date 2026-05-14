@@ -275,27 +275,49 @@ const ensureChildDirectory = async (
 const ensureTranslationsDirectory = async (
   workspacePath: string,
   markdownFilePath: string,
-): Promise<string> => {
+): Promise<{
+  readonly sourceWorkspacePath: string;
+  readonly translationsDirectoryPath: string;
+}> => {
+  const realWorkspacePath = await realpath(workspacePath);
   const sourceFilePath = await resolveSourceMarkdownFile(
-    workspacePath,
+    realWorkspacePath,
     markdownFilePath,
   );
-  const sourceDirectoryPath = dirname(sourceFilePath);
-  const mdeDirectoryPath = await ensureChildDirectory(
-    sourceDirectoryPath,
-    ".mde",
+  const sourceWorkspacePath = toWorkspaceRelativePath(
+    realWorkspacePath,
+    sourceFilePath,
   );
+  const mdeDirectoryPath = await ensureChildDirectory(realWorkspacePath, ".mde");
   const translationsDirectoryPath = await ensureChildDirectory(
     mdeDirectoryPath,
     "translations",
   );
 
-  assertPathInsideWorkspace(
-    await realpath(workspacePath),
-    translationsDirectoryPath,
-  );
+  assertPathInsideWorkspace(realWorkspacePath, translationsDirectoryPath);
 
-  return translationsDirectoryPath;
+  return { sourceWorkspacePath, translationsDirectoryPath };
+};
+
+const ensureNestedDirectory = async (
+  parentPath: string,
+  relativeDirectoryPath: string,
+): Promise<string> => {
+  const pathSegments = relativeDirectoryPath
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter((segment) => segment.length > 0);
+  let currentPath = parentPath;
+
+  for (const segment of pathSegments) {
+    if (segment === "." || segment === "..") {
+      throw new Error("AI result path must be a directory");
+    }
+
+    currentPath = await ensureChildDirectory(currentPath, segment);
+  }
+
+  return currentPath;
 };
 
 const sanitizeLanguageSlug = (language: string): string => {
@@ -322,8 +344,13 @@ const createResultFileNames = (
   markdownFilePath: string,
   kind: AiGenerationResult["kind"],
   language?: string,
-): { readonly metaFileName: string; readonly resultFileName: string } => {
+): {
+  readonly metaFileName: string;
+  readonly relativeDirectoryPath: string;
+  readonly resultFileName: string;
+} => {
   const baseName = basename(markdownFilePath, extname(markdownFilePath));
+  const relativeDirectoryPath = dirname(markdownFilePath).replaceAll("\\", "/");
   const resultStem =
     kind === "summary"
       ? `${baseName}-summary`
@@ -331,6 +358,8 @@ const createResultFileNames = (
 
   return {
     metaFileName: `${resultStem}.meta.json`,
+    relativeDirectoryPath:
+      relativeDirectoryPath === "." ? "" : relativeDirectoryPath,
     resultFileName: `${resultStem}.md`,
   };
 };
@@ -795,17 +824,22 @@ export const createAiService = ({
     readonly workspacePath: string;
   }): Promise<AiGenerationResult> => {
     const realWorkspacePath = await realpath(workspacePath);
-    const translationsDirectoryPath = await ensureTranslationsDirectory(
+    const { sourceWorkspacePath, translationsDirectoryPath } =
+      await ensureTranslationsDirectory(
       realWorkspacePath,
       markdownFilePath,
     );
-    const { metaFileName, resultFileName } = createResultFileNames(
-      markdownFilePath,
+    const { metaFileName, relativeDirectoryPath, resultFileName } = createResultFileNames(
+      sourceWorkspacePath,
       kind,
       language,
     );
-    const resultPath = join(translationsDirectoryPath, resultFileName);
-    const metadataPath = join(translationsDirectoryPath, metaFileName);
+    const resultDirectoryPath = await ensureNestedDirectory(
+      translationsDirectoryPath,
+      relativeDirectoryPath,
+    );
+    const resultPath = join(resultDirectoryPath, resultFileName);
+    const metadataPath = join(resultDirectoryPath, metaFileName);
     const resultWorkspacePath = toWorkspaceRelativePath(
       realWorkspacePath,
       resultPath,
@@ -818,7 +852,7 @@ export const createAiService = ({
       kind,
       language,
       markdown,
-      markdownFilePath,
+      markdownFilePath: sourceWorkspacePath,
       metadataPath,
       resultPath,
       selectedModelName,
@@ -858,7 +892,7 @@ export const createAiService = ({
           language,
           ...(selectedModelName ? { modelName: selectedModelName } : {}),
           sourceHash: hashMarkdown(markdown),
-          sourcePath: markdownFilePath,
+          sourcePath: sourceWorkspacePath,
           toolId: tool.id,
         };
 

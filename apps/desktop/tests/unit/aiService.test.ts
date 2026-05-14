@@ -76,7 +76,7 @@ describe("aiService", () => {
     expect(prompts[0]).toContain("Preserve placeholders");
   });
 
-  it("generates and caches translations beside the source Markdown file", async () => {
+  it("generates and caches translations under the workspace .mde directory", async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), "mde-ai-service-"));
     let runPromptCalls = 0;
     const runPrompt: RunPrompt = () => {
@@ -111,18 +111,56 @@ describe("aiService", () => {
     expect(generated).toMatchObject({
       cached: false,
       contents: "# English\n\nTranslated from fake CLI.",
-      path: "docs/.mde/translations/intro.English.md",
+      path: ".mde/translations/docs/intro.English.md",
       tool: { id: "codex", name: "Codex" },
     });
     expect(cached).toMatchObject({
       cached: true,
       contents: "# English\n\nTranslated from fake CLI.",
-      path: "docs/.mde/translations/intro.English.md",
+      path: ".mde/translations/docs/intro.English.md",
     });
     expect(runPromptCalls).toBe(1);
     await expect(
       readFile(join(workspacePath, generated.path), "utf8"),
     ).resolves.toBe("# English\n\nTranslated from fake CLI.");
+  });
+
+  it("keeps same-name nested Markdown AI results in separate workspace .mde folders", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "mde-ai-service-"));
+    const service = createAiService({
+      locateCommand: locateCommands({ codex: "/fake/codex" }),
+      runPrompt: ({ prompt }) =>
+        Promise.resolve(
+          prompt.includes("Alpha") ? "# English\n\nAlpha." : "# English\n\nBeta.",
+        ),
+    });
+
+    await mkdir(join(workspacePath, "alpha"));
+    await mkdir(join(workspacePath, "beta"));
+    await writeFile(join(workspacePath, "alpha", "intro.md"), "# Alpha");
+    await writeFile(join(workspacePath, "beta", "intro.md"), "# Beta");
+
+    const alpha = await service.translateMarkdown(
+      workspacePath,
+      "alpha/intro.md",
+      "# Alpha",
+      "English",
+    );
+    const beta = await service.translateMarkdown(
+      workspacePath,
+      "beta/intro.md",
+      "# Beta",
+      "English",
+    );
+
+    expect(alpha.path).toBe(".mde/translations/alpha/intro.English.md");
+    expect(beta.path).toBe(".mde/translations/beta/intro.English.md");
+    await expect(readFile(join(workspacePath, alpha.path), "utf8")).resolves.toBe(
+      "# English\n\nAlpha.",
+    );
+    await expect(readFile(join(workspacePath, beta.path), "utf8")).resolves.toBe(
+      "# English\n\nBeta.",
+    );
   });
 
   it("regenerates cached translations when source Markdown changes", async () => {

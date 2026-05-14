@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -134,6 +134,39 @@ describe("aiHandlers integration", () => {
     expect(result).toMatchObject({
       contents: "# English\n\nTranslated through IPC.",
       path: ".mde/translations/README.English.md",
+    });
+    await expect(
+      readFile(join(workspacePath, result.path), "utf8"),
+    ).resolves.toBe("# English\n\nTranslated through IPC.");
+  });
+
+  it("generates nested translation files under the workspace .mde directory through IPC", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "mde-ai-ipc-"));
+
+    await writeFile(join(workspacePath, "README.md"), "# Readme");
+    await mkdir(join(workspacePath, "docs"));
+    await writeFile(join(workspacePath, "docs", "intro.md"), "# Intro");
+    const { handlers } = registerHandlers(workspacePath);
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.(
+      {},
+    )) as {
+      rootPath: string;
+    };
+
+    const result = (await handlers.get(AI_CHANNELS.translateMarkdown)?.(
+      {},
+      "docs/intro.md",
+      "# Intro",
+      "English",
+      workspace.rootPath,
+    )) as {
+      contents: string;
+      path: string;
+    };
+
+    expect(result).toMatchObject({
+      contents: "# English\n\nTranslated through IPC.",
+      path: ".mde/translations/docs/intro.English.md",
     });
     await expect(
       readFile(join(workspacePath, result.path), "utf8"),

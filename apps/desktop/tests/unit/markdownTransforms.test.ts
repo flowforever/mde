@@ -133,6 +133,20 @@ describe('markdownTransforms', () => {
 
   it('resolves local image asset paths to file URLs for editor preview', () => {
     const result = prepareMarkdownForEditor(
+      '![Screenshot](mde-assets/screenshot.png)',
+      createDesktopMarkdownAssetResolver({
+        markdownFilePath: 'docs/README.md',
+        workspaceRoot: '/Users/test/workspace'
+      })
+    )
+
+    expect(result).toBe(
+      '![Screenshot](file:///Users/test/workspace/docs/mde-assets/screenshot.png)'
+    )
+  })
+
+  it('keeps legacy .mde asset paths previewable for existing Markdown', () => {
+    const result = prepareMarkdownForEditor(
       '![Screenshot](.mde/assets/screenshot.png)',
       createDesktopMarkdownAssetResolver({
         markdownFilePath: 'docs/README.md',
@@ -143,6 +157,20 @@ describe('markdownTransforms', () => {
     expect(result).toBe(
       '![Screenshot](file:///Users/test/workspace/docs/.mde/assets/screenshot.png)'
     )
+  })
+
+  it('does not resolve unsafe desktop asset paths for editor preview', () => {
+    const resolver = createDesktopMarkdownAssetResolver({
+      markdownFilePath: 'docs/README.md',
+      workspaceRoot: '/Users/test/workspace'
+    })
+
+    expect(prepareMarkdownForEditor('![Traversal](mde-assets/../secret.png)', resolver)).toBe(
+      '![Traversal](mde-assets/../secret.png)'
+    )
+    expect(
+      prepareMarkdownForEditor('![Encoded](.mde/assets/%2e%2e/secret.png)', resolver)
+    ).toBe('![Encoded](.mde/assets/%2e%2e/secret.png)')
   })
 
   it('accepts an injected asset resolver for non-desktop preview URLs', () => {
@@ -200,14 +228,38 @@ describe('markdownTransforms', () => {
 
   it('keeps stored Markdown portable by converting file URLs back to sibling asset paths', () => {
     const result = prepareMarkdownForStorage(
-      '![Screenshot](file:///Users/test/workspace/docs/.mde/assets/screenshot.png)',
+      '![Screenshot](file:///Users/test/workspace/docs/mde-assets/screenshot.png)',
       createDesktopMarkdownAssetResolver({
         markdownFilePath: 'docs/README.md',
         workspaceRoot: '/Users/test/workspace'
       })
     )
 
-    expect(result).toBe('![Screenshot](.mde/assets/screenshot.png)')
+    expect(result).toBe('![Screenshot](mde-assets/screenshot.png)')
+  })
+
+  it('does not convert unsafe file URLs back to desktop asset paths', () => {
+    const resolver = createDesktopMarkdownAssetResolver({
+      markdownFilePath: 'docs/README.md',
+      workspaceRoot: '/Users/test/workspace'
+    })
+
+    expect(
+      prepareMarkdownForStorage(
+        '![Traversal](file:///Users/test/workspace/docs/mde-assets/../secret.png)',
+        resolver
+      )
+    ).toBe(
+      '![Traversal](file:///Users/test/workspace/docs/mde-assets/../secret.png)'
+    )
+    expect(
+      prepareMarkdownForStorage(
+        '![Encoded](file:///Users/test/workspace/docs/.mde/assets/%2e%2e/secret.png)',
+        resolver
+      )
+    ).toBe(
+      '![Encoded](file:///Users/test/workspace/docs/.mde/assets/%2e%2e/secret.png)'
+    )
   })
 
   it('accepts an injected asset resolver for non-desktop storage paths', () => {

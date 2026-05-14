@@ -17,8 +17,8 @@ MDE 直接读写你选择的本地 Markdown 文件。应用生成的辅助数据
 
 | 数据 | 位置 |
 | --- | --- |
-| 粘贴图片 | `.mde/assets/` |
-| AI 摘要和翻译 | `.mde/translations/` |
+| 粘贴图片 | 当前 Markdown 文件旁边的 `mde-assets/` |
+| AI 摘要和翻译 | 当前工作区的 `.mde/translations/` |
 | Agent Chat 会话元数据和附件缓存 | `.mde/agent-chat/` |
 | Automation Center 工作区任务 | `.mde/docs/` |
 | Workspace automation-flow | `.mde/automation-flows/` |

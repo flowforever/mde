@@ -33,7 +33,7 @@ describe('markdownFileService', () => {
     })
   })
 
-  it('repairs missing moved image assets when a unique source asset exists', async () => {
+  it('returns migrated legacy .mde image asset references without rewriting the source Markdown file', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     const imageBytes = Buffer.from([137, 80, 78, 71])
 
@@ -54,13 +54,16 @@ describe('markdownFileService', () => {
     )
 
     expect(result).toEqual({
-      contents: '# Intro\n\n![Moved image](.mde/assets/moved.png)',
+      contents: '# Intro\n\n![Moved image](mde-assets/moved.png)',
       path: 'docs/intro.md',
       repairedImageAssetCount: 1
     })
     await expect(
-      readFile(join(rootPath, 'docs', '.mde', 'assets', 'moved.png'))
+      readFile(join(rootPath, 'docs', 'mde-assets', 'moved.png'))
     ).resolves.toEqual(imageBytes)
+    await expect(readFile(join(rootPath, 'docs', 'intro.md'), 'utf8')).resolves.toBe(
+      '# Intro\n\n![Moved image](.mde/assets/moved.png)'
+    )
   })
 
   it('does not repair missing image assets when multiple source assets match', async () => {
@@ -89,7 +92,32 @@ describe('markdownFileService', () => {
       path: 'docs/intro.md'
     })
     await expect(
-      stat(join(rootPath, 'docs', '.mde', 'assets', 'moved.png'))
+      stat(join(rootPath, 'docs', 'mde-assets', 'moved.png'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('does not repair unsafe desktop asset references while reading Markdown', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+
+    await mkdir(join(rootPath, 'docs'))
+    await mkdir(join(rootPath, 'archive', '.mde', 'assets'), { recursive: true })
+    await writeFile(
+      join(rootPath, 'docs', 'intro.md'),
+      '# Intro\n\n![Moved image](.mde/assets/%2e%2e/moved.png)'
+    )
+    await writeFile(join(rootPath, 'archive', '.mde', 'assets', 'moved.png'), 'image')
+
+    const result = await createMarkdownFileService().readMarkdownFile(
+      rootPath,
+      'docs/intro.md'
+    )
+
+    expect(result).toEqual({
+      contents: '# Intro\n\n![Moved image](.mde/assets/%2e%2e/moved.png)',
+      path: 'docs/intro.md'
+    })
+    await expect(
+      stat(join(rootPath, 'docs', 'mde-assets', 'moved.png'))
     ).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
@@ -186,7 +214,7 @@ describe('markdownFileService', () => {
     )
   })
 
-  it('saves pasted images beside the Markdown file under .mde/assets', async () => {
+  it('saves pasted images beside the Markdown file under mde-assets', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
 
     await mkdir(join(rootPath, 'docs'))
@@ -199,8 +227,8 @@ describe('markdownFileService', () => {
       mimeType: 'image/png'
     })
 
-    expect(result.markdownPath).toMatch(/^\.mde\/assets\/image-.+\.png$/)
-    expect(result.fileUrl).toContain('/docs/.mde/assets/image-')
+    expect(result.markdownPath).toMatch(/^mde-assets\/image-.+\.png$/)
+    expect(result.fileUrl).toContain('/docs/mde-assets/image-')
     await expect(
       readFile(join(rootPath, 'docs', result.markdownPath))
     ).resolves.toEqual(Buffer.from([137, 80, 78, 71]))
@@ -229,8 +257,7 @@ describe('markdownFileService', () => {
     const outsidePath = await mkdtemp(join(tmpdir(), 'mde-assets-outside-'))
 
     await writeFile(join(rootPath, 'README.md'), '# Readme')
-    await mkdir(join(rootPath, '.mde'))
-    await symlink(outsidePath, join(rootPath, '.mde', 'assets'))
+    await symlink(outsidePath, join(rootPath, 'mde-assets'))
 
     await expect(
       createMarkdownFileService().saveImageAsset(rootPath, {
@@ -335,7 +362,7 @@ describe('markdownFileService', () => {
     expect(createdFolderStats.isDirectory()).toBe(true)
   })
 
-  it('copies a Markdown file with its local .mde image assets into another folder', async () => {
+  it('copies a Markdown file with legacy .mde image assets into mde-assets in another folder', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     const imageBytes = Buffer.from([137, 80, 78, 71])
 
@@ -359,13 +386,13 @@ describe('markdownFileService', () => {
     })
     await expect(
       readFile(join(rootPath, 'archive', 'intro.md'), 'utf8')
-    ).resolves.toBe('# Intro\n\n![Hero](.mde/assets/hero.png)')
+    ).resolves.toBe('# Intro\n\n![Hero](mde-assets/hero.png)')
     await expect(
-      readFile(join(rootPath, 'archive', '.mde', 'assets', 'hero.png'))
+      readFile(join(rootPath, 'archive', 'mde-assets', 'hero.png'))
     ).resolves.toEqual(imageBytes)
   })
 
-  it('imports external Markdown files and rewrites relative image paths to .mde assets', async () => {
+  it('imports external Markdown files and rewrites relative image paths to mde-assets', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     const externalPath = await mkdtemp(join(tmpdir(), 'mde-external-'))
     const imageBytes = Buffer.from([137, 80, 78, 71])
@@ -392,13 +419,80 @@ describe('markdownFileService', () => {
     ])
     await expect(
       readFile(join(rootPath, 'docs', 'external.md'), 'utf8')
-    ).resolves.toBe('# External\n\n![Photo](.mde/assets/photo.png)')
+    ).resolves.toBe('# External\n\n![Photo](mde-assets/photo.png)')
     await expect(
-      readFile(join(rootPath, 'docs', '.mde', 'assets', 'photo.png'))
+      readFile(join(rootPath, 'docs', 'mde-assets', 'photo.png'))
     ).resolves.toEqual(imageBytes)
   })
 
-  it('copies Markdown directories with nested .mde assets', async () => {
+  it('does not copy workspace Markdown image references that escape the workspace root', async () => {
+    const parentPath = await mkdtemp(join(tmpdir(), 'mde-markdown-parent-'))
+    const rootPath = join(parentPath, 'workspace')
+    const privateImagePath = join(parentPath, 'private.png')
+
+    await mkdir(join(rootPath, 'docs'), { recursive: true })
+    await mkdir(join(rootPath, 'archive'))
+    await writeFile(privateImagePath, Buffer.from([137, 80, 78, 71]))
+    await writeFile(
+      join(rootPath, 'docs', 'intro.md'),
+      '# Intro\n\n![Private](../../private.png)'
+    )
+
+    await expect(
+      createMarkdownFileService().copyWorkspaceEntry(
+        rootPath,
+        'docs/intro.md',
+        'archive'
+      )
+    ).resolves.toEqual({
+      path: 'archive/intro.md',
+      type: 'file'
+    })
+    await expect(
+      readFile(join(rootPath, 'archive', 'intro.md'), 'utf8')
+    ).resolves.toBe('# Intro\n\n![Private](../../private.png)')
+    await expect(
+      stat(join(rootPath, 'archive', 'mde-assets', 'private.png'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('does not import external Markdown image references that escape the imported source root', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const externalParentPath = await mkdtemp(join(tmpdir(), 'mde-external-parent-'))
+    const externalPath = join(externalParentPath, 'import')
+
+    await mkdir(join(rootPath, 'docs'))
+    await mkdir(externalPath)
+    await writeFile(
+      join(externalParentPath, 'private.png'),
+      Buffer.from([137, 80, 78, 71])
+    )
+    await writeFile(
+      join(externalPath, 'external.md'),
+      '# External\n\n![Private](../private.png)'
+    )
+
+    await expect(
+      createMarkdownFileService().pasteExternalEntries(
+        rootPath,
+        [join(externalPath, 'external.md')],
+        'docs'
+      )
+    ).resolves.toEqual([
+      {
+        path: 'docs/external.md',
+        type: 'file'
+      }
+    ])
+    await expect(
+      readFile(join(rootPath, 'docs', 'external.md'), 'utf8')
+    ).resolves.toBe('# External\n\n![Private](../private.png)')
+    await expect(
+      stat(join(rootPath, 'docs', 'mde-assets', 'private.png'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('copies Markdown directories with nested legacy .mde assets into mde-assets', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
     const imageBytes = Buffer.from([137, 80, 78, 71])
 
@@ -422,10 +516,52 @@ describe('markdownFileService', () => {
     })
     await expect(
       readFile(join(rootPath, 'archive', 'docs', 'intro.md'), 'utf8')
-    ).resolves.toBe('# Intro\n\n![Hero](.mde/assets/hero.png)')
+    ).resolves.toBe('# Intro\n\n![Hero](mde-assets/hero.png)')
     await expect(
-      readFile(join(rootPath, 'archive', 'docs', '.mde', 'assets', 'hero.png'))
+      readFile(join(rootPath, 'archive', 'docs', 'mde-assets', 'hero.png'))
     ).resolves.toEqual(imageBytes)
+    await expect(
+      stat(join(rootPath, 'archive', 'docs', '.mde', 'assets'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('pastes external Markdown directories without stale legacy .mde assets', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-markdown-'))
+    const externalPath = await mkdtemp(join(tmpdir(), 'mde-external-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(rootPath, 'archive'))
+    await mkdir(join(externalPath, 'bundle', '.mde', 'assets'), { recursive: true })
+    await writeFile(
+      join(externalPath, 'bundle', 'intro.md'),
+      '# External\n\n![Hero](.mde/assets/hero.png)'
+    )
+    await writeFile(
+      join(externalPath, 'bundle', '.mde', 'assets', 'hero.png'),
+      imageBytes
+    )
+
+    const result = await createMarkdownFileService().pasteExternalEntries(
+      rootPath,
+      [join(externalPath, 'bundle')],
+      'archive'
+    )
+
+    expect(result).toEqual([
+      {
+        path: 'archive/bundle',
+        type: 'directory'
+      }
+    ])
+    await expect(
+      readFile(join(rootPath, 'archive', 'bundle', 'intro.md'), 'utf8')
+    ).resolves.toBe('# External\n\n![Hero](mde-assets/hero.png)')
+    await expect(
+      readFile(join(rootPath, 'archive', 'bundle', 'mde-assets', 'hero.png'))
+    ).resolves.toEqual(imageBytes)
+    await expect(
+      stat(join(rootPath, 'archive', 'bundle', '.mde', 'assets'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('rejects ignored folder creation targets', async () => {

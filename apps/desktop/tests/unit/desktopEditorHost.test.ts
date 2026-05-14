@@ -29,7 +29,7 @@ describe('desktop editor host adapter', () => {
       },
       uploadImage: ({ fileName, mimeType }) => {
         calls.push(`upload:${fileName}:${mimeType}`)
-        return { src: '.mde/assets/image.png' }
+        return { src: 'mde-assets/image.png' }
       }
     })
 
@@ -55,7 +55,7 @@ describe('desktop editor host adapter', () => {
         fileName: 'image.png',
         mimeType: 'image/png'
       })
-    ).resolves.toEqual({ ok: true, value: { src: '.mde/assets/image.png' } })
+    ).resolves.toEqual({ ok: true, value: { src: 'mde-assets/image.png' } })
     await expect(
       host.createLinkedDocument?.({
         document,

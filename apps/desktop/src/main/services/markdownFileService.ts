@@ -16,6 +16,7 @@ import {
   basename,
   dirname,
   extname,
+  isAbsolute,
   join,
   posix,
   relative,
@@ -32,6 +33,13 @@ import type {
   RenamedEntry,
   WorkspaceSearchResult
 } from '../../shared/workspace'
+import {
+  isDesktopMarkdownAssetPathCandidate,
+  LEGACY_IMAGE_ASSET_PREFIX,
+  LOCAL_IMAGE_ASSET_PREFIX,
+  normalizeDesktopMarkdownAssetPath,
+  normalizeLocalMarkdownAssetStoragePath
+} from '../../shared/markdownAssets'
 import {
   findTextSearchMatches,
   normalizeSearchQuery
@@ -105,9 +113,6 @@ interface MarkdownFileServiceOptions {
 
 const MAX_SEARCH_FILE_RESULTS = 50
 const MAX_SEARCH_MATCHES_PER_FILE = 3
-const LOCAL_IMAGE_ASSET_PATTERN =
-  /!\[[^\]]*\]\((\.mde\/assets\/[^)\s]+)(?:[^)]*)\)/g
-const LOCAL_IMAGE_ASSET_PREFIX = '.mde/assets/'
 const MARKDOWN_IMAGE_TARGET_PATTERN = /!\[[^\]]*]\(([^)]*)\)/g
 
 const isMarkdownPath = (filePath: string): boolean =>
@@ -315,45 +320,37 @@ const sanitizeAssetFileName = (fileName: string): string => {
   return `${sanitizedBaseName || fallbackBaseName}${fileExtension}`
 }
 
-const normalizeAssetStoragePath = (relativeAssetPath: string): string | null => {
-  if (!relativeAssetPath.startsWith(LOCAL_IMAGE_ASSET_PREFIX)) {
-    return null
-  }
+const normalizeLocalAssetStoragePath = (relativeAssetPath: string): string | null => {
+  const normalizedAssetPath = normalizeDesktopMarkdownAssetPath(relativeAssetPath)
 
-  const assetStoragePath = relativeAssetPath
-    .slice(LOCAL_IMAGE_ASSET_PREFIX.length)
-    .replaceAll('\\', '/')
-  const pathSegments = assetStoragePath
-    .split('/')
-    .filter((segment) => segment.length > 0)
-
-  if (
-    pathSegments.length === 0 ||
-    pathSegments.length !== assetStoragePath.split('/').length ||
-    pathSegments.some((segment) => segment === '.' || segment === '..') ||
-    !isSupportedImageAssetPath(assetStoragePath)
-  ) {
-    return null
-  }
-
-  return pathSegments.join('/')
+  return normalizedAssetPath?.kind === 'local' &&
+    isSupportedImageAssetPath(normalizedAssetPath.storagePath)
+    ? normalizedAssetPath.storagePath
+    : null
 }
 
-const collectLocalImageAssetStoragePaths = (
-  contents: string
-): readonly string[] => {
-  const assetStoragePaths = new Set<string>()
+const normalizeLegacyAssetStoragePath = (
+  relativeAssetPath: string
+): string | null => {
+  const normalizedAssetPath = normalizeDesktopMarkdownAssetPath(relativeAssetPath)
 
-  for (const match of contents.matchAll(LOCAL_IMAGE_ASSET_PATTERN)) {
-    const assetStoragePath = normalizeAssetStoragePath(match[1])
-
-    if (assetStoragePath) {
-      assetStoragePaths.add(assetStoragePath)
-    }
-  }
-
-  return Array.from(assetStoragePaths)
+  return normalizedAssetPath?.kind === 'legacy' &&
+    isSupportedImageAssetPath(normalizedAssetPath.storagePath)
+    ? normalizedAssetPath.storagePath
+    : null
 }
+
+const normalizePortableAssetStoragePath = (
+  relativeAssetPath: string
+): string | null =>
+  normalizeLocalAssetStoragePath(relativeAssetPath) ??
+  normalizeLegacyAssetStoragePath(relativeAssetPath)
+
+const getAssetWorkspacePath = (
+  markdownFilePath: string,
+  markdownAssetPath: string
+): string =>
+  joinWorkspacePath(getParentWorkspacePath(markdownFilePath), markdownAssetPath)
 
 const pathExists = async (targetPath: string): Promise<boolean> => {
   try {
@@ -376,18 +373,23 @@ const collectAssetCandidates = async (
     assetStoragePaths.map((assetStoragePath) => [assetStoragePath, [] as string[]])
   )
 
-  const collectFromMdeDirectory = async (mdeDirectoryPath: string): Promise<void> => {
-    const mdeStats = await lstat(mdeDirectoryPath).catch(() => null)
+  const collectFromAssetDirectory = async (
+    assetDirectoryPath: string
+  ): Promise<void> => {
+    const assetDirectoryStats = await lstat(assetDirectoryPath).catch(() => null)
 
-    if (!mdeStats || mdeStats.isSymbolicLink() || !mdeStats.isDirectory()) {
+    if (
+      !assetDirectoryStats ||
+      assetDirectoryStats.isSymbolicLink() ||
+      !assetDirectoryStats.isDirectory()
+    ) {
       return
     }
 
     await Promise.all(
       assetStoragePaths.map(async (assetStoragePath) => {
         const candidatePath = join(
-          mdeDirectoryPath,
-          'assets',
+          assetDirectoryPath,
           ...assetStoragePath.split('/')
         )
         const candidateStats = await lstat(candidatePath).catch(() => null)
@@ -403,6 +405,16 @@ const collectAssetCandidates = async (
     )
   }
 
+  const collectFromMdeDirectory = async (mdeDirectoryPath: string): Promise<void> => {
+    const mdeStats = await lstat(mdeDirectoryPath).catch(() => null)
+
+    if (!mdeStats || mdeStats.isSymbolicLink() || !mdeStats.isDirectory()) {
+      return
+    }
+
+    await collectFromAssetDirectory(join(mdeDirectoryPath, 'assets'))
+  }
+
   const visitDirectory = async (directoryPath: string): Promise<void> => {
     const entries = await readdir(directoryPath, { withFileTypes: true }).catch(
       () => []
@@ -414,6 +426,11 @@ const collectAssetCandidates = async (
 
         if (entry.name === '.mde') {
           await collectFromMdeDirectory(entryPath)
+          return
+        }
+
+        if (entry.name === 'mde-assets') {
+          await collectFromAssetDirectory(entryPath)
           return
         }
 
@@ -439,72 +456,105 @@ const repairMissingImageAssets = async (
   workspacePath: string,
   filePath: string,
   contents: string
-): Promise<number> => {
-  const assetStoragePaths = collectLocalImageAssetStoragePaths(contents)
-
-  if (assetStoragePaths.length === 0) {
-    return 0
-  }
-
-  const markdownDirectoryPath = getParentWorkspacePath(filePath)
-  const missingAssetTargets: {
-    readonly assetStoragePath: string
-    readonly workspaceAssetPath: string
-  }[] = []
-
-  for (const assetStoragePath of assetStoragePaths) {
-    const workspaceAssetPath = joinWorkspacePath(
-      markdownDirectoryPath,
-      LOCAL_IMAGE_ASSET_PREFIX,
-      assetStoragePath
+): Promise<{
+  readonly contents: string
+  readonly repairedCount: number
+}> => {
+  const imageTargets = Array.from(contents.matchAll(MARKDOWN_IMAGE_TARGET_PATTERN))
+    .map((match) => ({
+      match,
+      parsedTarget: parseMarkdownLinkTarget(match[1]),
+      rawTarget: match[1]
+    }))
+    .map(({ match, parsedTarget, rawTarget }) => ({
+      assetStoragePath: parsedTarget
+        ? normalizePortableAssetStoragePath(parsedTarget.path)
+        : null,
+      isLegacyAsset: parsedTarget
+        ? normalizeLegacyAssetStoragePath(parsedTarget.path) !== null
+        : false,
+      match,
+      parsedTarget,
+      rawTarget
+    }))
+    .filter(
+      (
+        target
+      ): target is typeof target & {
+        readonly assetStoragePath: string
+        readonly parsedTarget: ParsedMarkdownLinkTarget
+      } =>
+        target.assetStoragePath !== null &&
+        target.parsedTarget !== null &&
+        isRelativeMarkdownAssetReference(target.parsedTarget.path)
     )
-    const absoluteAssetPath = resolveWorkspacePath(workspacePath, workspaceAssetPath)
 
-    if (!(await pathExists(absoluteAssetPath))) {
-      missingAssetTargets.push({
-        assetStoragePath,
-        workspaceAssetPath
-      })
-    }
+  if (imageTargets.length === 0) {
+    return { contents, repairedCount: 0 }
   }
 
-  if (missingAssetTargets.length === 0) {
-    return 0
-  }
+  const uniqueAssetStoragePaths = Array.from(
+    new Set(imageTargets.map(({ assetStoragePath }) => assetStoragePath))
+  )
 
   const candidatesByAssetPath = await collectAssetCandidates(
     workspacePath,
-    Array.from(
-      new Set(
-        missingAssetTargets.map(({ assetStoragePath }) => assetStoragePath)
-      )
-    )
+    uniqueAssetStoragePaths
   )
   let repairedCount = 0
+  let migratedContents = ''
+  let lastIndex = 0
 
-  for (const { assetStoragePath, workspaceAssetPath } of missingAssetTargets) {
-    const candidates = candidatesByAssetPath.get(assetStoragePath) ?? []
+  for (const {
+    assetStoragePath,
+    isLegacyAsset,
+    match,
+    parsedTarget,
+    rawTarget
+  } of imageTargets) {
+    let nextTarget = rawTarget
+    const localWorkspaceAssetPath = getAssetWorkspacePath(
+      filePath,
+      `${LOCAL_IMAGE_ASSET_PREFIX}${assetStoragePath}`
+    )
+    const absoluteLocalAssetPath = resolveWorkspacePath(
+      workspacePath,
+      localWorkspaceAssetPath
+    )
+    const hasLocalAsset = await pathExists(absoluteLocalAssetPath)
 
-    if (candidates.length !== 1) {
-      continue
-    }
+    if (isLegacyAsset || !hasLocalAsset) {
+      const candidates = candidatesByAssetPath.get(assetStoragePath) ?? []
 
-    try {
-      const absoluteTargetPath = await prepareMutableNewPath(
-        workspacePath,
-        workspaceAssetPath
-      )
-
-      await copyFile(candidates[0], absoluteTargetPath, fsConstants.COPYFILE_EXCL)
-      repairedCount += 1
-    } catch (error) {
-      if (!isErrorWithCode(error, 'EEXIST')) {
-        continue
+      if (candidates.length === 1) {
+        try {
+          nextTarget = replaceMarkdownLinkTargetPath(
+            rawTarget,
+            parsedTarget,
+            await copyImageAssetForMarkdown({
+              preferredStoragePath: assetStoragePath,
+              sourceAssetPath: candidates[0],
+              targetMarkdownFilePath: filePath,
+              workspacePath
+            })
+          )
+          repairedCount += 1
+        } catch {
+          nextTarget = rawTarget
+        }
       }
     }
+
+    migratedContents += `${contents.slice(lastIndex, match.index)}![${match[0].slice(
+      2,
+      match[0].indexOf(']')
+    )}](${nextTarget})`
+    lastIndex = (match.index ?? 0) + match[0].length
   }
 
-  return repairedCount
+  const nextContents = `${migratedContents}${contents.slice(lastIndex)}`
+
+  return { contents: nextContents, repairedCount }
 }
 
 const createSearchPreview = (
@@ -688,6 +738,38 @@ const resolveMutableEntry = async (
 
 const isPathAtOrInside = (entryPath: string, targetPath: string): boolean =>
   targetPath === entryPath || targetPath.startsWith(`${entryPath}/`)
+
+const isAbsolutePathAtOrInside = (
+  parentPath: string,
+  targetPath: string
+): boolean => {
+  const relativePath = relative(resolve(parentPath), resolve(targetPath))
+
+  return (
+    relativePath === '' ||
+    (!isAbsolute(relativePath) &&
+      relativePath !== '..' &&
+      !relativePath.startsWith(`..${sep}`))
+  )
+}
+
+const resolveContainedSourceAssetPath = async (
+  sourceRootDirectoryPath: string,
+  sourceAssetPath: string
+): Promise<string | null> => {
+  try {
+    const [realSourceRootPath, realSourceAssetPath] = await Promise.all([
+      realpath(sourceRootDirectoryPath),
+      realpath(sourceAssetPath)
+    ])
+
+    return isAbsolutePathAtOrInside(realSourceRootPath, realSourceAssetPath)
+      ? realSourceAssetPath
+      : null
+  } catch {
+    return null
+  }
+}
 
 const replacePathPrefix = (
   targetPath: string,
@@ -885,7 +967,7 @@ const copyImageAssetForMarkdown = async ({
 
   const targetMarkdownDirectoryPath = getParentWorkspacePath(targetMarkdownFilePath)
   const normalizedPreferredStoragePath =
-    normalizeAssetStoragePath(`${LOCAL_IMAGE_ASSET_PREFIX}${preferredStoragePath}`) ??
+    normalizeLocalMarkdownAssetStoragePath(preferredStoragePath) ??
     sanitizeAssetFileName(preferredStoragePath)
   const firstChoiceWorkspacePath = joinWorkspacePath(
     targetMarkdownDirectoryPath,
@@ -941,11 +1023,13 @@ const copyImageAssetForMarkdown = async ({
 const migrateMarkdownImageAssets = async ({
   contents,
   sourceDirectoryPath,
+  sourceRootDirectoryPath,
   targetMarkdownFilePath,
   workspacePath
 }: {
   readonly contents: string
   readonly sourceDirectoryPath: string
+  readonly sourceRootDirectoryPath: string
   readonly targetMarkdownFilePath: string
   readonly workspacePath: string
 }): Promise<string> => {
@@ -959,18 +1043,54 @@ const migrateMarkdownImageAssets = async ({
 
     if (parsedTarget && isRelativeMarkdownAssetReference(parsedTarget.path)) {
       const decodedPath = safeDecodePath(parsedTarget.path).replaceAll('\\', '/')
-      const localAssetStoragePath = normalizeAssetStoragePath(decodedPath)
+      const desktopAssetPath = normalizeDesktopMarkdownAssetPath(parsedTarget.path)
+      const isUnsafeDesktopAssetPath =
+        !desktopAssetPath &&
+        isDesktopMarkdownAssetPathCandidate(parsedTarget.path)
+      const localAssetStoragePath =
+        desktopAssetPath?.kind === 'local' &&
+        isSupportedImageAssetPath(desktopAssetPath.storagePath)
+          ? desktopAssetPath.storagePath
+          : null
+      const legacyAssetStoragePath =
+        desktopAssetPath?.kind === 'legacy' &&
+        isSupportedImageAssetPath(desktopAssetPath.storagePath)
+          ? desktopAssetPath.storagePath
+          : null
       const preferredStoragePath =
-        localAssetStoragePath ?? sanitizeAssetFileName(basename(decodedPath))
-      const sourceAssetPath = localAssetStoragePath
-        ? join(sourceDirectoryPath, ...LOCAL_IMAGE_ASSET_PREFIX.split('/'), ...localAssetStoragePath.split('/'))
-        : resolve(sourceDirectoryPath, decodedPath)
+        localAssetStoragePath ??
+        legacyAssetStoragePath ??
+        sanitizeAssetFileName(basename(decodedPath))
+      const sourceAssetPath = isUnsafeDesktopAssetPath
+        ? null
+        : localAssetStoragePath
+          ? join(
+              sourceDirectoryPath,
+              ...LOCAL_IMAGE_ASSET_PREFIX.split('/'),
+              ...localAssetStoragePath.split('/')
+            )
+          : legacyAssetStoragePath
+            ? join(
+                sourceDirectoryPath,
+                ...LEGACY_IMAGE_ASSET_PREFIX.split('/'),
+                ...legacyAssetStoragePath.split('/')
+              )
+            : resolve(sourceDirectoryPath, decodedPath)
+      const containedSourceAssetPath = sourceAssetPath
+        ? await resolveContainedSourceAssetPath(
+            sourceRootDirectoryPath,
+            sourceAssetPath
+          )
+        : null
 
-      if (isSupportedImageAssetPath(sourceAssetPath)) {
+      if (
+        containedSourceAssetPath &&
+        isSupportedImageAssetPath(containedSourceAssetPath)
+      ) {
         try {
           const markdownAssetPath = await copyImageAssetForMarkdown({
             preferredStoragePath,
-            sourceAssetPath,
+            sourceAssetPath: containedSourceAssetPath,
             targetMarkdownFilePath,
             workspacePath
           })
@@ -1082,10 +1202,12 @@ const resolveExternalEntry = async (sourcePath: string): Promise<CopySourceEntry
 
 const copyMarkdownFileToWorkspace = async ({
   sourceAbsolutePath,
+  sourceRootDirectoryPath,
   targetWorkspacePath,
   workspacePath
 }: {
   readonly sourceAbsolutePath: string
+  readonly sourceRootDirectoryPath: string
   readonly targetWorkspacePath: string
   readonly workspacePath: string
 }): Promise<void> => {
@@ -1093,6 +1215,7 @@ const copyMarkdownFileToWorkspace = async ({
   const migratedContents = await migrateMarkdownImageAssets({
     contents: sourceContents,
     sourceDirectoryPath: dirname(sourceAbsolutePath),
+    sourceRootDirectoryPath,
     targetMarkdownFilePath: targetWorkspacePath,
     workspacePath
   })
@@ -1109,10 +1232,12 @@ const copyMarkdownFileToWorkspace = async ({
 
 const copyDirectoryToWorkspace = async ({
   sourceAbsolutePath,
+  sourceRootDirectoryPath,
   targetWorkspacePath,
   workspacePath
 }: {
   readonly sourceAbsolutePath: string
+  readonly sourceRootDirectoryPath: string
   readonly targetWorkspacePath: string
   readonly workspacePath: string
 }): Promise<void> => {
@@ -1126,12 +1251,21 @@ const copyDirectoryToWorkspace = async ({
   const entries = await readdir(sourceAbsolutePath, { withFileTypes: true })
 
   for (const entry of entries) {
+    if (
+      entry.isDirectory() &&
+      entry.name === 'assets' &&
+      basename(sourceAbsolutePath) === '.mde'
+    ) {
+      continue
+    }
+
     const sourceChildPath = join(sourceAbsolutePath, entry.name)
     const targetChildPath = joinWorkspacePath(targetWorkspacePath, entry.name)
 
     if (entry.isDirectory()) {
       await copyDirectoryToWorkspace({
         sourceAbsolutePath: sourceChildPath,
+        sourceRootDirectoryPath,
         targetWorkspacePath: targetChildPath,
         workspacePath
       })
@@ -1141,6 +1275,7 @@ const copyDirectoryToWorkspace = async ({
     if (entry.isFile() && isMarkdownPath(entry.name)) {
       await copyMarkdownFileToWorkspace({
         sourceAbsolutePath: sourceChildPath,
+        sourceRootDirectoryPath,
         targetWorkspacePath: targetChildPath,
         workspacePath
       })
@@ -1168,10 +1303,12 @@ const copyDirectoryToWorkspace = async ({
 
 const copySourceEntryToWorkspace = async ({
   source,
+  sourceRootDirectoryPath,
   targetDirectoryPath,
   workspacePath
 }: {
   readonly source: CopySourceEntry
+  readonly sourceRootDirectoryPath: string
   readonly targetDirectoryPath: string
   readonly workspacePath: string
 }): Promise<CopiedEntry> => {
@@ -1185,12 +1322,14 @@ const copySourceEntryToWorkspace = async ({
   if (source.type === 'file') {
     await copyMarkdownFileToWorkspace({
       sourceAbsolutePath: source.absolutePath,
+      sourceRootDirectoryPath,
       targetWorkspacePath,
       workspacePath
     })
   } else {
     await copyDirectoryToWorkspace({
       sourceAbsolutePath: source.absolutePath,
+      sourceRootDirectoryPath,
       targetWorkspacePath,
       workspacePath
     })
@@ -1214,16 +1353,18 @@ export const createMarkdownFileService = ({
   async readMarkdownFile(workspacePath, filePath) {
     const realFilePath = await resolveExistingMarkdownFile(workspacePath, filePath)
     const contents = await readFile(realFilePath, 'utf8')
-    const repairedImageAssetCount = await repairMissingImageAssets(
+    const repairedImageAssets = await repairMissingImageAssets(
       workspacePath,
       filePath,
       contents
     )
 
     return Object.freeze({
-      contents,
+      contents: repairedImageAssets.contents,
       path: filePath,
-      ...(repairedImageAssetCount > 0 ? { repairedImageAssetCount } : {})
+      ...(repairedImageAssets.repairedCount > 0
+        ? { repairedImageAssetCount: repairedImageAssets.repairedCount }
+        : {})
     })
   },
   async markdownFileExists(workspacePath, filePath) {
@@ -1340,7 +1481,7 @@ export const createMarkdownFileService = ({
     )
     const fileExtension = getSupportedImageExtension(asset)
     const assetFileName = createImageAssetFileName(fileExtension)
-    const markdownPath = posix.join('.mde', 'assets', assetFileName)
+    const markdownPath = posix.join('mde-assets', assetFileName)
     const markdownDirectoryPath = getParentWorkspacePath(asset.markdownFilePath)
     const workspaceAssetPath = joinWorkspacePath(
       markdownDirectoryPath,
@@ -1405,6 +1546,8 @@ export const createMarkdownFileService = ({
         name: getWorkspacePathName(sourcePath),
         type: sourceEntry.type
       },
+      sourceRootDirectoryPath:
+        sourceEntry.type === 'directory' ? sourceEntry.absolutePath : workspacePath,
       targetDirectoryPath,
       workspacePath
     })
@@ -1420,6 +1563,8 @@ export const createMarkdownFileService = ({
       copiedEntries.push(
         await copySourceEntryToWorkspace({
           source,
+          sourceRootDirectoryPath:
+            source.type === 'directory' ? source.absolutePath : dirname(source.absolutePath),
           targetDirectoryPath,
           workspacePath
         })

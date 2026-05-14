@@ -115,7 +115,7 @@ describe('fileHandlers integration', () => {
     ).resolves.toBe(false)
   })
 
-  it('repairs moved image assets while reading Markdown through IPC', async () => {
+  it('migrates moved legacy image assets while reading Markdown through IPC', async () => {
     const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
     const imageBytes = Buffer.from([137, 80, 78, 71])
 
@@ -142,9 +142,13 @@ describe('fileHandlers integration', () => {
       ?.({}, 'docs/README.md', workspace.rootPath)) as FileContents
 
     expect(result.repairedImageAssetCount).toBe(1)
+    expect(result.contents).toBe('# Workspace\n\n![Moved](mde-assets/moved.png)')
     await expect(
-      readFile(join(workspacePath, 'docs', '.mde', 'assets', 'moved.png'))
+      readFile(join(workspacePath, 'docs', 'mde-assets', 'moved.png'))
     ).resolves.toEqual(imageBytes)
+    await expect(readFile(join(workspacePath, 'docs', 'README.md'), 'utf8')).resolves.toBe(
+      '# Workspace\n\n![Moved](.mde/assets/moved.png)'
+    )
   })
 
   it('rejects non-Markdown files', async () => {
@@ -541,8 +545,8 @@ describe('fileHandlers integration', () => {
         workspace.rootPath
       )) as { fileUrl: string; markdownPath: string }
 
-    expect(result.markdownPath).toMatch(/^\.mde\/assets\/image-.+\.png$/)
-    expect(result.fileUrl).toContain('/docs/.mde/assets/image-')
+    expect(result.markdownPath).toMatch(/^mde-assets\/image-.+\.png$/)
+    expect(result.fileUrl).toContain('/docs/mde-assets/image-')
     await expect(
       readFile(join(workspacePath, 'docs', result.markdownPath))
     ).resolves.toEqual(Buffer.from([137, 80, 78, 71]))
@@ -854,7 +858,7 @@ describe('fileHandlers integration', () => {
       type: 'file'
     })
     await expect(
-      readFile(join(workspacePath, 'archive', '.mde', 'assets', 'hero.png'))
+      readFile(join(workspacePath, 'archive', 'mde-assets', 'hero.png'))
     ).resolves.toEqual(imageBytes)
 
     await expect(
@@ -868,11 +872,144 @@ describe('fileHandlers integration', () => {
       }
     ])
     await expect(readFile(join(workspacePath, 'docs', 'outside.md'), 'utf8')).resolves.toBe(
-      '# Outside\n\n![Photo](.mde/assets/photo.png)'
+      '# Outside\n\n![Photo](mde-assets/photo.png)'
     )
     await expect(
-      readFile(join(workspacePath, 'docs', '.mde', 'assets', 'photo.png'))
+      readFile(join(workspacePath, 'docs', 'mde-assets', 'photo.png'))
     ).resolves.toEqual(imageBytes)
+  })
+
+  it('does not copy Markdown image references that escape the source root through IPC', async () => {
+    const parentPath = await mkdtemp(join(tmpdir(), 'mde-workspace-parent-'))
+    const workspacePath = join(parentPath, 'workspace')
+    const externalParentPath = await mkdtemp(join(tmpdir(), 'mde-external-parent-'))
+    const externalPath = join(externalParentPath, 'import')
+
+    await mkdir(join(workspacePath, 'docs'), { recursive: true })
+    await mkdir(join(workspacePath, 'archive'))
+    await writeFile(join(parentPath, 'private.png'), Buffer.from([137, 80, 78, 71]))
+    await writeFile(
+      join(workspacePath, 'docs', 'intro.md'),
+      '# Intro\n\n![Private](../../private.png)'
+    )
+    await mkdir(externalPath)
+    await writeFile(
+      join(externalParentPath, 'external-private.png'),
+      Buffer.from([137, 80, 78, 71])
+    )
+    await writeFile(
+      join(externalPath, 'outside.md'),
+      '# Outside\n\n![Private](../external-private.png)'
+    )
+
+    const { handlers } = registerHandlers(workspacePath, {
+      clipboardText: join(externalPath, 'outside.md')
+    })
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.copyWorkspaceEntry)
+        ?.({}, 'docs/intro.md', 'archive', workspace.rootPath)
+    ).resolves.toEqual({
+      path: 'archive/intro.md',
+      type: 'file'
+    })
+    await expect(
+      readFile(join(workspacePath, 'archive', 'intro.md'), 'utf8')
+    ).resolves.toBe('# Intro\n\n![Private](../../private.png)')
+    await expect(
+      stat(join(workspacePath, 'archive', 'mde-assets', 'private.png'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.pasteClipboardEntries)
+        ?.({}, 'docs', workspace.rootPath)
+    ).resolves.toEqual([
+      {
+        path: 'docs/outside.md',
+        type: 'file'
+      }
+    ])
+    await expect(readFile(join(workspacePath, 'docs', 'outside.md'), 'utf8')).resolves.toBe(
+      '# Outside\n\n![Private](../external-private.png)'
+    )
+    await expect(
+      stat(join(workspacePath, 'docs', 'mde-assets', 'external-private.png'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('copies and pastes Markdown directories through IPC without stale legacy .mde assets', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const externalPath = await mkdtemp(join(tmpdir(), 'mde-external-'))
+    const imageBytes = Buffer.from([137, 80, 78, 71])
+
+    await mkdir(join(workspacePath, 'docs', '.mde', 'assets'), {
+      recursive: true
+    })
+    await mkdir(join(workspacePath, 'archive'))
+    await writeFile(
+      join(workspacePath, 'docs', 'intro.md'),
+      '# Intro\n\n![Hero](.mde/assets/hero.png)'
+    )
+    await writeFile(join(workspacePath, 'docs', '.mde', 'assets', 'hero.png'), imageBytes)
+    await mkdir(join(externalPath, 'bundle', '.mde', 'assets'), { recursive: true })
+    await writeFile(
+      join(externalPath, 'bundle', 'outside.md'),
+      '# Outside\n\n![Photo](.mde/assets/photo.png)'
+    )
+    await writeFile(
+      join(externalPath, 'bundle', '.mde', 'assets', 'photo.png'),
+      imageBytes
+    )
+
+    const { handlers } = registerHandlers(workspacePath, {
+      clipboardText: join(externalPath, 'bundle')
+    })
+    const workspace = (await handlers.get(WORKSPACE_CHANNELS.openWorkspace)?.({})) as {
+      rootPath: string
+    }
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.copyWorkspaceEntry)
+        ?.({}, 'docs', 'archive', workspace.rootPath)
+    ).resolves.toEqual({
+      path: 'archive/docs',
+      type: 'directory'
+    })
+    await expect(
+      readFile(join(workspacePath, 'archive', 'docs', 'intro.md'), 'utf8')
+    ).resolves.toBe('# Intro\n\n![Hero](mde-assets/hero.png)')
+    await expect(
+      readFile(join(workspacePath, 'archive', 'docs', 'mde-assets', 'hero.png'))
+    ).resolves.toEqual(imageBytes)
+    await expect(
+      stat(join(workspacePath, 'archive', 'docs', '.mde', 'assets'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await expect(
+      handlers
+        .get(FILE_CHANNELS.pasteClipboardEntries)
+        ?.({}, 'archive', workspace.rootPath)
+    ).resolves.toEqual([
+      {
+        path: 'archive/bundle',
+        type: 'directory'
+      }
+    ])
+    await expect(
+      readFile(join(workspacePath, 'archive', 'bundle', 'outside.md'), 'utf8')
+    ).resolves.toBe('# Outside\n\n![Photo](mde-assets/photo.png)')
+    await expect(
+      readFile(join(workspacePath, 'archive', 'bundle', 'mde-assets', 'photo.png'))
+    ).resolves.toEqual(imageBytes)
+    await expect(
+      stat(join(workspacePath, 'archive', 'bundle', '.mde', 'assets'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('pastes Finder file-url clipboard entries through IPC', async () => {
@@ -908,10 +1045,10 @@ describe('fileHandlers integration', () => {
       }
     ])
     await expect(readFile(join(workspacePath, 'docs', 'finder.md'), 'utf8')).resolves.toBe(
-      '# Finder\n\n![Photo](.mde/assets/photo.png)'
+      '# Finder\n\n![Photo](mde-assets/photo.png)'
     )
     await expect(
-      readFile(join(workspacePath, 'docs', '.mde', 'assets', 'photo.png'))
+      readFile(join(workspacePath, 'docs', 'mde-assets', 'photo.png'))
     ).resolves.toEqual(imageBytes)
   })
 })

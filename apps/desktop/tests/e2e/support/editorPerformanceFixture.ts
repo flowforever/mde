@@ -191,7 +191,7 @@ export const buildEditorPerformanceMarkdown = (
     ) {
       imageCount += 1;
       blocks.push(
-        `![Performance image ${imageCount}](.mde/assets/performance-image-${imageCount}.png)`,
+        `![Performance image ${imageCount}](mde-assets/performance-image-${imageCount}.png)`,
       );
     }
 
@@ -245,7 +245,7 @@ export const createEditorPerformanceWorkspace = async ({
   const rootPath =
     workspacePath ?? (await mkdtemp(join(tmpdir(), "mde-performance-e2e-")));
   const fixture = buildEditorPerformanceMarkdown(preset);
-  const assetDirectoryPath = join(rootPath, ".mde", "assets");
+  const assetDirectoryPath = join(rootPath, "mde-assets");
   const assetPaths = Array.from(
     { length: preset.imageCount },
     (_, index) => join(assetDirectoryPath, `performance-image-${index + 1}.png`),

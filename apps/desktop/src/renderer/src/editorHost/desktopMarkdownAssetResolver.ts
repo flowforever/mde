@@ -1,5 +1,6 @@
 import type { MarkdownAssetResolver } from '@mde/editor-core/assets'
 import type { MarkdownAssetReference } from '@mde/editor-core/types'
+import { normalizeDesktopMarkdownAssetPath } from '../../../shared/markdownAssets'
 
 export interface MarkdownAssetContext {
   readonly markdownFilePath: string
@@ -55,17 +56,26 @@ const getAssetAbsolutePath = (
 ): string =>
   joinWorkspacePath(getMarkdownDirectoryAbsolutePath(context), relativeAssetPath)
 
-const isDesktopPortableAssetPath = (reference: MarkdownAssetReference): boolean =>
-  reference.kind === 'portable-markdown-path' &&
-  reference.rawTarget.startsWith('.mde/assets/')
+const getDesktopPortableAssetPath = (
+  reference: MarkdownAssetReference
+): string | null => {
+  if (reference.kind !== 'portable-markdown-path') {
+    return null
+  }
+
+  return normalizeDesktopMarkdownAssetPath(reference.rawTarget)?.markdownPath ?? null
+}
 
 export const createDesktopMarkdownAssetResolver = (
   context: MarkdownAssetContext
 ): MarkdownAssetResolver => ({
-  toEditorUrl: (reference) =>
-    isDesktopPortableAssetPath(reference)
-      ? encodeFilePath(getAssetAbsolutePath(context, reference.rawTarget))
-      : null,
+  toEditorUrl: (reference) => {
+    const assetPath = getDesktopPortableAssetPath(reference)
+
+    return assetPath
+      ? encodeFilePath(getAssetAbsolutePath(context, assetPath))
+      : null
+  },
   toStoragePath: (reference) => {
     if (reference.kind !== 'host-display-url') {
       return null
@@ -86,6 +96,6 @@ export const createDesktopMarkdownAssetResolver = (
 
     const relativePath = normalizedFilePath.slice(pathPrefix.length)
 
-    return relativePath.startsWith('.mde/assets/') ? relativePath : null
+    return normalizeDesktopMarkdownAssetPath(relativePath)?.markdownPath ?? null
   }
 })

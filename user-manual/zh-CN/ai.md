@@ -22,7 +22,7 @@ MDE 可以调用本机已安装的 Codex 或 Claude Code CLI，为当前 Markdow
 
 ## 缓存位置
 
-AI 结果保存在当前工作区的 `.mde/translations/`。Agent Chat 的 MDE 会话绑定和图片附件缓存保存在 `.mde/agent-chat/`。当原文没有变化时，MDE 会复用缓存结果，减少重复 CLI 调用。重新打开或刷新当前文件时，已显示的缓存结果会继续留在编辑器区域。
+AI 结果保存在当前工作区的 `.mde/translations/`，嵌套文档会按工作区相对路径分目录保存，避免同名文件互相覆盖。Agent Chat 的 MDE 会话绑定和图片附件缓存保存在 `.mde/agent-chat/`。当原文没有变化时，MDE 会复用缓存结果，减少重复 CLI 调用。重新打开或刷新当前文件时，已显示的缓存结果会继续留在编辑器区域。
 
 ## 设置
 
