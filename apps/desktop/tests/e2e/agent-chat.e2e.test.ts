@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
@@ -11,6 +11,7 @@ import { COMPONENT_IDS } from '../../src/renderer/src/componentIds'
 const E2E_TEST_TIMEOUT_MS = 120_000
 const E2E_BUILD_TIMEOUT_MS = 900_000
 const E2E_UI_READY_TIMEOUT_MS = 20_000
+const AGENT_CHAT_CAPABILITY_TIMEOUT_MS = 45_000
 
 test.setTimeout(E2E_TEST_TIMEOUT_MS)
 
@@ -32,6 +33,119 @@ const installFakeCodexCli = async (): Promise<string> => {
   await chmod(fakeCodexPath, 0o755)
 
   return fakeBinPath
+}
+
+const shellQuote = (value: string): string =>
+  `'${value.replace(/'/gu, "'\\''")}'`
+
+const installFakeShellPathCodexCli = async (): Promise<{
+  readonly fakeBinPath: string
+  readonly fakeShellPath: string
+}> => installFakeShellPathCodexCliWithOptions()
+
+const installFakeShellPathCodexCliWithOptions = async (
+  options: {
+    readonly loginStatus?: 'authenticated' | 'authentication-required'
+  } = {}
+): Promise<{
+  readonly fakeBinPath: string
+  readonly fakeShellPath: string
+}> => {
+  const loginStatus = options.loginStatus ?? 'authenticated'
+  const fakeBinPath = await mkdtemp(join(tmpdir(), 'mde-agent-chat-bin-'))
+  const fakeShellPathRoot = await mkdtemp(
+    join(tmpdir(), 'mde-agent-chat-shell-path-')
+  )
+  const fakeCodexPath = join(fakeBinPath, 'codex')
+  const fakeInterpreterPath = join(fakeShellPathRoot, 'mde-test-node')
+  const fakeShellPath = join(fakeShellPathRoot, 'shell')
+  const resolvedShellPath = [fakeBinPath, fakeShellPathRoot].join(delimiter)
+
+  await writeFile(
+    fakeInterpreterPath,
+    `#!/bin/sh\nexec ${shellQuote(process.execPath)} "$@"\n`,
+    'utf8'
+  )
+  await chmod(fakeInterpreterPath, 0o755)
+  await writeFile(
+    fakeShellPath,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "-lc" ] && [ "$2" = \'printf %s "$PATH"\' ]; then',
+      `  printf "%s" ${shellQuote(resolvedShellPath)}`,
+      '  exit 0',
+      'fi',
+      'exec /bin/sh "$@"',
+      ''
+    ].join('\n'),
+    'utf8'
+  )
+  await chmod(fakeShellPath, 0o755)
+  await writeFile(
+    fakeCodexPath,
+    [
+      '#!/usr/bin/env mde-test-node',
+      'const { mkdirSync, writeFileSync } = require("node:fs")',
+      'const { join } = require("node:path")',
+      'const readline = require("node:readline")',
+      'const args = process.argv.slice(2)',
+      'if (args[0] === "--version") {',
+      '  process.stdout.write("codex-cli 0.130.0\\n")',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "login" && args[1] === "status") {',
+      loginStatus === 'authenticated'
+        ? '  process.stdout.write("logged in as e2e\\n")'
+        : '  process.stderr.write("Not logged in\\n")',
+      loginStatus === 'authenticated' ? '  process.exit(0)' : '  process.exit(1)',
+      '}',
+      'if (args[0] === "app-server" && args[1] === "--help") {',
+      '  process.stdout.write("app-server generate-ts --listen\\n")',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "app-server" && args[1] === "generate-ts") {',
+      '  const out = args[args.indexOf("--out") + 1]',
+      '  mkdirSync(out, { recursive: true })',
+      '  writeFileSync(join(out, "protocol.ts"), "initialize initialized thread/start thread/resume thread/list turn/start turn/interrupt localImage cwd approvalPolicy sandbox")',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "app-server" && args[1] === "--listen" && args[2] === "stdio://") {',
+      '  const writeJson = (message) => process.stdout.write(`${JSON.stringify(message)}\\n`)',
+      '  const rl = readline.createInterface({ input: process.stdin })',
+      '  rl.on("line", (line) => {',
+      '    if (!line.trim()) return',
+      '    const message = JSON.parse(line)',
+      '    if (!message.id) return',
+      '    if (message.method === "initialize") {',
+      '      writeJson({ id: message.id, result: { codexHome: "/tmp/mde-e2e-codex", platformFamily: "unix", platformOs: "macos", userAgent: "mde-e2e/0.130.0" } })',
+      '      return',
+      '    }',
+      '    if (message.method === "thread/list") {',
+      '      writeJson({ id: message.id, result: { data: [] } })',
+      '      return',
+      '    }',
+      '    if (message.method === "thread/start") {',
+      '      writeJson({ id: message.id, result: { thread: { cwd: message.params.cwd, id: "shell-path-thread-1", name: "Shell PATH session" } } })',
+      '      return',
+      '    }',
+      '    if (message.method === "turn/start") {',
+      '      writeJson({ id: message.id, result: { turn: { id: "shell-path-turn-1" } } })',
+      '      writeJson({ method: "item/agentMessage/delta", params: { delta: "Shell PATH codex response", itemId: "shell-path-message-1", threadId: message.params.threadId, turnId: "shell-path-turn-1" } })',
+      '      writeJson({ method: "turn/completed", params: { threadId: message.params.threadId, turn: { id: "shell-path-turn-1" } } })',
+      '      return',
+      '    }',
+      '    writeJson({ id: message.id, result: {} })',
+      '  })',
+      '  return',
+      '}',
+      'process.exit(1)',
+      ''
+    ].join('\n'),
+    'utf8'
+  )
+  await chmod(fakeCodexPath, 0o755)
+
+  return { fakeBinPath, fakeShellPath }
 }
 
 const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
@@ -182,6 +296,82 @@ test('opens Editor Agent Chat through the fake Codex sustained engine', async ()
     await expect(panel).toContainText('Summarize the current note')
     await expect(panel).toContainText('Fake codex response')
     await expect(panel.getByRole('alert')).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('sends Editor Agent Chat through packaged app-server when Codex is only on the login-shell PATH', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { fakeShellPath } = await installFakeShellPathCodexCli()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath],
+    env: {
+      PATH: ['/usr/bin', '/bin'].join(delimiter),
+      SHELL: fakeShellPath
+    }
+  })
+
+  try {
+    await window
+      .getByRole('button', { name: /README\.md Markdown file/i })
+      .click({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Root markdown file.'
+    )
+
+    const agentChatButton = window.getByRole('button', { name: /^Agent Chat$/ })
+
+    await expect(agentChatButton).toBeVisible({
+      timeout: AGENT_CHAT_CAPABILITY_TIMEOUT_MS
+    })
+    await agentChatButton.click()
+
+    const panel = window.getByRole('complementary', { name: /^Agent Chat$/ })
+
+    await expect(panel).toBeVisible()
+    await panel
+      .getByRole('textbox', { name: /message agent chat/i })
+      .fill('Verify packaged app-server spawn')
+    await panel.getByRole('button', { name: /^Send$/ }).click()
+
+    await expect(panel).toContainText('Verify packaged app-server spawn')
+    await expect(panel).toContainText('Shell PATH codex response')
+    await expect(panel.getByRole('alert')).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('hides Editor Agent Chat in packaged sparse GUI PATH when Codex is not logged in', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { fakeShellPath } = await installFakeShellPathCodexCliWithOptions({
+    loginStatus: 'authentication-required'
+  })
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath],
+    env: {
+      PATH: ['/usr/bin', '/bin'].join(delimiter),
+      SHELL: fakeShellPath
+    }
+  })
+
+  try {
+    await window
+      .getByRole('button', { name: /README\.md Markdown file/i })
+      .click({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Root markdown file.'
+    )
+    await expect(
+      window.getByRole('button', { name: /summarize markdown/i })
+    ).toBeVisible()
+    await window.waitForTimeout(1_000)
+    await expect(
+      window.getByRole('button', { name: /^Agent Chat$/ })
+    ).toBeHidden()
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

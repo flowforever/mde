@@ -1,6 +1,6 @@
 # AI Summary、Translation 和 Agent Chat
 
-MDE 可以调用本机已安装的 Codex 或 Claude Code CLI，为当前 Markdown 生成摘要或翻译。编辑器侧 Agent Chat 目前只在 Codex app-server sustained protocol 可用时显示；不可用时不会出现聊天入口。
+MDE 可以调用本机已安装的 Codex 或 Claude Code CLI，为当前 Markdown 生成摘要或翻译。编辑器侧 Agent Chat 目前只在 Codex 可通过登录 shell 的 PATH 找到、已登录，并且支持 Codex app-server sustained protocol 与本地图片输入时显示；不可用时不会出现聊天入口。
 
 ![AI 结果面板](/screenshots/zh-CN/ai-result.png)
 
@@ -14,7 +14,7 @@ MDE 可以调用本机已安装的 Codex 或 Claude Code CLI，为当前 Markdow
 
 ## Agent Chat
 
-当设置中的 AI CLI 解析为 Codex，且本机 Codex 支持 app-server sustained protocol 和本地图片输入时，编辑器动作栏会显示 Agent Chat 入口。打开后，右侧面板会带入当前 Markdown、选区文本、选中 block id、工作区路径和最高权限模式。聊天框作为编辑器右侧的独立工作区面板显示，可以拖动编辑器和聊天框之间的分隔条调整宽度；上下文和权限信息收在输入区上方的折叠区域里。上下文区域可以分别控制当前文档和当前选区是否随消息发送；选中文本可以固定为多个片段，方便在切换焦点后反复发送同一段上下文。
+当设置中的 AI CLI 解析为 Codex，且本机 Codex 可以通过登录 shell 的 PATH 找到、`codex login status` 已登录、支持 app-server sustained protocol 和本地图片输入时，编辑器动作栏会显示 Agent Chat 入口。正式安装后的 MDE 也会读取登录 shell 的 PATH 来寻找 Codex，因此从 Dock、Finder 或启动器打开应用时，只要终端登录环境里的 Codex 已登录并支持这些能力，入口就应正常出现。打开后，右侧面板会带入当前 Markdown、选区文本、选中 block id、工作区路径和最高权限模式。聊天框作为编辑器右侧的独立工作区面板显示，可以拖动编辑器和聊天框之间的分隔条调整宽度；上下文和权限信息收在输入区上方的折叠区域里。上下文区域可以分别控制当前文档和当前选区是否随消息发送；选中文本可以固定为多个片段，方便在切换焦点后反复发送同一段上下文。
 
 图片按钮、消息输入框和发送/停止主按钮都位于同一个消息框内。面板支持图标按钮新建 MDE 会话、恢复历史会话、继续发送消息、粘贴图片作为安全缓存附件，并在一次 turn 后显示变更文件摘要。AI 回复会按 Markdown 渲染，列表、标题、代码块和表格会保持结构；Codex 的 thinking 会在运行时流式显示，历史会话中的 thinking 默认折叠，展开后可以查看。
 

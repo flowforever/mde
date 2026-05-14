@@ -1,4 +1,3 @@
-import { execFile as nodeExecFile, spawn as nodeSpawn } from 'node:child_process'
 import {
   mkdir,
   readFile,
@@ -6,7 +5,6 @@ import {
   rm,
   writeFile
 } from 'node:fs/promises'
-import { promisify } from 'node:util'
 import { dirname, join } from 'node:path'
 
 import type {
@@ -64,13 +62,12 @@ import {
   createCodexAgentChatAdapter,
   createFakeAgentChatAdapter,
   type AgentChatCapabilityCacheEntry,
-  type AgentChatChildProcess,
   type AgentChatFileStore,
   type AgentChatMetadataStorage,
-  type AgentChatProcessRunner,
   type AgentChatSessionBinding
 } from '@mde/agent-chat'
 import { createWorkspaceSnapshotProvider } from './services/agentChatWorkspaceSnapshot'
+import { createNodeAgentChatProcessRunner } from './services/agentChatProcessRunner'
 
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
@@ -99,7 +96,6 @@ const DEV_PRODUCT_NAME = `${APP_PRODUCT_NAME} Dev`
 const E2E_AUTOMATION_AUTONOMY_GATE_ENV = 'MDE_E2E_AUTOMATION_AUTONOMY_GATE'
 const E2E_AUTOMATION_JSONL_ADAPTER_ENV = 'MDE_E2E_AUTOMATION_JSONL_ADAPTER'
 const E2E_AGENT_CHAT_FAKE_CODEX_ENV = 'MDE_E2E_AGENT_CHAT_FAKE_CODEX'
-const execFileAsync = promisify(nodeExecFile)
 
 interface RuntimeIdentityApp {
   readonly isPackaged: boolean
@@ -140,56 +136,6 @@ export const createMoveEntryToTrash =
 
     await shell.trashItem(entryPath)
   }
-
-const createTextIterable = (
-  stream: NodeJS.ReadableStream | null
-): AsyncIterable<string> => ({
-  async *[Symbol.asyncIterator]() {
-    if (!stream) {
-      return
-    }
-    for await (const chunk of stream as AsyncIterable<Buffer | string>) {
-      yield typeof chunk === 'string' ? chunk : chunk.toString('utf8')
-    }
-  }
-})
-
-const createNodeProcessRunner = (): AgentChatProcessRunner => ({
-  execFile: async (command, args, options) => {
-    const result = await execFileAsync(command, [...args], {
-      cwd: options?.cwd,
-      timeout: options?.timeoutMs
-    })
-
-    return {
-      stderr: result.stderr?.toString() ?? '',
-      stdout: result.stdout?.toString() ?? ''
-    }
-  },
-  spawn: (command, args, options): AgentChatChildProcess => {
-    const child = nodeSpawn(command, [...args], {
-      cwd: options?.cwd,
-      env: options?.env,
-      stdio: ['pipe', 'pipe', 'pipe']
-    })
-
-    return {
-      kill: () => {
-        child.kill()
-      },
-      stderr: createTextIterable(child.stderr),
-      stdin: {
-        end: () => {
-          child.stdin.end()
-        },
-        write: (chunk) => {
-          child.stdin.write(chunk)
-        }
-      },
-      stdout: createTextIterable(child.stdout)
-    }
-  }
-})
 
 const createNodeAgentChatFileStore = (): AgentChatFileStore => ({
   mkdir: async (path) => {
@@ -581,7 +527,7 @@ const bootstrap = async (): Promise<void> => {
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
     ipcMain
   })
-  const agentChatProcessRunner = createNodeProcessRunner()
+  const agentChatProcessRunner = createNodeAgentChatProcessRunner()
   const agentChatRuntime = createAgentChatRuntime({
     adapters:
       process.env[E2E_AGENT_CHAT_FAKE_CODEX_ENV] === '1'

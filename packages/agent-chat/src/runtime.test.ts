@@ -186,6 +186,38 @@ describe('createAgentChatRuntime', () => {
     })
   })
 
+  it('returns an engine-missing diagnostic when capability identity lookup cannot run Codex', async () => {
+    const missingCodexError = Object.assign(new Error('spawn codex ENOENT'), {
+      code: 'ENOENT'
+    })
+    const adapter: AgentChatEngineAdapter = {
+      ...createRecordingAdapter({}),
+      createCapabilityCacheKey: vi.fn(() => Promise.reject(missingCodexError)),
+      probeCapabilities: vi.fn(() => {
+        throw new Error('probe should not run after an executable miss')
+      })
+    }
+    const runtime = createAgentChatRuntime({
+      adapters: [adapter],
+      fileStore: createTestFileStore(),
+      now: () => '2026-05-12T00:00:00.000Z'
+    })
+
+    await expect(
+      runtime.getAvailability({
+        selectedEngineId: 'codex',
+        workspaceRoot: '/workspace'
+      })
+    ).resolves.toMatchObject({
+      available: false,
+      diagnostic: {
+        code: 'engine-missing',
+        details: 'spawn codex ENOENT'
+      }
+    })
+    expect(adapter.probeCapabilities).not.toHaveBeenCalled()
+  })
+
   it('hides availability when a supported engine is not authenticated', async () => {
     const adapter: AgentChatEngineAdapter = {
       ...createRecordingAdapter({}),

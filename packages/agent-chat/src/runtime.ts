@@ -2,7 +2,11 @@ import { dirname } from 'node:path'
 
 import { createAttachmentCachePath, sanitizeAttachmentFileName } from './attachments'
 import { captureChangedFilesAroundTurn } from './changedFiles'
-import { createAgentChatDiagnostic } from './diagnostics'
+import {
+  createAgentChatDiagnostic,
+  getAgentChatErrorDetails,
+  isAgentChatExecutableMissingError
+} from './diagnostics'
 import type { AgentChatFileStore, AgentChatWorkspaceSnapshotProvider } from './host'
 import { filterNativeSessionsForWorkspace } from './nativeHistory'
 import { createDraftAgentChatSession, reduceAgentChatState } from './sessionReducer'
@@ -123,6 +127,25 @@ const mapCapabilityReportToAvailability = (
             ? 'authentication-required'
             : 'protocol-unsupported'
       }
+
+const mapCapabilityIdentityErrorToAvailability = (
+  adapter: AgentChatEngineAdapter,
+  error: unknown
+): AgentChatAvailabilityResponse | undefined => {
+  if (!isAgentChatExecutableMissingError(error)) {
+    return undefined
+  }
+
+  return mapCapabilityReportToAvailability({
+    diagnostic: createAgentChatDiagnostic({
+      code: 'engine-missing',
+      details: getAgentChatErrorDetails(error),
+      recoverable: true
+    }),
+    engineId: adapter.engineId,
+    verdict: 'unsupported'
+  })
+}
 
 export const createAgentChatRuntime = (
   options: AgentChatRuntimeOptions
@@ -382,10 +405,19 @@ export const createAgentChatRuntime = (
       }
 
       const modelName = normalizeOptionalText(request.modelName)
-      const capabilityIdentity = await adapter.createCapabilityCacheKey?.({
-        modelName,
-        workspaceRoot: request.workspaceRoot
-      })
+      let capabilityIdentity: string | undefined
+      try {
+        capabilityIdentity = await adapter.createCapabilityCacheKey?.({
+          modelName,
+          workspaceRoot: request.workspaceRoot
+        })
+      } catch (error) {
+        const availability = mapCapabilityIdentityErrorToAvailability(adapter, error)
+        if (availability) {
+          return availability
+        }
+        throw error
+      }
       const report = await getCachedCapabilityReport({
         adapter,
         cacheKey: createAvailabilityCacheKey({

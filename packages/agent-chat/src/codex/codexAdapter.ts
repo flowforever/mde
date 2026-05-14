@@ -3,7 +3,11 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { buildCodexUserInputItems } from '../context'
-import { createAgentChatDiagnostic } from '../diagnostics'
+import {
+  createAgentChatDiagnostic,
+  getAgentChatErrorDetails,
+  isAgentChatExecutableMissingError
+} from '../diagnostics'
 import type { AgentChatProcessRunner } from '../host'
 import type {
   AgentChatCapabilityReport,
@@ -42,19 +46,23 @@ const REQUIRED_PROTOCOL_MARKERS = [
   'approvalPolicy',
   'sandbox'
 ] as const
+const CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS = 5_000
 const CODEX_GENERATE_TS_PROBE_TIMEOUT_MS = 30_000
 
 const now = (): string => new Date().toISOString()
 
 const createUnsupportedReport = (
   details?: string,
-  code: 'authentication-required' | 'protocol-unsupported' = 'protocol-unsupported'
+  code:
+    | 'authentication-required'
+    | 'engine-missing'
+    | 'protocol-unsupported' = 'protocol-unsupported'
 ): AgentChatCapabilityReport => ({
   authenticated: code === 'authentication-required' ? false : undefined,
   diagnostic: createAgentChatDiagnostic({
     code,
     details,
-    recoverable: false
+    recoverable: code === 'engine-missing'
   }),
   engineId: 'codex',
   verdict: 'unsupported'
@@ -92,16 +100,16 @@ const combineProcessOutput = (output: {
     .filter(Boolean)
     .join('\n')
 
-const probeCodexLoginStatus = async (
+const getCodexLoginStatusOutput = async (
   options: CodexAgentChatAdapterOptions,
   command: string
-): Promise<void> => {
-  const status = await options.processRunner.execFile(command, ['login', 'status'])
-  const output = combineProcessOutput(status)
-
-  if (!isLoggedIn(output)) {
-    throw new Error(output || 'Codex is not logged in')
-  }
+): Promise<string> => {
+  const status = await options.processRunner.execFile(
+    command,
+    ['login', 'status'],
+    { timeoutMs: CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS }
+  )
+  return combineProcessOutput(status)
 }
 
 const createClient = (
@@ -416,12 +424,20 @@ export const createCodexAgentChatAdapter = (
 
   return {
     createCapabilityCacheKey: async (): Promise<string | undefined> => {
-      const version = await options.processRunner.execFile(command, ['--version'])
+      let version: { readonly stderr: string; readonly stdout: string }
       try {
-        const loginStatus = await options.processRunner.execFile(command, [
-          'login',
-          'status'
-        ])
+        version = await options.processRunner.execFile(command, ['--version'], {
+          timeoutMs: CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS
+        })
+      } catch (error) {
+        return `codex-unavailable:${getAgentChatErrorDetails(error)}`
+      }
+      try {
+        const loginStatus = await options.processRunner.execFile(
+          command,
+          ['login', 'status'],
+          { timeoutMs: CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS }
+        )
 
         return `${version.stdout.trim()}:${combineProcessOutput(loginStatus)}`
       } catch (error) {
@@ -446,16 +462,49 @@ export const createCodexAgentChatAdapter = (
     probeCapabilities: async (): Promise<AgentChatCapabilityReport> => {
       let tempDirectory: string | undefined
       try {
-        const version = await options.processRunner.execFile(command, ['--version'])
+        let version: { readonly stderr: string; readonly stdout: string }
         try {
-          await probeCodexLoginStatus(options, command)
+          version = await options.processRunner.execFile(command, ['--version'], {
+            timeoutMs: CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS
+          })
+        } catch (error) {
+          if (isAgentChatExecutableMissingError(error)) {
+            return createUnsupportedReport(
+              getAgentChatErrorDetails(error),
+              'engine-missing'
+            )
+          }
+          return createUnsupportedReport(
+            error instanceof Error ? error.message : 'Codex version probe failed',
+            'protocol-unsupported'
+          )
+        }
+
+        let loginStatusOutput: string
+        try {
+          loginStatusOutput = await getCodexLoginStatusOutput(options, command)
         } catch (error) {
           return createUnsupportedReport(
-            error instanceof Error ? error.message : 'Codex login status failed',
+            error instanceof Error ? error.message : 'Codex login status failed'
+          )
+        }
+        if (!isLoggedIn(loginStatusOutput)) {
+          return createUnsupportedReport(
+            loginStatusOutput || 'Codex is not logged in',
             'authentication-required'
           )
         }
-        await options.processRunner.execFile(command, ['app-server', '--help'])
+
+        try {
+          await options.processRunner.execFile(command, ['app-server', '--help'], {
+            timeoutMs: CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS
+          })
+        } catch (error) {
+          return createUnsupportedReport(
+            error instanceof Error ? error.message : 'Codex app-server probe failed'
+          )
+        }
+
         tempDirectory = await mkdtemp(join(tmpdir(), 'mde-codex-app-server-types-'))
         let generatedStdout = ''
         let generateError: unknown

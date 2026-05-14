@@ -154,6 +154,8 @@ const requiredCodexProtocolSource = [
   'approvalPolicy',
   'sandbox'
 ].join('\n')
+const CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS = 5_000
+const CODEX_GENERATE_TS_PROBE_TIMEOUT_MS = 30_000
 
 describe('createCodexAgentChatAdapter', () => {
   it('is unsupported when app-server generation is unavailable', async () => {
@@ -173,6 +175,65 @@ describe('createCodexAgentChatAdapter', () => {
       adapter.probeCapabilities({ workspaceRoot: '/workspace' })
     ).resolves.toMatchObject({ verdict: 'unsupported' })
   })
+
+  it('reports engine-missing when the Codex executable is unavailable', async () => {
+    const missingCodexError = Object.assign(new Error('spawn codex ENOENT'), {
+      code: 'ENOENT'
+    })
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(() =>
+        Promise.reject(missingCodexError)
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.createCapabilityCacheKey?.({ workspaceRoot: '/workspace' })
+    ).resolves.toBe('codex-unavailable:spawn codex ENOENT')
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      diagnostic: {
+        code: 'engine-missing',
+        details: 'spawn codex ENOENT'
+      },
+      engineId: 'codex',
+      verdict: 'unsupported'
+    })
+  })
+
+  it.each(['codex: command not found', 'command not found: codex'])(
+    'reports engine-missing for command-level shell output: %s',
+    async (message) => {
+      const processRunner = {
+        execFile: vi.fn<AgentChatProcessRunner['execFile']>(() =>
+          Promise.reject(new Error(message))
+        ),
+        spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+          throw new Error('spawn not expected')
+        })
+      } satisfies AgentChatProcessRunner
+      const adapter = createCodexAgentChatAdapter({
+        processRunner
+      })
+
+      await expect(
+        adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+      ).resolves.toMatchObject({
+        diagnostic: {
+          code: 'engine-missing',
+          details: message
+        },
+        engineId: 'codex',
+        verdict: 'unsupported'
+      })
+    }
+  )
 
   it('requires localImage support for V1 availability', async () => {
     const processRunner = {
@@ -250,7 +311,319 @@ describe('createCodexAgentChatAdapter', () => {
     const generateCall = processRunner.execFile.mock.calls.find((call) =>
       call[1].includes('generate-ts')
     )
-    expect(generateCall?.[2]?.timeoutMs).toBeGreaterThanOrEqual(20_000)
+    expect(generateCall?.[2]?.timeoutMs).toBe(CODEX_GENERATE_TS_PROBE_TIMEOUT_MS)
+  })
+
+  it('uses bounded lightweight probe timeouts before the generate-ts probe', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(
+        async (_command, args) => {
+          if (args.includes('--version')) {
+            return { stderr: '', stdout: 'codex-cli 0.130.0' }
+          }
+
+          if (args[0] === 'login' && args[1] === 'status') {
+            return { stderr: '', stdout: 'Logged in using ChatGPT' }
+          }
+
+          if (args.includes('--help')) {
+            return { stderr: '', stdout: 'Usage: codex app-server' }
+          }
+
+          const outIndex = args.indexOf('--out')
+          const outDirectory = outIndex >= 0 ? args[outIndex + 1] : undefined
+          if (!outDirectory) {
+            throw new Error('missing generated protocol output directory')
+          }
+
+          await mkdir(join(outDirectory, 'protocol'), { recursive: true })
+          await writeFile(
+            join(outDirectory, 'protocol', 'generated.ts'),
+            requiredCodexProtocolSource,
+            'utf8'
+          )
+
+          return { stderr: '', stdout: '' }
+        }
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.createCapabilityCacheKey?.({ workspaceRoot: '/workspace' })
+    ).resolves.toBe('codex-cli 0.130.0:Logged in using ChatGPT')
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({ verdict: 'supported' })
+
+    const timeoutFor = (args: readonly string[]) =>
+      processRunner.execFile.mock.calls
+        .filter((call) => args.every((arg) => call[1].includes(arg)))
+        .map((call) => call[2]?.timeoutMs)
+
+    expect(timeoutFor(['--version'])).toEqual([
+      CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS,
+      CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS
+    ])
+    expect(timeoutFor(['login', 'status'])).toEqual([
+      CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS,
+      CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS
+    ])
+    expect(timeoutFor(['app-server', '--help'])).toEqual([
+      CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS
+    ])
+    expect(timeoutFor(['app-server', 'generate-ts'])).toEqual([
+      CODEX_GENERATE_TS_PROBE_TIMEOUT_MS
+    ])
+  })
+
+  it('returns an unsupported diagnostic when a lightweight probe hangs until the runner timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const processRunner = {
+        execFile: vi.fn<AgentChatProcessRunner['execFile']>(
+          (_command, args, options) => {
+            if (!options?.timeoutMs) {
+              return new Promise(() => undefined)
+            }
+
+            return new Promise((resolve, reject) => {
+              setTimeout(() => {
+                reject(new Error(`${args.join(' ')} timed out`))
+              }, options.timeoutMs)
+            })
+          }
+        ),
+        spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+          throw new Error('spawn not expected')
+        })
+      } satisfies AgentChatProcessRunner
+      const adapter = createCodexAgentChatAdapter({
+        processRunner
+      })
+      const probe = adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+      const result = Promise.race([
+        probe,
+        new Promise<'still-pending'>((resolve) => {
+          setTimeout(() => {
+            resolve('still-pending')
+          }, CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS + 1)
+        })
+      ])
+
+      await vi.advanceTimersByTimeAsync(CODEX_LIGHTWEIGHT_PROBE_TIMEOUT_MS + 1)
+
+      expect(await result).toMatchObject({
+        diagnostic: {
+          code: 'protocol-unsupported',
+          details: '--version timed out'
+        },
+        verdict: 'unsupported'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps unsupported app-server subcommands distinct from a missing Codex executable', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(
+        (_command, args) => {
+          if (args.includes('--version')) {
+            return Promise.resolve({ stderr: '', stdout: 'codex-cli 0.110.0' })
+          }
+
+          if (args[0] === 'login' && args[1] === 'status') {
+            return Promise.resolve({
+              stderr: '',
+              stdout: 'Logged in using ChatGPT'
+            })
+          }
+
+          if (args[0] === 'app-server' && args[1] === '--help') {
+            throw new Error('error: unrecognized subcommand app-server not found')
+          }
+
+          throw new Error('generate-ts subcommand not found')
+        }
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      diagnostic: {
+        code: 'protocol-unsupported',
+        details: 'error: unrecognized subcommand app-server not found'
+      },
+      verdict: 'unsupported'
+    })
+  })
+
+  it('does not treat unrelated ENOENT text as a missing Codex executable', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(() => {
+        throw new Error('ENOENT: no such file or directory, scandir /tmp/mde-probe')
+      }),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      diagnostic: {
+        code: 'protocol-unsupported',
+        details: 'ENOENT: no such file or directory, scandir /tmp/mde-probe'
+      },
+      verdict: 'unsupported'
+    })
+  })
+
+  it('does not treat structured unrelated filesystem ENOENT as a missing Codex executable', async () => {
+    const unrelatedFilesystemError = Object.assign(
+      new Error('ENOENT: no such file or directory, scandir /tmp/mde-probe'),
+      { code: 'ENOENT' }
+    )
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(() => {
+        throw unrelatedFilesystemError
+      }),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      diagnostic: {
+        code: 'protocol-unsupported',
+        details: 'ENOENT: no such file or directory, scandir /tmp/mde-probe'
+      },
+      verdict: 'unsupported'
+    })
+  })
+
+  it.each(['codex app-server subcommand not found', 'codex: app-server not found'])(
+    'does not treat Codex-prefixed subcommand text as a missing executable: %s',
+    async (message) => {
+      const processRunner = {
+        execFile: vi.fn<AgentChatProcessRunner['execFile']>(() => {
+          throw new Error(message)
+        }),
+        spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+          throw new Error('spawn not expected')
+        })
+      } satisfies AgentChatProcessRunner
+      const adapter = createCodexAgentChatAdapter({
+        processRunner
+      })
+
+      await expect(
+        adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+      ).resolves.toMatchObject({
+        diagnostic: {
+          code: 'protocol-unsupported',
+          details: message
+        },
+        verdict: 'unsupported'
+      })
+    }
+  )
+
+  it('keeps unsupported generate-ts subcommands distinct from a missing Codex executable', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(
+        (_command, args) => {
+          if (args.includes('--version')) {
+            return Promise.resolve({ stderr: '', stdout: 'codex-cli 0.110.0' })
+          }
+
+          if (args[0] === 'login' && args[1] === 'status') {
+            return Promise.resolve({
+              stderr: '',
+              stdout: 'Logged in using ChatGPT'
+            })
+          }
+
+          if (args[0] === 'app-server' && args[1] === '--help') {
+            return Promise.resolve({ stderr: '', stdout: 'Usage: codex app-server' })
+          }
+
+          throw new Error('generate-ts subcommand not found')
+        }
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      diagnostic: {
+        code: 'protocol-unsupported',
+        details: 'generate-ts subcommand not found'
+      },
+      verdict: 'unsupported'
+    })
+  })
+
+  it('does not report authentication-required when login status times out', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(
+        (_command, args) => {
+          if (args.includes('--version')) {
+            return Promise.resolve({ stderr: '', stdout: 'codex-cli 0.130.0' })
+          }
+
+          if (args[0] === 'login' && args[1] === 'status') {
+            throw new Error('login status timed out')
+          }
+
+          throw new Error('app-server probe not expected')
+        }
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      authenticated: undefined,
+      diagnostic: {
+        code: 'protocol-unsupported',
+        details: 'login status timed out'
+      },
+      verdict: 'unsupported'
+    })
   })
 
   it('accepts Codex login status written to stderr', async () => {

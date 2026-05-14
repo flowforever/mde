@@ -139,6 +139,37 @@ describe('agentChatHandlers integration', () => {
     })
   })
 
+  it('strips raw diagnostic details from availability responses before IPC delivery', async () => {
+    const { handlers, runtime } = registerHandlers()
+
+    vi.mocked(runtime.getAvailability).mockResolvedValueOnce({
+      available: false,
+      diagnostic: {
+        code: 'engine-missing',
+          details:
+            '/private/tmp/workspace/.mde/agent-chat/codex.log TOKEN=secret',
+          message: 'Codex is not available.',
+          recoverable: true
+      },
+      engineId: 'codex'
+    })
+
+    await expect(
+      handlers.get(AGENT_CHAT_CHANNELS.getAvailability)?.(
+        { sender: { id: 1, send: vi.fn() } },
+        { selectedEngineId: 'codex', workspaceRoot: '/workspace' }
+      )
+    ).resolves.toEqual({
+      available: false,
+      diagnostic: {
+        code: 'engine-missing',
+        message: 'Codex is not available.',
+        recoverable: true
+      },
+      engineId: 'codex'
+    })
+  })
+
   it('rejects request workspace mismatches', async () => {
     const { handlers } = registerHandlers('/workspace-a')
 
