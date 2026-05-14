@@ -87,6 +87,22 @@ const getDiagnosticMessage = (
     ? text(diagnostic.messageKey)
     : text('automation.diagnosticUnavailable')
 
+const getDiagnosticSeverityLabel = (
+  severity: AutomationCenterViewModel['diagnostics'][number]['severity'],
+  text: AppText
+): string =>
+  severity === 'error'
+    ? text('automation.diagnosticError')
+    : text('automation.diagnosticWarning')
+
+const getDiagnosticsSummary = (
+  diagnosticsCount: number,
+  text: AppText
+): string =>
+  diagnosticsCount === 1
+    ? text('automation.setupDiagnosticsSummaryOne')
+    : text('automation.setupDiagnosticsSummaryMany', { count: diagnosticsCount })
+
 const hasTaskWorkspace = (task: AutomationTaskCard): boolean =>
   task.workspaceId !== undefined && task.workspaceId !== AUTOMATION_NO_WORKSPACE_ID
 
@@ -120,6 +136,24 @@ const getWorkspaceDisplayName = (
   return workspaceName
 }
 
+const getFlowDisplayName = (task: AutomationTaskCard): string =>
+  task.engine === undefined
+    ? task.automationFlowId
+    : `${task.automationFlowId} · ${task.engine}`
+
+const getTaskDescription = (
+  task: AutomationTaskCard,
+  bucketLabel: string,
+  text: AppText
+): string =>
+  [
+    bucketLabel,
+    hasTaskWorkspace(task)
+      ? getWorkspaceDisplayName(task.workspaceId, text)
+      : text('automation.noWorkspace'),
+    getFlowDisplayName(task)
+  ].join(' · ')
+
 export const SignalStack = ({
   onSelectTask,
   selectedTaskId,
@@ -144,7 +178,7 @@ export const SignalStack = ({
     {(viewModel.visibleTasks ?? viewModel.tasks).length === 0 ? (
       <p className="automation-signal-empty">{text('automation.emptyTasks')}</p>
     ) : null}
-    <div className="automation-flat-queue">
+    <div className="automation-card-queue">
       {(viewModel.visibleTasks ?? viewModel.tasks).map((task) => {
         const bucketLabel = getBucketLabel(task.bucket, text)
         const selected =
@@ -153,9 +187,9 @@ export const SignalStack = ({
         return (
           <button
             aria-pressed={selected}
-            className={`automation-task-row${
-              selected ? ' automation-task-row--selected' : ''
-            } automation-task-row--${task.bucket}`}
+            className={`automation-task-card automation-task-card--${task.bucket}${
+              selected ? ' automation-task-card--selected' : ''
+            }`}
             data-component-id={COMPONENT_IDS.automation.signalTaskRow}
             key={task.taskId}
             onClick={() => {
@@ -163,20 +197,30 @@ export const SignalStack = ({
             }}
             type="button"
           >
-            <span className="automation-task-row__status">{bucketLabel}</span>
-            <span className="automation-task-row__title">{task.title}</span>
-            <span className="automation-task-row__meta">
-              {task.engine === undefined
-                ? task.automationFlowId
-                : `${task.automationFlowId} · ${task.engine}`}
+            <span className="automation-task-card__body">
+              <span className="automation-task-card__title">{task.title}</span>
+              <span className="automation-task-card__description">
+                {getTaskDescription(task, bucketLabel, text)}
+              </span>
             </span>
-            <span className="automation-task-row__meta">
-              {hasTaskWorkspace(task)
-                ? getWorkspaceDisplayName(task.workspaceId, text)
-                : text('automation.noWorkspace')}
+            <span className="automation-task-meta" aria-hidden="true">
+              <span className="automation-task-badge automation-task-badge--status">
+                {bucketLabel}
+              </span>
+              <span className="automation-task-badge">
+                {hasTaskWorkspace(task)
+                  ? getWorkspaceDisplayName(task.workspaceId, text)
+                  : text('automation.noWorkspace')}
+              </span>
+              <span className="automation-task-badge">{getFlowDisplayName(task)}</span>
             </span>
-            <span className="automation-task-row__meta">
-              {getTaskSourceHint(task, text)}
+            <span className="automation-task-card__footer">
+              <span className="automation-task-card__source">
+                {getTaskSourceHint(task, text)}
+              </span>
+              <span className="automation-task-card__action">
+                {text('automation.inspectFlowline')}
+              </span>
             </span>
           </button>
         )
@@ -189,13 +233,24 @@ export const SignalStack = ({
         data-component-id={COMPONENT_IDS.automation.diagnosticList}
       >
         <h3>{text('automation.setupDiagnostics')}</h3>
-        <ul>
+        <p className="automation-diagnostic-summary">
+          {getDiagnosticsSummary(viewModel.diagnostics.length, text)}
+        </p>
+        <div className="automation-diagnostic-rows">
           {viewModel.diagnostics.map((diagnostic) => (
-            <li key={diagnostic.diagnosticId}>
-              {getDiagnosticMessage(diagnostic, text)}
-            </li>
+            <article
+              className={`automation-diagnostic-row automation-diagnostic-row--${diagnostic.severity}`}
+              key={diagnostic.diagnosticId}
+            >
+              <div>
+                <span className="automation-diagnostic-label">
+                  {getDiagnosticSeverityLabel(diagnostic.severity, text)}
+                </span>
+                <p>{getDiagnosticMessage(diagnostic, text)}</p>
+              </div>
+            </article>
           ))}
-        </ul>
+        </div>
       </section>
     ) : null}
   </section>

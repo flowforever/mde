@@ -267,6 +267,11 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "automation.flowline",
     standardName: "Automation Flowline",
   },
+  automationFlowlineCloseButton: {
+    componentId: "automation.flowline-close-button",
+    constantPath: "automation.flowlineCloseButton",
+    standardName: "Automation Flowline Close Button",
+  },
   automationFlowlinePhase: {
     componentId: "automation.flowline-phase",
     constantPath: "automation.flowlinePhase",
@@ -940,6 +945,8 @@ export const COMPONENT_IDS = {
     flowMenuItem: COMPONENT_NAME_ID_MAP.automationFlowMenuItem.componentId,
     flowRow: COMPONENT_NAME_ID_MAP.automationFlowRow.componentId,
     flowline: COMPONENT_NAME_ID_MAP.automationFlowline.componentId,
+    flowlineCloseButton:
+      COMPONENT_NAME_ID_MAP.automationFlowlineCloseButton.componentId,
     flowlinePhase: COMPONENT_NAME_ID_MAP.automationFlowlinePhase.componentId,
     flowlineStartButton:
       COMPONENT_NAME_ID_MAP.automationFlowlineStartButton.componentId,

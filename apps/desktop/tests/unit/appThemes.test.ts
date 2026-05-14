@@ -8,6 +8,7 @@ import {
   disableSystemThemePreference,
   enableSystemThemePreference,
   getAppThemeRows,
+  readSystemThemeFamily,
   readThemePreference,
   resolveThemePreference,
   selectAppTheme,
@@ -141,6 +142,21 @@ describe('app theme preferences', () => {
 
     expect(resolveThemePreference(preference, 'dark').id).toBe('cedar')
     expect(resolveThemePreference(preference, 'light').id).toBe('porcelain')
+  })
+
+  it('reads the current system theme family from the color-scheme media query', () => {
+    const matchMedia = vi.fn((query: string) => ({
+      matches: query === '(prefers-color-scheme: dark)'
+    }))
+
+    expect(readSystemThemeFamily(matchMedia)).toBe('dark')
+    expect(matchMedia).toHaveBeenCalledWith('(prefers-color-scheme: dark)')
+    expect(readSystemThemeFamily(() => ({ matches: false }))).toBe('light')
+    expect(
+      readSystemThemeFamily(() => {
+        throw new Error('media unavailable')
+      })
+    ).toBe('light')
   })
 
   it('selects manual themes while preserving the opposite family memory', () => {

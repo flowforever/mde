@@ -95,6 +95,7 @@ const EN_MESSAGES = {
   "automation.closeEditor": "Close automation-flow editor",
   "automation.closeAgentChat": "Close Automation Agent Chat",
   "automation.createFlow": "Create automation-flow",
+  "automation.closeFlowlineDetail": "Close Flowline detail",
   "automation.decisionAction": "Approve and resume",
   "automation.diagnostics.automationRun.decisionUnavailable":
     "This decision is no longer available. Refresh and try again.",
@@ -110,6 +111,8 @@ const EN_MESSAGES = {
     "Automation task is no longer available. Refresh and try again.",
   "automation.diagnosticUnavailable":
     "Automation setup needs attention. Check the automation-flow configuration.",
+  "automation.diagnosticError": "Error",
+  "automation.diagnosticWarning": "Warning",
   "automation.decisionPrompt": "Decision required",
   "automation.disableFlow": "Disable automation-flow",
   "automation.done": "Done",
@@ -127,6 +130,9 @@ const EN_MESSAGES = {
   "automation.flowsCount": "flows",
   "automation.flowline": "Flowline",
   "automation.flowlineEmpty": "Select a task to inspect its Flowline.",
+  "automation.flowlineTaskLifecycleDescription":
+    "Phase plan derived from task content and automation-flow runtime state.",
+  "automation.inspectFlowline": "Inspect Flowline",
   "automation.loadingProjection": "Loading automation tasks...",
   "automation.localFileSource": "Local file",
   "automation.needsMe": "Needs me",
@@ -139,6 +145,7 @@ const EN_MESSAGES = {
   "automation.openAgentChat": "Open Automation Agent Chat",
   "automation.owningFlow": "Owning flow",
   "automation.phasePlanPreview": "Phase plan preview",
+  "automation.pending": "Pending",
   "automation.personalAutomationFlows": "personal automation-flows",
   "automation.personalPromptsSource": "Personal prompts",
   "automation.projectionError": "Unable to load automation tasks.",
@@ -148,10 +155,20 @@ const EN_MESSAGES = {
   "automation.readyFlowlineDescription":
     "Start this Ready task through its owning automation-flow runtime.",
   "automation.readyPhaseReviewSource": "Review source metadata",
+  "automation.readyPhaseReviewSourceDescription":
+    "Check the selected source before the owning automation-flow starts.",
   "automation.readyPhaseReviewWorkspaceSource": "Review workspace source",
+  "automation.readyPhaseReviewWorkspaceSourceDescription":
+    "Read the workspace task source and confirm the accepted scope.",
   "automation.readyPhaseRunFlow": "Run the owning automation-flow",
+  "automation.readyPhaseRunFlowDescription":
+    "Execute or resume the selected task through its automation-flow runtime.",
   "automation.readyPhaseVerifyEngineResult": "Verify the engine result",
+  "automation.readyPhaseVerifyEngineResultDescription":
+    "Review the engine output, evidence, and next required handoff.",
   "automation.readyPhaseVerifyResult": "Verify the result",
+  "automation.readyPhaseVerifyResultDescription":
+    "Review the output, evidence, and next required handoff.",
   "automation.requirementsSource": "Requirements",
   "automation.remoteDocSource": "Remote doc",
   "automation.remoteIssueSource": "Remote issue",
@@ -169,6 +186,9 @@ const EN_MESSAGES = {
   "automation.selectedSources": "Selected workspace automation-flow sources",
   "automation.sourceSummary": "Source",
   "automation.setupDiagnostics": "Setup diagnostics",
+  "automation.setupDiagnosticsSummaryMany":
+    "{count} setup items outside the task queue",
+  "automation.setupDiagnosticsSummaryOne": "1 setup item outside the task queue",
   "automation.submitDecisionFailed":
     "Decision could not be submitted. Refresh and try again.",
   "automation.statusArchived": "Flow is archived",
@@ -647,6 +667,7 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.closeEditor": "关闭自动化流程编辑器",
   "automation.closeAgentChat": "关闭自动化 Agent Chat",
   "automation.createFlow": "创建自动化流程",
+  "automation.closeFlowlineDetail": "关闭流程线详情",
   "automation.decisionAction": "批准并继续",
   "automation.diagnostics.automationRun.decisionUnavailable":
     "这个决策已不可用，请刷新后重试。",
@@ -662,6 +683,8 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
     "这个自动化任务已不可用，请刷新后重试。",
   "automation.diagnosticUnavailable":
     "自动化设置需要处理，请检查自动化流程配置。",
+  "automation.diagnosticError": "错误",
+  "automation.diagnosticWarning": "警告",
   "automation.decisionPrompt": "需要决策",
   "automation.disableFlow": "停用自动化流程",
   "automation.done": "已完成",
@@ -679,6 +702,9 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.flowsCount": "个流程",
   "automation.flowline": "流程线",
   "automation.flowlineEmpty": "选择任务后查看它的流程线。",
+  "automation.flowlineTaskLifecycleDescription":
+    "阶段计划来自任务内容和自动化流程运行状态。",
+  "automation.inspectFlowline": "查看流程线",
   "automation.loadingProjection": "正在加载自动化任务...",
   "automation.localFileSource": "本地文件",
   "automation.needsMe": "需要我",
@@ -690,6 +716,7 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.openAgentChat": "打开自动化 Agent Chat",
   "automation.owningFlow": "所属流程",
   "automation.phasePlanPreview": "阶段计划预览",
+  "automation.pending": "待处理",
   "automation.personalAutomationFlows": "个人自动化流程",
   "automation.personalPromptsSource": "个人 prompts",
   "automation.projectionError": "无法加载自动化任务。",
@@ -699,10 +726,20 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.readyFlowlineDescription":
     "通过所属自动化流程运行时启动这个就绪任务。",
   "automation.readyPhaseReviewSource": "检查来源元数据",
+  "automation.readyPhaseReviewSourceDescription":
+    "在所属自动化流程启动前检查选中的来源。",
   "automation.readyPhaseReviewWorkspaceSource": "检查工作区来源",
+  "automation.readyPhaseReviewWorkspaceSourceDescription":
+    "读取工作区任务来源并确认已接受范围。",
   "automation.readyPhaseRunFlow": "运行所属自动化流程",
+  "automation.readyPhaseRunFlowDescription":
+    "通过所属自动化流程运行或继续选中的任务。",
   "automation.readyPhaseVerifyEngineResult": "验证引擎结果",
+  "automation.readyPhaseVerifyEngineResultDescription":
+    "检查引擎输出、证据和下一步交接。",
   "automation.readyPhaseVerifyResult": "验证结果",
+  "automation.readyPhaseVerifyResultDescription":
+    "检查输出、证据和下一步交接。",
   "automation.requirementsSource": "需求",
   "automation.remoteDocSource": "远程文档",
   "automation.remoteIssueSource": "远程 issue",
@@ -720,6 +757,8 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.selectedSources": "已选择当前工作区的自动化流程来源",
   "automation.sourceSummary": "来源",
   "automation.setupDiagnostics": "设置诊断",
+  "automation.setupDiagnosticsSummaryMany": "{count} 个设置项不在任务队列中",
+  "automation.setupDiagnosticsSummaryOne": "1 个设置项不在任务队列中",
   "automation.submitDecisionFailed": "无法提交决策，请刷新后重试。",
   "automation.statusArchived": "流程已归档",
   "automation.statusDisabled": "流程已停用",

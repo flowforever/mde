@@ -157,6 +157,8 @@ describe("app language preferences", () => {
     expect(chineseText("automation.signalStack")).toBe("信号队列");
     expect(chineseText("automation.flowline")).toBe("流程线");
     expect(chineseText("automation.readyFlowline")).toBe("就绪流程线");
+    expect(chineseText("automation.closeFlowlineDetail")).toBe("关闭流程线详情");
+    expect(chineseText("automation.inspectFlowline")).toBe("查看流程线");
   });
 
   it("formats parameterized language pack text", () => {

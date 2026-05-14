@@ -18,6 +18,14 @@ import {
   readAppLanguagePreference,
   readCustomAppLanguagePacks,
 } from "../i18n/appLanguage";
+import {
+  APP_THEME_STORAGE_KEY,
+  readSystemThemeFamily,
+  readThemePreference,
+  resolveThemePreference,
+  SYSTEM_DARK_COLOR_SCHEME_QUERY,
+  type AppThemeFamily,
+} from "../theme/appThemes";
 import { COMPONENT_IDS } from "../componentIds";
 import type {
   AutomationApi,
@@ -56,7 +64,7 @@ interface AutomationCenterWindowProps {
   readonly text?: AppText;
 }
 
-const AUTOMATION_SIDEBAR_WIDTH_DEFAULT = 288;
+const AUTOMATION_SIDEBAR_WIDTH_DEFAULT = 260;
 const AUTOMATION_SIDEBAR_WIDTH_MAX = 440;
 const AUTOMATION_SIDEBAR_WIDTH_MIN = 220;
 const AUTOMATION_SIDEBAR_WIDTH_STORAGE_KEY =
@@ -106,9 +114,15 @@ const readAutomationSidebarWidth = (): number => {
     return AUTOMATION_SIDEBAR_WIDTH_DEFAULT;
   }
 
-  const storedWidth = Number(
-    window.localStorage.getItem(AUTOMATION_SIDEBAR_WIDTH_STORAGE_KEY),
+  const storedValue = window.localStorage.getItem(
+    AUTOMATION_SIDEBAR_WIDTH_STORAGE_KEY,
   );
+
+  if (storedValue === null) {
+    return AUTOMATION_SIDEBAR_WIDTH_DEFAULT;
+  }
+
+  const storedWidth = Number(storedValue);
 
   return Number.isFinite(storedWidth)
     ? clampAutomationSidebarWidth(storedWidth)
@@ -147,9 +161,9 @@ export const AutomationCenterWindow = ({
   const resolvedAutomationApi = automationApi ?? window.mdeAutomation;
   const resolvedAgentChatApi = agentChatApi ?? window.agentChatApi;
   const [projection, setProjection] = useState<AutomationProjection | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(
-    undefined,
-  );
+  const [selectedTaskId, setSelectedTaskId] = useState<
+    string | null | undefined
+  >(undefined);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">(
     "loading",
   );
@@ -159,6 +173,9 @@ export const AutomationCenterWindow = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(readAutomationSidebarWidth);
+  const [themePreference, setThemePreference] = useState(readThemePreference);
+  const [systemThemeFamily, setSystemThemeFamily] =
+    useState<AppThemeFamily>(readSystemThemeFamily);
   const automationCenterRef = useRef<HTMLElement | null>(null);
 
   const updateSidebarWidth = useCallback((width: number): void => {
@@ -262,6 +279,45 @@ export const AutomationCenterWindow = ({
   }, [resolvedAutomationApi]);
 
   useEffect(() => {
+    let mediaQueryList: MediaQueryList;
+
+    try {
+      mediaQueryList = window.matchMedia(SYSTEM_DARK_COLOR_SCHEME_QUERY);
+    } catch {
+      return undefined;
+    }
+
+    const updateSystemThemeFamily = (
+      eventOrQueryList: MediaQueryList | MediaQueryListEvent,
+    ): void => {
+      setSystemThemeFamily(eventOrQueryList.matches ? "dark" : "light");
+    };
+
+    updateSystemThemeFamily(mediaQueryList);
+    mediaQueryList.addEventListener?.("change", updateSystemThemeFamily);
+    mediaQueryList.addListener?.(updateSystemThemeFamily);
+
+    return () => {
+      mediaQueryList.removeEventListener?.("change", updateSystemThemeFamily);
+      mediaQueryList.removeListener?.(updateSystemThemeFamily);
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateThemePreferenceFromStorage = (event: StorageEvent): void => {
+      if (event.key === APP_THEME_STORAGE_KEY) {
+        setThemePreference(readThemePreference());
+      }
+    };
+
+    window.addEventListener("storage", updateThemePreferenceFromStorage);
+
+    return () => {
+      window.removeEventListener("storage", updateThemePreferenceFromStorage);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isResizingSidebar) {
       return undefined;
     }
@@ -291,6 +347,10 @@ export const AutomationCenterWindow = ({
   const agentChatWorkspaceRoot = projection?.workspaceRoot;
   const effectiveLoadState =
     resolvedAutomationApi === undefined ? "error" : loadState;
+  const resolvedTheme = resolveThemePreference(
+    themePreference,
+    systemThemeFamily,
+  );
   const createDefaultSetup = useCallback(
     (
       templates: readonly AutomationFlowTemplateSummary[],
@@ -536,6 +596,10 @@ export const AutomationCenterWindow = ({
         .filter(Boolean)
         .join(" ")}
       data-component-id={COMPONENT_IDS.automation.centerWindow}
+      data-panel-family={resolvedTheme.panelFamily}
+      data-theme={resolvedTheme.id}
+      data-theme-family={resolvedTheme.family}
+      data-theme-mode={themePreference.mode}
       ref={automationCenterRef}
       style={
         {
@@ -633,6 +697,10 @@ export const AutomationCenterWindow = ({
                 viewModel={viewModel}
               />
               <QuietFlowline
+                onClearSelection={() => {
+                  setStatusMessage(null);
+                  setSelectedTaskId(null);
+                }}
                 onStartTask={(taskId) => {
                   void startTask(taskId);
                 }}

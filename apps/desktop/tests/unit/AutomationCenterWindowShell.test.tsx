@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationCenterWindow } from "../../src/renderer/src/automation/AutomationCenterWindow";
 import { App } from "../../src/renderer/src/app/App";
 import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
+import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
 import type { AutomationApi, AutomationProjection } from "../../src/shared/automation";
 import {
   AUTOMATION_CENTER_WINDOW_MODE,
@@ -11,11 +12,27 @@ import {
 } from "../../src/shared/windowMode";
 import { MdeWindowRoot } from "../../src/renderer/src/windowRoot";
 
+const createMatchMediaMock = (matches: boolean): typeof window.matchMedia =>
+  vi.fn().mockImplementation((query: string) => ({
+    addEventListener: vi.fn(),
+    addListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    matches,
+    media: query,
+    onchange: null,
+    removeEventListener: vi.fn(),
+    removeListener: vi.fn(),
+  }));
+
 describe("AutomationCenterWindow shell", () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
     Reflect.deleteProperty(window, "mdeAutomation");
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: createMatchMediaMock(false),
+    });
   });
 
   const createProjection = (
@@ -114,6 +131,57 @@ describe("AutomationCenterWindow shell", () => {
       COMPONENT_IDS.automation.flowline,
     );
     expect(automationApi.getProjection).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies the persisted manual app theme to the Automation Center shell", () => {
+    localStorage.setItem(
+      APP_THEME_STORAGE_KEY,
+      JSON.stringify({
+        lastDarkThemeId: "blue-hour",
+        lastLightThemeId: "manuscript",
+        mode: "dark",
+      }),
+    );
+
+    render(
+      <AutomationCenterWindow
+        automationApi={createAutomationApi(createProjection())}
+      />,
+    );
+
+    const shell = screen.getByRole("main", { name: "Automation Center" });
+
+    expect(shell).toHaveAttribute("data-theme", "blue-hour");
+    expect(shell).toHaveAttribute("data-theme-family", "dark");
+    expect(shell).toHaveAttribute("data-panel-family", "dark");
+    expect(shell).toHaveAttribute("data-theme-mode", "dark");
+  });
+
+  it("resolves follow-system theme preferences before rendering Automation Center shell attributes", () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: createMatchMediaMock(true),
+    });
+    localStorage.setItem(
+      APP_THEME_STORAGE_KEY,
+      JSON.stringify({
+        lastDarkThemeId: "moss",
+        lastLightThemeId: "porcelain",
+        mode: "system",
+      }),
+    );
+
+    render(
+      <AutomationCenterWindow
+        automationApi={createAutomationApi(createProjection())}
+      />,
+    );
+
+    const shell = screen.getByRole("main", { name: "Automation Center" });
+
+    expect(shell).toHaveAttribute("data-theme", "moss");
+    expect(shell).toHaveAttribute("data-theme-family", "dark");
+    expect(shell).toHaveAttribute("data-theme-mode", "system");
   });
 
   it("renders loading, empty, diagnostics, and error states through i18n text", async () => {

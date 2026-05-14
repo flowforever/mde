@@ -14,15 +14,22 @@ export interface AutomationReadyFlowlinePreview {
   readonly sourceSummary: string
 }
 
+export type AutomationFlowlinePhaseStatus =
+  | AutomationTaskCard['bucket']
+  | 'pending'
+
+export interface AutomationFlowlinePhase {
+  readonly descriptionKey: AppTextKey
+  readonly phaseId: string
+  readonly status: AutomationFlowlinePhaseStatus
+  readonly titleKey: AppTextKey
+}
+
 export interface AutomationCenterViewModel {
   readonly diagnostics: readonly AutomationDiagnostic[]
   readonly doneTasks: readonly AutomationTaskCard[]
   readonly needsMeTasks: readonly AutomationTaskCard[]
-  readonly phases: readonly {
-    readonly phaseId: string
-    readonly status: AutomationTaskCard['bucket']
-    readonly title: string
-  }[]
+  readonly phases: readonly AutomationFlowlinePhase[]
   readonly readyTasks: readonly AutomationTaskCard[]
   readonly readyPreview?: AutomationReadyFlowlinePreview
   readonly runningTasks: readonly AutomationTaskCard[]
@@ -57,27 +64,87 @@ const getReadyPreviewPhases = (task: AutomationTaskCard): readonly AppTextKey[] 
       : 'automation.readyPhaseVerifyEngineResult'
   ])
 
+const getReviewSourceDescriptionKey = (
+  task: AutomationTaskCard
+): AppTextKey =>
+  task.sourceType === 'workspace-markdown'
+    ? 'automation.readyPhaseReviewWorkspaceSourceDescription'
+    : 'automation.readyPhaseReviewSourceDescription'
+
+const getVerifyResultDescriptionKey = (
+  task: AutomationTaskCard
+): AppTextKey =>
+  task.engine === undefined
+    ? 'automation.readyPhaseVerifyResultDescription'
+    : 'automation.readyPhaseVerifyEngineResultDescription'
+
+const getRunPhaseStatus = (
+  task: AutomationTaskCard
+): AutomationFlowlinePhaseStatus => {
+  switch (task.bucket) {
+    case 'done':
+      return 'done'
+    case 'needs-me':
+      return 'needs-me'
+    case 'running':
+      return 'running'
+    case 'ready':
+      return 'ready'
+  }
+}
+
+const getVerifyPhaseStatus = (
+  task: AutomationTaskCard
+): AutomationFlowlinePhaseStatus => (task.bucket === 'done' ? 'done' : 'pending')
+
+const createFlowlinePhases = (
+  task: AutomationTaskCard
+): readonly AutomationFlowlinePhase[] =>
+  Object.freeze([
+    Object.freeze({
+      descriptionKey: getReviewSourceDescriptionKey(task),
+      phaseId: `${task.taskId}:review-source`,
+      status: 'done',
+      titleKey:
+        task.sourceType === 'workspace-markdown'
+          ? 'automation.readyPhaseReviewWorkspaceSource'
+          : 'automation.readyPhaseReviewSource'
+    }),
+    Object.freeze({
+      descriptionKey: 'automation.readyPhaseRunFlowDescription',
+      phaseId: `${task.taskId}:run-flow`,
+      status: getRunPhaseStatus(task),
+      titleKey: 'automation.readyPhaseRunFlow'
+    }),
+    Object.freeze({
+      descriptionKey: getVerifyResultDescriptionKey(task),
+      phaseId: `${task.taskId}:verify-result`,
+      status: getVerifyPhaseStatus(task),
+      titleKey:
+        task.engine === undefined
+          ? 'automation.readyPhaseVerifyResult'
+          : 'automation.readyPhaseVerifyEngineResult'
+    })
+  ])
+
 export const createAutomationCenterViewModel = (
   projection: AutomationProjection,
-  selectedTaskId?: string
+  selectedTaskId?: string | null
 ): AutomationCenterViewModel => {
+  const projectionSelectedTaskId = selectedTaskId ?? projection.selectedTaskId
   const selectedTask =
-    selectedTaskId === undefined && projection.selectedTaskId === undefined
+    selectedTaskId === null
+      ? undefined
+      : projectionSelectedTaskId === undefined
       ? projection.tasks[0]
       : projection.tasks.find(
-          (task) => task.taskId === (selectedTaskId ?? projection.selectedTaskId)
+          (task) => task.taskId === projectionSelectedTaskId
         ) ?? projection.tasks[0]
 
   const phases =
     selectedTask === undefined
       ? []
-      : [
-          Object.freeze({
-            phaseId: `task:${selectedTask.taskId}`,
-            status: selectedTask.bucket,
-            title: selectedTask.title
-          })
-        ]
+      : createFlowlinePhases(selectedTask)
   const selectedDecision =
     selectedTask === undefined
       ? undefined

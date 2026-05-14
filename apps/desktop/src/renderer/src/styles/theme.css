@@ -922,6 +922,9 @@ input:focus-visible,
 }
 
 .app-shell {
+  --primary-action: var(--editor-accent);
+  --primary-action-text: var(--editor-bg);
+  --status-success: var(--editor-accent);
   display: grid;
   grid-template-columns: var(--explorer-width, 288px) 6px minmax(0, 1fr);
   height: 100vh;

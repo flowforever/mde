@@ -1,13 +1,13 @@
 .automation-center-window {
   color: var(--panel-text);
-  background: var(--panel-surface-strong);
+  background: var(--panel-bg);
 }
 
 .automation-console-pane {
   min-height: 0;
   overflow: hidden;
   padding: 16px;
-  background: var(--panel-surface-strong);
+  background: var(--panel-bg);
 }
 
 .automation-console-pane--loading {
@@ -15,7 +15,7 @@
 }
 
 .automation-task-start,
-.automation-decision-panel button,
+.automation-flowline-actions button,
 .automation-flow-menu button {
   border-radius: 6px;
 }
@@ -110,7 +110,7 @@
 .automation-task-stack-row--selected,
 .automation-task-stack-row[aria-pressed='true'] {
   border-color: var(--panel-active-border);
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--primary-action);
 }
 
 .automation-task-stack-row h3 {
@@ -175,7 +175,7 @@
   align-items: center;
   min-height: 22px;
   padding: 0 8px;
-  color: var(--accent);
+  color: var(--primary-action);
   background: var(--panel-surface);
   border: 1px solid var(--panel-active-border);
   border-radius: 999px;
@@ -235,7 +235,7 @@
 }
 
 .automation-workspace-check {
-  accent-color: var(--accent);
+  accent-color: var(--primary-action);
 }
 
 .automation-workspace-title,
@@ -279,7 +279,7 @@
 
 .automation-icon-action,
 .automation-mini-action {
-  color: var(--accent);
+  color: var(--primary-action);
   background: var(--panel-surface);
   border: 1px solid var(--panel-active-border);
   border-radius: 5px;
@@ -422,7 +422,7 @@
 }
 
 .automation-status-light--enabled {
-  background: #2f8f5f;
+  background: var(--status-success);
 }
 
 .automation-status-light--disabled,
@@ -489,7 +489,8 @@
 
 .automation-stack-header p:not(.automation-kicker),
 .automation-source-summary,
-.automation-task-card p,
+.automation-task-card__description,
+.automation-task-card__source,
 .automation-flowline p,
 .automation-bucket-empty {
   color: var(--panel-muted);
@@ -515,7 +516,7 @@
   gap: 10px;
 }
 
-.automation-flat-queue {
+.automation-card-queue {
   display: grid;
   gap: 8px;
 }
@@ -541,7 +542,7 @@
 
 .automation-task-row--selected {
   border-color: var(--panel-active-border);
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--primary-action);
 }
 
 .automation-task-row__status,
@@ -590,11 +591,31 @@
 
 .automation-task-card {
   position: relative;
-  margin-bottom: 10px;
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  margin: 0;
   padding: 11px;
+  color: var(--panel-text);
+  text-align: left;
   background: var(--panel-surface);
   border: 1px solid var(--panel-border);
   border-radius: 7px;
+  cursor: pointer;
+}
+
+.automation-task-card:hover {
+  background: var(--panel-surface-hover);
+}
+
+.automation-task-card:focus-visible {
+  outline: 2px solid var(--panel-active-border);
+  outline-offset: 2px;
+}
+
+.automation-task-card--selected {
+  border-color: var(--panel-active-border);
+  box-shadow: inset 3px 0 0 var(--primary-action);
 }
 
 .automation-task-card--needs-me {
@@ -603,32 +624,50 @@
 }
 
 .automation-task-card--running {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--primary-action);
 }
 
 .automation-task-card--ready {
-  box-shadow: inset 3px 0 0 #2f8f5f;
+  box-shadow: inset 3px 0 0 var(--status-success);
 }
 
-.automation-task-card h2 {
-  margin: 0;
+.automation-task-card--done {
+  background: var(--panel-surface-strong);
+}
+
+.automation-task-card__body {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.automation-task-card__title {
+  min-width: 0;
+  overflow: hidden;
   color: var(--panel-text-strong);
-  font-size: 17px;
+  font-size: 15px;
+  font-weight: 820;
   line-height: 1.22;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.automation-task-card p {
-  margin: 6px 0 0;
+.automation-task-card__description,
+.automation-task-card__source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .automation-task-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
-.automation-task-meta span {
+.automation-task-badge {
   display: inline-flex;
   align-items: center;
   min-height: 20px;
@@ -641,46 +680,87 @@
   font-weight: 780;
 }
 
+.automation-task-badge--status {
+  color: var(--primary-action-text);
+  background: var(--primary-action);
+  border-color: var(--primary-action);
+}
+
+.automation-task-card__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.automation-task-card__action {
+  min-height: 24px;
+  padding: 0 8px;
+  color: var(--primary-action);
+  background: var(--panel-surface-strong);
+  border: 1px solid var(--panel-active-border);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
 .automation-task-start {
   min-height: 30px;
   margin-top: 10px;
   padding: 0 10px;
-  color: #fff;
-  background: var(--accent);
-  border: 1px solid var(--accent);
+  color: var(--primary-action-text);
+  background: var(--primary-action);
+  border: 1px solid var(--primary-action);
   font-size: 12px;
   font-weight: 760;
 }
 
-.automation-ready-preview {
+.automation-flow-head {
   display: grid;
-  gap: 12px;
-  margin-top: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
 }
 
-.automation-ready-preview h2 {
+.automation-flow-head h2 {
   margin: 0;
 }
 
-.automation-ready-preview dl {
+.automation-flowline-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  color: var(--panel-text);
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 820;
+}
+
+.automation-flowline-meta {
   display: grid;
   gap: 8px;
-  margin: 0;
+  margin: 14px 0 0;
 }
 
-.automation-ready-preview dl div {
+.automation-flowline-meta div {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
   gap: 8px;
 }
 
-.automation-ready-preview dt {
+.automation-flowline-meta dt {
   color: var(--panel-muted);
   font-size: 11px;
   font-weight: 760;
 }
 
-.automation-ready-preview dd {
+.automation-flowline-meta dd {
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -690,14 +770,29 @@
   white-space: nowrap;
 }
 
+.automation-ready-phase-plan {
+  margin-top: 14px;
+}
+
 .automation-flowline-start,
 .automation-agent-chat-button {
   min-height: 32px;
   padding: 0 11px;
-  color: #fff;
-  background: #155eef;
-  border: 1px solid #155eef;
+  color: var(--primary-action-text);
+  background: var(--primary-action);
+  border: 1px solid var(--primary-action);
   border-radius: 6px;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 18%);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.automation-flowline-actions button {
+  min-height: 32px;
+  padding: 0 11px;
+  color: var(--primary-action-text);
+  background: var(--primary-action);
+  border: 1px solid var(--primary-action);
   box-shadow: 0 1px 2px rgb(16 24 40 / 18%);
   font-size: 12px;
   font-weight: 760;
@@ -762,6 +857,42 @@
   line-height: 1.22;
 }
 
+.automation-diagnostic-summary {
+  margin: 7px 0 0;
+}
+
+.automation-diagnostic-rows {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.automation-diagnostic-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+}
+
+.automation-diagnostic-row--error {
+  border-color: var(--warning);
+}
+
+.automation-diagnostic-label {
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 840;
+  text-transform: uppercase;
+}
+
+.automation-diagnostic-row p {
+  margin: 3px 0 0;
+}
+
 .automation-flowline-phases {
   position: relative;
   display: grid;
@@ -790,6 +921,28 @@
   border-radius: 7px;
 }
 
+.automation-flowline-phase h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--panel-text-strong);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.automation-flowline-phase h3 span {
+  color: var(--panel-muted-subtle);
+  font-size: 10px;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.automation-flowline-phase p {
+  margin: 6px 0 0;
+}
+
 .automation-flowline-phase::before {
   position: absolute;
   top: 16px;
@@ -802,7 +955,11 @@
 }
 
 .automation-flowline-phase--done::before {
-  background: #2f8f5f;
+  background: var(--status-success);
+}
+
+.automation-flowline-phase--running::before {
+  background: var(--primary-action);
 }
 
 .automation-flowline-phase--needs-me,
@@ -814,6 +971,13 @@
 .automation-flowline-phase--needs-me::before,
 .automation-flowline-phase--ready::before {
   background: var(--warning);
+}
+
+.automation-flowline-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .automation-flow-editor-host__header {

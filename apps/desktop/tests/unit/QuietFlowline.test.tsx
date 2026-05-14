@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { QuietFlowline } from '../../src/renderer/src/automation/QuietFlowline'
 import { createAppText, BUILT_IN_APP_LANGUAGE_PACKS } from '../../src/renderer/src/i18n/appLanguage'
@@ -17,15 +17,29 @@ describe('QuietFlowline', () => {
   })
 
   it('renders a Ready start preview from the selected task', () => {
+    const clearSelection = vi.fn()
     const viewModel: AutomationCenterViewModel = {
       diagnostics: [],
       doneTasks: [],
       needsMeTasks: [],
       phases: [
         {
-          phaseId: 'task-title',
+          descriptionKey: 'automation.readyPhaseReviewWorkspaceSourceDescription',
+          phaseId: 'review-source',
+          status: 'done',
+          titleKey: 'automation.readyPhaseReviewWorkspaceSource'
+        },
+        {
+          descriptionKey: 'automation.readyPhaseRunFlowDescription',
+          phaseId: 'run-flow',
           status: 'ready',
-          title: 'READY Implement projection'
+          titleKey: 'automation.readyPhaseRunFlow'
+        },
+        {
+          descriptionKey: 'automation.readyPhaseVerifyEngineResultDescription',
+          phaseId: 'verify-result',
+          status: 'pending',
+          titleKey: 'automation.readyPhaseVerifyEngineResult'
         }
       ],
       readyTasks: [],
@@ -53,12 +67,24 @@ describe('QuietFlowline', () => {
       tasks: []
     }
 
-    render(<QuietFlowline text={text} viewModel={viewModel} />)
+    render(
+      <QuietFlowline
+        onClearSelection={clearSelection}
+        text={text}
+        viewModel={viewModel}
+      />
+    )
 
     expect(screen.getByRole('region', { name: 'Flowline' })).toHaveAttribute(
       'data-component-id',
       COMPONENT_IDS.automation.flowline
     )
+    expect(screen.getByLabelText('Close Flowline detail')).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.flowlineCloseButton
+    )
+    screen.getByLabelText('Close Flowline detail').click()
+    expect(clearSelection).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Start automation task')).toHaveAttribute(
       'data-component-id',
       COMPONENT_IDS.automation.flowlineStartButton
@@ -68,13 +94,34 @@ describe('QuietFlowline', () => {
     expect(screen.getByText('codex')).toBeInTheDocument()
     expect(
       screen.getByRole('region', { name: 'Phase plan preview' })
-    ).toHaveAttribute('data-component-id', COMPONENT_IDS.automation.flowlinePhase)
+    ).toBeInTheDocument()
+    const phasePlan = screen.getByRole('region', { name: 'Phase plan preview' })
+
+    expect(
+      within(phasePlan)
+        .getAllByText(/^(Done|Ready|Pending)$/u)
+        .map((element) => element.textContent)
+    ).toEqual(['Done', 'Ready', 'Pending'])
+    expect(
+      within(phasePlan)
+        .getAllByText(/Review workspace source|Run the owning automation-flow|Verify the engine result/u)
+        .map((element) => element.closest('[data-component-id]'))
+    ).toHaveLength(3)
+    expect(
+      within(phasePlan)
+        .getAllByText(/Review workspace source|Run the owning automation-flow|Verify the engine result/u)
+        .map((element) => element.closest('[data-component-id]')?.getAttribute('data-component-id'))
+    ).toEqual([
+      COMPONENT_IDS.automation.flowlinePhase,
+      COMPONENT_IDS.automation.flowlinePhase,
+      COMPONENT_IDS.automation.flowlinePhase
+    ])
     expect(screen.getByText('Review workspace source')).toBeInTheDocument()
     expect(screen.getByText('Run the owning automation-flow')).toBeInTheDocument()
     expect(screen.getByText('Verify the engine result')).toBeInTheDocument()
   })
 
-  it('keeps the Ready start CTA visually primary without depending on app accent variables', () => {
+  it('keeps the Ready start CTA visually primary through shared theme tokens', () => {
     const css = readFileSync(
       join(process.cwd(), 'apps/desktop/src/renderer/src/automation/styles.css'),
       'utf8'
@@ -84,9 +131,10 @@ describe('QuietFlowline', () => {
         css
       )?.[0]
 
-    expect(startButtonRule).toContain('background: #155eef;')
-    expect(startButtonRule).toContain('border: 1px solid #155eef;')
-    expect(startButtonRule).not.toContain('background: var(--accent)')
+    expect(startButtonRule).toContain('color: var(--primary-action-text);')
+    expect(startButtonRule).toContain('background: var(--primary-action);')
+    expect(startButtonRule).toContain('border: 1px solid var(--primary-action);')
+    expect(startButtonRule).not.toContain('#155eef')
   })
 
   it('renders the no-selection empty state', () => {

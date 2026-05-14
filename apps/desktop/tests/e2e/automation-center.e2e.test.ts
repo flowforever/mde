@@ -192,6 +192,62 @@ const openAutomationCenter = async (
   return automationWindow
 }
 
+const waitForAutomationCenterSteadyState = async (
+  automationWindow: Page
+): Promise<void> => {
+  await expect(
+    automationWindow.locator('.automation-console-pane')
+  ).not.toHaveClass(/automation-console-pane--loading/u, {
+    timeout: E2E_UI_READY_TIMEOUT_MS
+  })
+  await expect(
+    automationWindow.getByRole('region', { name: 'Signal Stack' })
+  ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+  await expect(
+    automationWindow.getByRole('region', { name: 'Flowline' })
+  ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+}
+
+const readAutomationPrototypeLayout = async (
+  automationWindow: Page
+): Promise<{
+  readonly flowlineLeft: number
+  readonly flowlineWidth: number
+  readonly signalLeft: number
+  readonly signalRight: number
+  readonly sidebarRight: number
+  readonly sidebarWidth: number
+}> =>
+  automationWindow.evaluate((componentIds) => {
+    const getRect = (componentId: string): DOMRect => {
+      const element = document.querySelector(
+        `[data-component-id="${componentId}"]`
+      )
+
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing Automation Center layout element ${componentId}`)
+      }
+
+      return element.getBoundingClientRect()
+    }
+    const sidebar = getRect(componentIds.workspaceFilters)
+    const signalStack = getRect(componentIds.signalStack)
+    const flowline = getRect(componentIds.flowline)
+
+    return {
+      flowlineLeft: flowline.left,
+      flowlineWidth: flowline.width,
+      signalLeft: signalStack.left,
+      signalRight: signalStack.right,
+      sidebarRight: sidebar.right,
+      sidebarWidth: sidebar.width
+    }
+  }, {
+    flowline: COMPONENT_IDS.automation.flowline,
+    signalStack: COMPONENT_IDS.automation.signalStack,
+    workspaceFilters: COMPONENT_IDS.automation.workspaceFilters
+  })
+
 const createWorkspaceAutomationFlow = async (
   automationWindow: Page
 ): Promise<void> => {
@@ -304,6 +360,14 @@ test('opens Automation Center in a separate window and keeps the editor usable',
       /\d+(?:\.\d+)?px 6px \d+(?:\.\d+)?px/
     )
     await expect(
+      automationWindow.getByRole('region', { name: 'Task stack' })
+    ).toBeVisible()
+    await expect(
+      automationWindow.getByRole('region', {
+        name: 'Workspaces · flow filters'
+      })
+    ).toBeVisible()
+    await expect(
       automationWindow.locator(
         '[data-component-id="automation.sidebar-resize-handle"]'
       )
@@ -315,6 +379,51 @@ test('opens Automation Center in a separate window and keeps the editor usable',
     await expect(
       window.getByRole('button', { name: /README\.md Markdown file/i })
     ).toBeVisible()
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('opens Automation Center with the theme selected in the main window', async () => {
+  const workspacePath = await createAutomationWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath]
+  })
+
+  try {
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+
+    const appShell = window.locator('.app-shell')
+
+    await window.getByRole('button', { name: /change theme/i }).click()
+    await expect(window.getByRole('dialog', { name: /settings/i })).toBeVisible()
+    const followSystemSwitch = window.getByRole('switch', {
+      name: /follow system appearance/i
+    })
+
+    if (await followSystemSwitch.isChecked()) {
+      await followSystemSwitch.click()
+    }
+
+    await window.getByRole('radio', { name: /blue hour/i }).click()
+    await expect(appShell).toHaveAttribute('data-theme', 'blue-hour')
+    await expect(appShell).toHaveAttribute('data-theme-family', 'dark')
+    await expect(appShell).toHaveAttribute('data-theme-mode', 'dark')
+    await window.getByRole('button', { name: /close settings/i }).click()
+    await expect(window.getByRole('dialog', { name: /settings/i })).toHaveCount(0)
+
+    const automationWindow = await openAutomationCenter(app, window)
+    const automationShell = automationWindow.getByRole('main', {
+      name: /automation center/i
+    })
+
+    await expect(automationShell).toHaveAttribute('data-theme', 'blue-hour')
+    await expect(automationShell).toHaveAttribute('data-theme-family', 'dark')
+    await expect(automationShell).toHaveAttribute('data-theme-mode', 'dark')
+    await expect(automationShell).toHaveAttribute('data-panel-family', 'dark')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -380,6 +489,31 @@ test('creates a workspace automation-flow and projects a READY task', async () =
       automationWindow,
       'READY Implement automation E2E'
     )
+    await waitForAutomationCenterSteadyState(automationWindow)
+    const layout = await readAutomationPrototypeLayout(automationWindow)
+
+    expect(layout.sidebarWidth).toBeGreaterThanOrEqual(240)
+    expect(layout.sidebarWidth).toBeLessThanOrEqual(276)
+    expect(layout.sidebarRight).toBeLessThan(layout.signalLeft)
+    expect(layout.signalRight).toBeLessThan(layout.flowlineLeft)
+    expect(layout.flowlineWidth).toBeGreaterThanOrEqual(340)
+    expect(layout.flowlineWidth).toBeLessThanOrEqual(430)
+    const taskCard = automationWindow
+      .locator('[data-component-id="automation.signal-task-row"]')
+      .filter({ hasText: 'READY Implement automation E2E' })
+
+    await expect(taskCard).toHaveClass(/automation-task-card/u)
+    await expect(taskCard).toContainText('Source: .mde/docs/tasks/ready.md')
+    await expect(taskCard).toContainText('Inspect Flowline')
+    await expect(taskCard.locator('.automation-task-badge')).toHaveCount(3)
+    await expect(
+      automationWindow.locator('[data-component-id="automation.flowline-phase"]')
+    ).toHaveCount(3)
+    await expect(
+      automationWindow.locator(
+        '[data-component-id="automation.flowline-close-button"]'
+      )
+    ).toBeVisible()
     await expect
       .poll(async () =>
         (await readFile(fakeCli.logPath, 'utf8'))

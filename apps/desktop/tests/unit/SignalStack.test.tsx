@@ -180,26 +180,48 @@ describe('SignalStack', () => {
     cleanup()
   })
 
-  it('renders a flat task queue and keeps diagnostics out of task rows', () => {
-    render(<SignalStack text={text} viewModel={createViewModel()} />)
+  it('renders a card-based task queue and keeps diagnostics out of task cards', () => {
+    render(
+      <SignalStack
+        selectedTaskId="needs-me-task"
+        text={text}
+        viewModel={createViewModel()}
+      />
+    )
 
     expect(screen.getAllByRole('button')).toHaveLength(6)
+    expect(screen.getByText('READY needs input').closest('button')).toHaveClass(
+      'automation-task-card',
+      'automation-task-card--selected'
+    )
     expect(screen.getByText('READY needs input').closest('button')).toHaveAttribute(
       'data-component-id',
       COMPONENT_IDS.automation.signalTaskRow
+    )
+    expect(screen.getByText('READY visible task').closest('button')).toHaveClass(
+      'automation-task-card'
     )
     expect(screen.getByText('READY visible task').closest('button')).toHaveAttribute(
       'data-component-id',
       COMPONENT_IDS.automation.signalTaskRow
     )
+    expect(screen.getByText('RUNNING task').closest('button')).toHaveClass(
+      'automation-task-card',
+      'automation-task-card--running'
+    )
     expect(screen.getByText('RUNNING task').closest('button')).toHaveAttribute(
       'data-component-id',
       COMPONENT_IDS.automation.signalTaskRow
+    )
+    expect(screen.getByText('DONE archived task').closest('button')).toHaveClass(
+      'automation-task-card',
+      'automation-task-card--done'
     )
     expect(screen.getByText('DONE archived task').closest('button')).toHaveAttribute(
       'data-component-id',
       COMPONENT_IDS.automation.signalTaskRow
     )
+    expect(screen.getAllByText('Inspect Flowline')).toHaveLength(6)
     expect(screen.getByText('Selected automation-flow sources')).toBeInTheDocument()
     expect(screen.getByText('project-a')).toBeInTheDocument()
     expect(screen.getByText('project-b')).toBeInTheDocument()
@@ -216,6 +238,10 @@ describe('SignalStack', () => {
     const diagnosticList = screen.getByRole('region', {
       name: 'Setup diagnostics'
     })
+    expect(
+      within(diagnosticList).getByText('1 setup item outside the task queue')
+    ).toBeInTheDocument()
+    expect(within(diagnosticList).getByText('Error')).toBeInTheDocument()
     expect(
       within(diagnosticList).getByText(
         'Automation setup needs attention. Check the automation-flow configuration.'

@@ -101,9 +101,11 @@ import { UpdateDialog, type UpdateDialogStatus } from "./UpdateDialog";
 import {
   disableSystemThemePreference,
   enableSystemThemePreference,
+  readSystemThemeFamily,
   readThemePreference,
   resolveThemePreference,
   selectAppTheme,
+  SYSTEM_DARK_COLOR_SCHEME_QUERY,
   writeThemePreference,
   type AppThemeFamily,
   type AppThemeId,
@@ -343,7 +345,6 @@ const AGENT_CHAT_PANEL_WIDTH_MIN = 380;
 const AGENT_CHAT_PANEL_MAIN_AREA_MIN = 320;
 const AUTO_SAVE_IDLE_DELAY_MS = 5000;
 export const EXTERNAL_FILE_SYNC_INTERVAL_MS = 5000;
-const SYSTEM_DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 const APP_VERSION = packageJson.version;
 
 interface SaveCurrentFileOptions {
@@ -456,16 +457,6 @@ const createRecentWorkspace = (workspace: Workspace): RecentWorkspace =>
         rootPath: workspace.rootPath,
         type: "workspace",
       };
-
-const readSystemThemeFamily = (): AppThemeFamily => {
-  try {
-    return window.matchMedia?.(SYSTEM_DARK_COLOR_SCHEME_QUERY).matches
-      ? "dark"
-      : "light";
-  } catch {
-    return "light";
-  }
-};
 
 export const App = (): React.JSX.Element => {
   const [state, dispatch] = useReducer(

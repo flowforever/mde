@@ -1,4 +1,5 @@
 export const APP_THEME_STORAGE_KEY = 'mde.themePreference'
+export const SYSTEM_DARK_COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)'
 
 export type AppThemeFamily = 'dark' | 'light'
 export type AppThemeMode = 'system' | AppThemeFamily
@@ -392,6 +393,19 @@ const DEFAULT_THEME_PREFERENCE: ThemePreference = {
 
 export const getThemeById = (themeId: string): AppTheme | null =>
   APP_THEMES.find((theme) => theme.id === themeId) ?? null
+
+export const readSystemThemeFamily = (
+  matchMedia:
+    | ((query: string) => Pick<MediaQueryList, 'matches'>)
+    | undefined =
+    typeof window === 'undefined' ? undefined : window.matchMedia?.bind(window)
+): AppThemeFamily => {
+  try {
+    return matchMedia?.(SYSTEM_DARK_COLOR_SCHEME_QUERY).matches ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
+}
 
 const getThemeFamily = (themeId: AppThemeId): AppThemeFamily =>
   getThemeById(themeId)?.family ?? 'dark'
