@@ -347,27 +347,33 @@ export const WorkspaceFlowFilters = ({
           data-component-id={COMPONENT_IDS.automation.taskStack}
         >
           <p className="automation-kicker">{text('automation.taskStack')}</p>
-          {taskStackRows.map((row) => (
-            <button
-              aria-pressed={(filters.bucket ?? 'ready') === row.bucket}
-              className="automation-task-stack-row"
-              data-component-id={COMPONENT_IDS.automation.bucketFilterButton}
-              key={row.label}
-              onClick={() => {
-                onUpdateFilters?.({
-                  ...filters,
-                  bucket: row.bucket
-                })
-              }}
-              type="button"
-            >
-              <h3>
-                {row.label}
-                <span>{row.count}</span>
-              </h3>
-              <p>{row.description}</p>
-            </button>
-          ))}
+          {taskStackRows.map((row) => {
+            const selected = (filters.bucket ?? 'ready') === row.bucket
+
+            return (
+              <button
+                aria-pressed={selected}
+                className={`automation-task-stack-row${
+                  selected ? ' automation-task-stack-row--selected' : ''
+                }`}
+                data-component-id={COMPONENT_IDS.automation.bucketFilterButton}
+                key={row.label}
+                onClick={() => {
+                  onUpdateFilters?.({
+                    ...filters,
+                    bucket: row.bucket
+                  })
+                }}
+                type="button"
+              >
+                <h3>
+                  {row.label}
+                  <span>{row.count}</span>
+                </h3>
+                <p>{row.description}</p>
+              </button>
+            )
+          })}
         </section>
         <section
           aria-label={text('automation.workspaceFilterPanel')}

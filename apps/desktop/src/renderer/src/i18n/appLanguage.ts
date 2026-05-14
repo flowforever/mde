@@ -101,7 +101,7 @@ const EN_MESSAGES = {
   "automation.diagnostics.automationRun.resumeFailed":
     "Automation run could not be resumed. Check the task status and try again.",
   "automation.diagnostics.automationAdapter.authenticationRequired":
-    "Sign in to Codex before starting automation.",
+    "Codex is detected but not signed in. Sign in to Codex before starting real automation.",
   "automation.diagnostics.automationAdapter.runCapabilityUnavailable":
     "Automation cannot start because the required adapter is unavailable.",
   "automation.diagnostics.automationDiscovery.runCapabilityUnavailable":
@@ -653,7 +653,7 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.diagnostics.automationRun.resumeFailed":
     "无法继续自动化运行，请检查任务状态后重试。",
   "automation.diagnostics.automationAdapter.authenticationRequired":
-    "请先登录 Codex，再启动自动化。",
+    "已检测到 Codex，但当前未登录。请先登录 Codex，再启动真实自动化。",
   "automation.diagnostics.automationAdapter.runCapabilityUnavailable":
     "所需适配器不可用，无法启动自动化。",
   "automation.diagnostics.automationDiscovery.runCapabilityUnavailable":

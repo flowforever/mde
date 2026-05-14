@@ -899,6 +899,106 @@ describe('automationHandlers integration', () => {
     ])
   })
 
+  it('keeps Task Stack bucket counts available while the selected task bucket is filtered', async () => {
+    let idCounter = 0
+    const { handlers, workspaceRoot } = await createHandlers({
+      createId: (prefix) => {
+        idCounter += 1
+
+        return `${prefix}-bucket-${idCounter}`
+      },
+      taskRunEvents: [
+        {
+          outcome: 'succeeded',
+          summary: 'Bucket one completed',
+          title: 'READY Bucket one',
+          type: 'final-report'
+        }
+      ]
+    })
+
+    await mkdir(join(workspaceRoot, '.mde', 'docs', 'tasks'), {
+      recursive: true
+    })
+    await writeFile(
+      join(workspaceRoot, '.mde', 'docs', 'tasks', 'bucket-one.md'),
+      '# READY Bucket one\n'
+    )
+    await writeFile(
+      join(workspaceRoot, '.mde', 'docs', 'tasks', 'bucket-two.md'),
+      '# READY Bucket two\n'
+    )
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'bucket-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+
+    const initialProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly tasks: readonly {
+          readonly taskId: string
+          readonly title: string
+        }[]
+      }
+    }
+    const completedTask = initialProjection.projection.tasks.find(
+      (task) => task.title === 'READY Bucket one'
+    )
+
+    if (completedTask === undefined) {
+      throw new Error('Expected READY Bucket one to be projected')
+    }
+
+    await expect(
+      handlers
+        .get(AUTOMATION_CHANNELS.startRun)
+        ?.({}, { taskId: completedTask.taskId })
+    ).resolves.toMatchObject({
+      accepted: true
+    })
+
+    const readyProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { filters: { bucket: 'ready' }, workspaceRoot })) as {
+      projection: {
+        readonly buckets: {
+          readonly done: readonly { readonly bucket: string; readonly title: string }[]
+          readonly ready: readonly { readonly bucket: string; readonly title: string }[]
+        }
+        readonly tasks: readonly {
+          readonly bucket: string
+          readonly title: string
+        }[]
+      }
+    }
+
+    expect(readyProjection.projection.tasks).toEqual([
+      expect.objectContaining({
+        bucket: 'ready',
+        title: 'READY Bucket two'
+      })
+    ])
+    expect(readyProjection.projection.buckets.done).toEqual([
+      expect.objectContaining({
+        bucket: 'done',
+        title: 'READY Bucket one'
+      })
+    ])
+    expect(readyProjection.projection.buckets.ready).toEqual([
+      expect.objectContaining({
+        bucket: 'ready',
+        title: 'READY Bucket two'
+      })
+    ])
+  })
+
   it('validates template inputs and accepts decision responses', async () => {
     const { handlers, workspaceRoot } = await createHandlers({
       capabilities: { autonomyGate: false }

@@ -215,6 +215,54 @@ describe('AutomationCenterWindow', () => {
     expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
   })
 
+  it('switches Task Stack buckets before the refreshed projection returns', async () => {
+    let resolveRefresh:
+      | ((value: { readonly projection: AutomationProjection }) => void)
+      | undefined
+    const refreshedProjection: AutomationProjection = {
+      ...projection,
+      filters: {
+        ...projection.filters,
+        bucket: 'done'
+      },
+      tasks: []
+    }
+    const automationApi = {
+      getProjection: vi
+        .fn()
+        .mockResolvedValueOnce({ projection })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveRefresh = resolve
+            })
+        ),
+      updateFilters: vi.fn(() => Promise.resolve({ accepted: true }))
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    const doneBucket = await screen.findByRole('button', { name: /Done/ })
+
+    fireEvent.click(doneBucket)
+
+    await waitFor(() => {
+      expect(doneBucket).toHaveAttribute('aria-pressed', 'true')
+    })
+    expect(automationApi.updateFilters).toHaveBeenCalledWith({
+      filters: {
+        bucket: 'done',
+        flowIds: [],
+        workspaceIds: ['/workspace', 'mde:no-workspace']
+      }
+    })
+
+    resolveRefresh?.({ projection: refreshedProjection })
+    await waitFor(() => {
+      expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('opens New automation-flow setup in the right editor mode', async () => {
     const automationApi = {
       createFlowFromTemplate: vi.fn(() =>

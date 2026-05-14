@@ -1369,8 +1369,10 @@ test('opens Automation Center in a separate window from Explorer Home', async ()
       COMPONENT_IDS.automation.signalStack
     )
     await expect(
-      automationWindow.getByText(/no automation tasks yet/i)
-    ).toBeVisible()
+      automationWindow.locator(
+        '[data-component-id="automation.bucket-filter-button"]'
+      )
+    ).toHaveCount(4)
     await expect(window.locator('.app-shell')).toBeVisible()
     await expect(
       window.getByRole('button', { name: /README\.md Markdown file/i })

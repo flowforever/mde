@@ -90,9 +90,27 @@
 .automation-task-stack-row {
   min-width: 0;
   padding: 11px;
+  color: inherit;
+  text-align: left;
   background: var(--panel-surface);
   border: 1px solid var(--panel-border);
   border-radius: 7px;
+  cursor: pointer;
+}
+
+.automation-task-stack-row:hover {
+  background: var(--panel-surface-hover);
+}
+
+.automation-task-stack-row:focus-visible {
+  outline: 2px solid var(--panel-active-border);
+  outline-offset: 2px;
+}
+
+.automation-task-stack-row--selected,
+.automation-task-stack-row[aria-pressed='true'] {
+  border-color: var(--panel-active-border);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .automation-task-stack-row h3 {
@@ -113,6 +131,7 @@
 }
 
 .automation-task-stack-row p {
+  display: none;
   margin: 7px 0 0;
   color: var(--panel-muted);
   font-size: 12px;

@@ -219,6 +219,19 @@ export const AutomationCenterWindow = ({
     setProjection(nextProjection);
     setLoadState("ready");
   }, [resolvedAutomationApi]);
+  const applyLocalFilters = useCallback(
+    (nextFilters: AutomationProjectionFilters): void => {
+      setProjection((currentProjection) =>
+        currentProjection === null
+          ? currentProjection
+          : {
+              ...currentProjection,
+              filters: nextFilters,
+            },
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -501,11 +514,12 @@ export const AutomationCenterWindow = ({
         return;
       }
 
+      applyLocalFilters(nextFilters);
       await resolvedAutomationApi.updateFilters({ filters: nextFilters });
       setSelectedTaskId(undefined);
       await refreshProjection();
     },
-    [refreshProjection, resolvedAutomationApi],
+    [applyLocalFilters, refreshProjection, resolvedAutomationApi],
   );
   const returnToWorkspace = useCallback((): void => {
     void window.mdeWindow?.focusWorkspaceWindow();

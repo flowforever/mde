@@ -83,14 +83,24 @@ const hasRequiredProtocol = (source: string): boolean =>
 const isLoggedIn = (stdout: string): boolean =>
   /^logged in\b/iu.test(stdout.trim())
 
+const combineProcessOutput = (output: {
+  readonly stderr?: string
+  readonly stdout?: string
+}): string =>
+  [output.stdout, output.stderr]
+    .map((item) => item?.trim() ?? '')
+    .filter(Boolean)
+    .join('\n')
+
 const probeCodexLoginStatus = async (
   options: CodexAgentChatAdapterOptions,
   command: string
 ): Promise<void> => {
   const status = await options.processRunner.execFile(command, ['login', 'status'])
+  const output = combineProcessOutput(status)
 
-  if (!isLoggedIn(status.stdout)) {
-    throw new Error(status.stdout.trim() || 'Codex is not logged in')
+  if (!isLoggedIn(output)) {
+    throw new Error(output || 'Codex is not logged in')
   }
 }
 
@@ -413,7 +423,7 @@ export const createCodexAgentChatAdapter = (
           'status'
         ])
 
-        return `${version.stdout.trim()}:${loginStatus.stdout.trim()}`
+        return `${version.stdout.trim()}:${combineProcessOutput(loginStatus)}`
       } catch (error) {
         return `${version.stdout.trim()}:login-status-unavailable:${
           error instanceof Error ? error.message : 'unknown'

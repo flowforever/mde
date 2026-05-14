@@ -257,6 +257,43 @@ describe('WorkspaceFlowFilters', () => {
     ])
   })
 
+  it('switches Task Stack buckets with prototype selected state', () => {
+    const onUpdateFilters = vi.fn()
+
+    render(
+      <WorkspaceFlowFilters
+        filters={{ bucket: 'ready', workspaceIds: ['/workspace'] }}
+        flows={[createFlow()]}
+        onUpdateFilters={onUpdateFilters}
+        taskStackCounts={{
+          done: 3,
+          needsMe: 1,
+          ready: 5,
+          running: 2
+        }}
+        text={text}
+        workspaceName="Fixture Workspace"
+      />
+    )
+
+    const taskStack = screen.getByRole('region', { name: 'Task stack' })
+    const readyButton = within(taskStack).getByRole('button', { name: /Ready/ })
+    const doneButton = within(taskStack).getByRole('button', { name: /Done/ })
+
+    expect(readyButton).toHaveAttribute('aria-pressed', 'true')
+    expect(readyButton).toHaveClass('automation-task-stack-row--selected')
+    expect(doneButton).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(doneButton)
+
+    expect(onUpdateFilters).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: 'done',
+        workspaceIds: ['/workspace']
+      })
+    )
+  })
+
   it('uses checkbox flow filters, status lights, and action menu instead of visible lifecycle tags', () => {
     const onSelectFlow = vi.fn()
 

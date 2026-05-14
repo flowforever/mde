@@ -110,7 +110,9 @@ describe("app language preferences", () => {
       englishText(
         "automation.diagnostics.automationAdapter.authenticationRequired",
       ),
-    ).toBe("Sign in to Codex before starting automation.");
+    ).toBe(
+      "Codex is detected but not signed in. Sign in to Codex before starting real automation.",
+    );
     expect(englishText("automation.submitDecisionFailed")).toContain(
       "Decision could not be submitted",
     );
@@ -121,7 +123,7 @@ describe("app language preferences", () => {
       chineseText(
         "automation.diagnostics.automationAdapter.authenticationRequired",
       ),
-    ).toBe("请先登录 Codex，再启动自动化。");
+    ).toBe("已检测到 Codex，但当前未登录。请先登录 Codex，再启动真实自动化。");
   });
 
   it("covers neutral automation source metadata text in English and Chinese", () => {

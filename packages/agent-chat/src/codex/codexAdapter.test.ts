@@ -253,6 +253,58 @@ describe('createCodexAgentChatAdapter', () => {
     expect(generateCall?.[2]?.timeoutMs).toBeGreaterThanOrEqual(20_000)
   })
 
+  it('accepts Codex login status written to stderr', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(
+        async (_command, args) => {
+          if (args.includes('--version')) {
+            return { stderr: '', stdout: 'codex-cli 0.130.0' }
+          }
+
+          if (args[0] === 'login' && args[1] === 'status') {
+            return { stderr: 'Logged in using ChatGPT', stdout: '' }
+          }
+
+          if (args.includes('--help')) {
+            return { stderr: '', stdout: 'Usage: codex app-server' }
+          }
+
+          const outIndex = args.indexOf('--out')
+          const outDirectory = outIndex >= 0 ? args[outIndex + 1] : undefined
+          if (!outDirectory) {
+            throw new Error('missing generated protocol output directory')
+          }
+
+          await mkdir(join(outDirectory, 'protocol'), { recursive: true })
+          await writeFile(
+            join(outDirectory, 'protocol', 'generated.ts'),
+            requiredCodexProtocolSource,
+            'utf8'
+          )
+
+          return { stderr: '', stdout: '' }
+        }
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.createCapabilityCacheKey?.({ workspaceRoot: '/workspace' })
+    ).resolves.toBe('codex-cli 0.130.0:Logged in using ChatGPT')
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      authenticated: true,
+      engineId: 'codex',
+      verdict: 'supported'
+    })
+  })
+
   it('requires a successful Codex login status for V1 availability', async () => {
     const processRunner = {
       execFile: vi.fn<AgentChatProcessRunner['execFile']>((_command, args) =>

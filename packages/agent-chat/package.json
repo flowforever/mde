@@ -1,6 +1,6 @@
 {
   "name": "@mde/agent-chat",
-  "version": "1.5.19",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "exports": {

@@ -494,11 +494,17 @@ const applyTaskFilters = <
   }
 >(
   tasks: readonly Task[],
-  filters: AutomationProjectionFilters
+  filters: AutomationProjectionFilters,
+  options: {
+    readonly includeBucket?: boolean
+  } = {}
 ): readonly Task[] =>
   Object.freeze(
     tasks.filter((task) => {
-      const bucket = mapFilterBucketToTaskBucket(filters.bucket)
+      const shouldFilterBucket = options.includeBucket ?? true
+      const bucket = shouldFilterBucket
+        ? mapFilterBucketToTaskBucket(filters.bucket)
+        : undefined
       const flowIds = filters.flowIds ?? []
       const workspaceIds = filters.workspaceIds ?? []
 
@@ -955,15 +961,21 @@ export const registerAutomationHandlers = ({
       await store.saveFilterState(normalizedStoredFilters)
     }
     const filteredBuckets = Object.freeze({
-      done: applyTaskFilters(index.projection.buckets.done, projectionFilters),
+      done: applyTaskFilters(index.projection.buckets.done, projectionFilters, {
+        includeBucket: false
+      }),
       needsMe: applyTaskFilters(
         index.projection.buckets.needsMe,
-        projectionFilters
+        projectionFilters,
+        { includeBucket: false }
       ),
-      ready: applyTaskFilters(index.projection.buckets.ready, projectionFilters),
+      ready: applyTaskFilters(index.projection.buckets.ready, projectionFilters, {
+        includeBucket: false
+      }),
       running: applyTaskFilters(
         index.projection.buckets.running,
-        projectionFilters
+        projectionFilters,
+        { includeBucket: false }
       )
     })
     const filteredTasks = applyTaskFilters(index.projection.tasks, projectionFilters)
