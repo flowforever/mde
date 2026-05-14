@@ -187,15 +187,30 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "app.shell",
     standardName: "App Shell",
   },
+  automationAgentChatButton: {
+    componentId: "automation.agent-chat-button",
+    constantPath: "automation.agentChatButton",
+    standardName: "Automation Agent Chat Button",
+  },
+  automationAgentChatCloseButton: {
+    componentId: "automation.agent-chat-close-button",
+    constantPath: "automation.agentChatCloseButton",
+    standardName: "Automation Agent Chat Close Button",
+  },
+  automationAgentChatEntry: {
+    componentId: "automation.agent-chat-entry",
+    constantPath: "automation.agentChatEntry",
+    standardName: "Automation Agent Chat Entry",
+  },
   automationArchivedToggle: {
     componentId: "automation.archived-toggle",
     constantPath: "automation.archivedToggle",
     standardName: "Automation Archived Toggle",
   },
-  automationBucket: {
-    componentId: "automation.bucket",
-    constantPath: "automation.bucket",
-    standardName: "Automation Bucket",
+  automationBucketFilterButton: {
+    componentId: "automation.bucket-filter-button",
+    constantPath: "automation.bucketFilterButton",
+    standardName: "Automation Bucket Filter Button",
   },
   automationCenterWindow: {
     componentId: "automation.center-window",
@@ -211,6 +226,11 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "automation.decision-panel",
     constantPath: "automation.decisionPanel",
     standardName: "Automation Decision Panel",
+  },
+  automationDecisionStatusMessage: {
+    componentId: "automation.decision-status-message",
+    constantPath: "automation.decisionStatusMessage",
+    standardName: "Automation Decision Status Message",
   },
   automationDiagnosticList: {
     componentId: "automation.diagnostic-list",
@@ -237,10 +257,10 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "automation.flowContextMenu",
     standardName: "Automation Flow Context Menu",
   },
-  automationFlowFilterButton: {
-    componentId: "automation.flow-filter-button",
-    constantPath: "automation.flowFilterButton",
-    standardName: "Automation Flow Filter Button",
+  automationFlowFilterToggle: {
+    componentId: "automation.flow-filter-toggle",
+    constantPath: "automation.flowFilterToggle",
+    standardName: "Automation Flow Filter Toggle",
   },
   automationFlowline: {
     componentId: "automation.flowline",
@@ -251,6 +271,11 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "automation.flowline-phase",
     constantPath: "automation.flowlinePhase",
     standardName: "Automation Flowline Phase",
+  },
+  automationFlowlineStartButton: {
+    componentId: "automation.flowline-start-button",
+    constantPath: "automation.flowlineStartButton",
+    standardName: "Automation Flowline Start Button",
   },
   automationFlowMenuItem: {
     componentId: "automation.flow-menu-item",
@@ -287,30 +312,20 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "automation.signalStack",
     standardName: "Automation Signal Stack",
   },
-  automationStartTaskButton: {
-    componentId: "automation.start-task-button",
-    constantPath: "automation.startTaskButton",
-    standardName: "Automation Start Task Button",
+  automationSignalTaskRow: {
+    componentId: "automation.signal-task-row",
+    constantPath: "automation.signalTaskRow",
+    standardName: "Automation Signal Task Row",
   },
   automationStatusLight: {
     componentId: "automation.status-light",
     constantPath: "automation.statusLight",
     standardName: "Automation Status Light",
   },
-  automationTaskCard: {
-    componentId: "automation.task-card",
-    constantPath: "automation.taskCard",
-    standardName: "Automation Task Card",
-  },
   automationTaskStack: {
     componentId: "automation.task-stack",
     constantPath: "automation.taskStack",
     standardName: "Automation Task Stack",
-  },
-  automationTaskStackStatusRow: {
-    componentId: "automation.task-stack-status-row",
-    constantPath: "automation.taskStackStatusRow",
-    standardName: "Automation Task Stack Status Row",
   },
   automationTemplatePicker: {
     componentId: "automation.template-picker",
@@ -321,6 +336,11 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "automation.validation-panel",
     constantPath: "automation.validationPanel",
     standardName: "Automation Validation Panel",
+  },
+  automationWorkspaceAddFlowButton: {
+    componentId: "automation.workspace-add-flow-button",
+    constantPath: "automation.workspaceAddFlowButton",
+    standardName: "Automation Workspace Add Flow Button",
   },
   automationWorkspaceFilterCard: {
     componentId: "automation.workspace-filter-card",
@@ -336,6 +356,11 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "automation.workspace-filters",
     constantPath: "automation.workspaceFilters",
     standardName: "Automation Workspace Filters",
+  },
+  automationWorkspaceFilterToggle: {
+    componentId: "automation.workspace-filter-toggle",
+    constantPath: "automation.workspaceFilterToggle",
+    standardName: "Automation Workspace Filter Toggle",
   },
   editorActionButton: {
     componentId: "editor.action-button",
@@ -889,25 +914,35 @@ export const COMPONENT_IDS = {
     thinkingStatus: COMPONENT_NAME_ID_MAP.agentChatThinkingStatus.componentId,
   },
   automation: {
+    agentChatButton:
+      COMPONENT_NAME_ID_MAP.automationAgentChatButton.componentId,
+    agentChatCloseButton:
+      COMPONENT_NAME_ID_MAP.automationAgentChatCloseButton.componentId,
+    agentChatEntry: COMPONENT_NAME_ID_MAP.automationAgentChatEntry.componentId,
     archivedToggle: COMPONENT_NAME_ID_MAP.automationArchivedToggle.componentId,
-    bucket: COMPONENT_NAME_ID_MAP.automationBucket.componentId,
+    bucketFilterButton:
+      COMPONENT_NAME_ID_MAP.automationBucketFilterButton.componentId,
     centerWindow: COMPONENT_NAME_ID_MAP.automationCenterWindow.componentId,
     diagnosticList: COMPONENT_NAME_ID_MAP.automationDiagnosticList.componentId,
     decisionApproveButton:
       COMPONENT_NAME_ID_MAP.automationDecisionApproveButton.componentId,
     decisionPanel: COMPONENT_NAME_ID_MAP.automationDecisionPanel.componentId,
+    decisionStatusMessage:
+      COMPONENT_NAME_ID_MAP.automationDecisionStatusMessage.componentId,
     editorCloseButton:
       COMPONENT_NAME_ID_MAP.automationEditorCloseButton.componentId,
     editorHost: COMPONENT_NAME_ID_MAP.automationEditorHost.componentId,
     editorSaveButton:
       COMPONENT_NAME_ID_MAP.automationEditorSaveButton.componentId,
     flowContextMenu: COMPONENT_NAME_ID_MAP.automationFlowContextMenu.componentId,
-    flowFilterButton:
-      COMPONENT_NAME_ID_MAP.automationFlowFilterButton.componentId,
+    flowFilterToggle:
+      COMPONENT_NAME_ID_MAP.automationFlowFilterToggle.componentId,
     flowMenuItem: COMPONENT_NAME_ID_MAP.automationFlowMenuItem.componentId,
     flowRow: COMPONENT_NAME_ID_MAP.automationFlowRow.componentId,
     flowline: COMPONENT_NAME_ID_MAP.automationFlowline.componentId,
     flowlinePhase: COMPONENT_NAME_ID_MAP.automationFlowlinePhase.componentId,
+    flowlineStartButton:
+      COMPONENT_NAME_ID_MAP.automationFlowlineStartButton.componentId,
     flowToolbar: COMPONENT_NAME_ID_MAP.automationFlowToolbar.componentId,
     newFlowButton: COMPONENT_NAME_ID_MAP.automationNewFlowButton.componentId,
     returnWorkspaceButton:
@@ -915,19 +950,19 @@ export const COMPONENT_IDS = {
     sidebarResizeHandle:
       COMPONENT_NAME_ID_MAP.automationSidebarResizeHandle.componentId,
     signalStack: COMPONENT_NAME_ID_MAP.automationSignalStack.componentId,
+    signalTaskRow: COMPONENT_NAME_ID_MAP.automationSignalTaskRow.componentId,
     statusLight: COMPONENT_NAME_ID_MAP.automationStatusLight.componentId,
-    startTaskButton:
-      COMPONENT_NAME_ID_MAP.automationStartTaskButton.componentId,
-    taskCard: COMPONENT_NAME_ID_MAP.automationTaskCard.componentId,
     taskStack: COMPONENT_NAME_ID_MAP.automationTaskStack.componentId,
-    taskStackStatusRow:
-      COMPONENT_NAME_ID_MAP.automationTaskStackStatusRow.componentId,
     templatePicker: COMPONENT_NAME_ID_MAP.automationTemplatePicker.componentId,
     validationPanel: COMPONENT_NAME_ID_MAP.automationValidationPanel.componentId,
+    workspaceAddFlowButton:
+      COMPONENT_NAME_ID_MAP.automationWorkspaceAddFlowButton.componentId,
     workspaceFilterCard:
       COMPONENT_NAME_ID_MAP.automationWorkspaceFilterCard.componentId,
     workspaceFilterPanel:
       COMPONENT_NAME_ID_MAP.automationWorkspaceFilterPanel.componentId,
+    workspaceFilterToggle:
+      COMPONENT_NAME_ID_MAP.automationWorkspaceFilterToggle.componentId,
     workspaceFilters: COMPONENT_NAME_ID_MAP.automationWorkspaceFilters.componentId,
   },
   app: {

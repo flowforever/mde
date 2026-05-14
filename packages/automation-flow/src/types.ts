@@ -136,6 +136,7 @@ export interface AutomationDiscoveredTaskSource {
   readonly adapterId?: AgentEngineId
   readonly authDiagnostic?: AutomationSourceAuthDiagnostic
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly contentSnapshot?: string
   readonly discoveredAt: string
   readonly engine?: AgentEngineId
@@ -155,6 +156,7 @@ export interface AutomationDiscoveredTaskSource {
 
 export interface AutomationFlowTaskCandidate {
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly authDiagnostic?: AutomationSourceAuthDiagnostic
   readonly engine: AgentEngineId
   readonly externalId?: string
@@ -193,22 +195,35 @@ export interface AutomationRunOverlay {
 export interface AutomationReportOverlay {
   readonly automationFlowId: string
   readonly completedAt: string
+  readonly engine?: AgentEngineId
+  readonly priority?: number
+  readonly relativePath?: string
   readonly reportId: string
   readonly sourceItemId: string
+  readonly sourcePath?: string
+  readonly sourceType?: AutomationFlowSourceType
+  readonly sourceUri?: string
   readonly taskId: string
   readonly title?: string
+  readonly workspaceId?: string
 }
 
 export interface AutomationProjectedTask {
   readonly activeRunId?: string
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly bucket: AutomationTaskBucket
   readonly engine?: AgentEngineId
   readonly latestReportId?: string
+  readonly priority?: number
+  readonly relativePath?: string
   readonly sourceItemId: string
+  readonly sourcePath?: string
   readonly sourceType?: AutomationFlowSourceType
+  readonly sourceUri?: string
   readonly taskId: string
   readonly title: string
+  readonly workspaceId?: string
 }
 
 export interface AutomationSignalStackBuckets {

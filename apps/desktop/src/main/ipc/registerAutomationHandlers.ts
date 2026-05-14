@@ -32,12 +32,27 @@ import type {
 } from '../../shared/automation'
 import { AUTOMATION_CHANNELS } from './channels'
 import type { AgentCliCapabilityProbeReport } from '../services/automation/agentCliAdapters'
-import type { AutomationAdapterRegistry } from '../services/automation/automationAdapterRegistry'
+import {
+  AutomationAdapterCapabilityError,
+  type AutomationAdapterRegistry
+} from '../services/automation/automationAdapterRegistry'
 import { createAutomationFlowDefinitionService } from '../services/automation/automationFlowDefinitionService'
 import { loadAutomationFlowLibrary } from '../services/automation/automationFlowLibrary'
 import { buildAutomationIndex } from '../services/automation/automationIndexService'
+import {
+  createAutomationFlowOwnerKey,
+  getStoredAutomationFlowOwnerKey
+} from '../services/automation/automationFlowOwnerIdentity'
+import {
+  AUTOMATION_NO_WORKSPACE_ID,
+  normalizeAutomationProjectionFilters
+} from '../services/automation/automationProjectionFilters'
 import type { AutomationStoredRun, AutomationStore } from '../services/automation/automationStore'
-import type { AutomationRuntime } from '../services/automation/automationRuntime'
+import {
+  AutomationRunCancellationError,
+  type AutomationRuntime
+} from '../services/automation/automationRuntime'
+import { isAutomationRunLockActive } from '../services/automation/automationRunLocks'
 
 interface RegisterAutomationHandlersOptions {
   readonly adapterRegistry: AutomationAdapterRegistry
@@ -60,16 +75,16 @@ interface AutomationContext {
 
 const createDiagnostic = (
   code: string,
-  message: string,
+  technicalMessage: string,
   severity: AutomationDiagnostic['severity'] = 'error'
 ): AutomationDiagnostic =>
   Object.freeze({
     code,
     diagnosticId: `automation:${code}`,
-    message,
+    message: code,
     messageKey: `automation.diagnostics.${code}`,
     severity,
-    technicalMessage: message
+    technicalMessage
   })
 
 const mapFlowDiagnostic = (
@@ -78,7 +93,7 @@ const mapFlowDiagnostic = (
   Object.freeze({
     code: diagnostic.code,
     diagnosticId: `automation-flow:${diagnostic.code}:${diagnostic.sourceFile ?? 'inline'}`,
-    message: diagnostic.technicalMessage ?? diagnostic.code,
+    message: diagnostic.code,
     messageKey: diagnostic.messageKey,
     severity: diagnostic.severity,
     ...(diagnostic.sourceFile !== undefined
@@ -88,6 +103,41 @@ const mapFlowDiagnostic = (
       ? { technicalMessage: diagnostic.technicalMessage }
       : {})
   })
+
+const mapAutomationAdapterCapabilityError = (
+  error: AutomationAdapterCapabilityError,
+  fallbackCode: string
+): AutomationDiagnostic => {
+  switch (error.reason) {
+    case 'authentication-required':
+      return createDiagnostic(
+        'automationAdapter.authenticationRequired',
+        error.message
+      )
+    case 'missing-required-capability':
+      return createDiagnostic(
+        fallbackCode,
+        error.message
+      )
+    case 'capability-unavailable':
+      return createDiagnostic(
+        fallbackCode,
+        error.message
+      )
+  }
+}
+
+const mapAutomationRunStartError = (
+  error: unknown,
+  fallbackCode: string,
+  fallbackTechnicalMessage: string
+): AutomationDiagnostic =>
+  error instanceof AutomationAdapterCapabilityError
+    ? mapAutomationAdapterCapabilityError(error, fallbackCode)
+    : createDiagnostic(
+        fallbackCode,
+        error instanceof Error ? error.message : fallbackTechnicalMessage
+      )
 
 const mapCapabilityReport = (
   report: AgentCliCapabilityProbeReport
@@ -135,6 +185,23 @@ const assertString = (value: unknown, name: string): string => {
   return value
 }
 
+const assertOptionalStringArray = (
+  value: unknown,
+  name: string
+): readonly string[] | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${name} must be an array`)
+  }
+
+  return Object.freeze(
+    value.map((item, index) => assertString(item, `${name}[${index}]`))
+  )
+}
+
 const assertProjectionFilters = (
   value: unknown
 ): AutomationProjectionFilters => {
@@ -149,9 +216,16 @@ const assertProjectionFilters = (
       ? { archivedVisible: filters.archivedVisible }
       : {}),
     ...(typeof filters.bucket === 'string' ? { bucket: filters.bucket as never } : {}),
-    ...(typeof filters.flowId === 'string' ? { flowId: filters.flowId } : {}),
-    ...(typeof filters.workspaceId === 'string'
-      ? { workspaceId: filters.workspaceId }
+    ...(filters.flowIds !== undefined
+      ? { flowIds: assertOptionalStringArray(filters.flowIds, 'Flow ids') }
+      : {}),
+    ...(filters.workspaceIds !== undefined
+      ? {
+          workspaceIds: assertOptionalStringArray(
+            filters.workspaceIds,
+            'Workspace ids'
+          )
+        }
       : {})
   })
 }
@@ -358,13 +432,21 @@ const mapTask = (task: AutomationProjectedTask) =>
   Object.freeze({
     activeRunId: task.activeRunId,
     automationFlowId: task.automationFlowId,
+    ...(task.automationFlowOwnerKey !== undefined
+      ? { automationFlowOwnerKey: task.automationFlowOwnerKey }
+      : {}),
     bucket: task.bucket,
     engine: task.engine,
     latestReportId: task.latestReportId,
+    priority: task.priority,
+    relativePath: task.relativePath,
     sourceItemId: task.sourceItemId,
+    sourcePath: task.sourcePath,
     sourceType: task.sourceType,
+    sourceUri: task.sourceUri,
     taskId: task.taskId,
-    title: task.title
+    title: task.title,
+    workspaceId: getTaskWorkspaceId(task)
   })
 
 const mapRunSummary = (run: AutomationStoredRun): AutomationRunSummary =>
@@ -394,20 +476,256 @@ const mapRunSummary = (run: AutomationStoredRun): AutomationRunSummary =>
     updatedAt: run.updatedAt
   })
 
-const applyTaskFilters = <Task extends { readonly automationFlowId: string }>(
+const mapFilterBucketToTaskBucket = (
+  bucket: AutomationProjectionFilters['bucket']
+): AutomationProjectedTask['bucket'] | undefined => {
+  if (bucket === 'needsMe') {
+    return 'needs-me'
+  }
+
+  return bucket
+}
+
+const applyTaskFilters = <
+  Task extends {
+    readonly automationFlowId: string
+    readonly bucket?: AutomationProjectedTask['bucket']
+    readonly workspaceId?: string
+  }
+>(
   tasks: readonly Task[],
   filters: AutomationProjectionFilters
 ): readonly Task[] =>
-  filters.flowId === undefined
-    ? Object.freeze([...tasks])
-    : Object.freeze(
-        tasks.filter((task) => task.automationFlowId === filters.flowId)
+  Object.freeze(
+    tasks.filter((task) => {
+      const bucket = mapFilterBucketToTaskBucket(filters.bucket)
+      const flowIds = filters.flowIds ?? []
+      const workspaceIds = filters.workspaceIds ?? []
+
+      return (
+        (bucket === undefined || task.bucket === undefined || task.bucket === bucket) &&
+        (flowIds.length === 0 || flowIds.includes(task.automationFlowId)) &&
+        (workspaceIds.length === 0 ||
+          workspaceIds.includes(getTaskWorkspaceId(task)))
       )
+    })
+  )
+
+const getTaskWorkspaceId = (task: {
+  readonly workspaceId?: string
+}): string => task.workspaceId ?? AUTOMATION_NO_WORKSPACE_ID
+
+const areStringArraysEqual = (
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined
+): boolean => {
+  const leftValues = left ?? []
+  const rightValues = right ?? []
+
+  return (
+    leftValues.length === rightValues.length &&
+    leftValues.every((value, index) => value === rightValues[index])
+  )
+}
+
+const areProjectionFiltersEqual = (
+  left: AutomationProjectionFilters,
+  right: AutomationProjectionFilters
+): boolean =>
+  (left.archivedVisible ?? false) === (right.archivedVisible ?? false) &&
+  (left.bucket ?? 'ready') === (right.bucket ?? 'ready') &&
+  areStringArraysEqual(left.flowIds, right.flowIds) &&
+  areStringArraysEqual(left.workspaceIds, right.workspaceIds)
+
+const hasProjectionFilterProperty = (
+  filters: AutomationProjectionFilters,
+  property: keyof AutomationProjectionFilters
+): boolean => Object.prototype.hasOwnProperty.call(filters, property)
+
+const normalizeStoredProjectionFiltersForPersistence = ({
+  normalized,
+  stored
+}: {
+  readonly normalized: AutomationProjectionFilters
+  readonly stored: AutomationProjectionFilters
+}): AutomationProjectionFilters => Object.freeze({
+  ...stored,
+  ...(hasProjectionFilterProperty(stored, 'archivedVisible')
+    ? { archivedVisible: normalized.archivedVisible }
+    : {}),
+  ...(hasProjectionFilterProperty(stored, 'bucket')
+    ? { bucket: normalized.bucket }
+    : {}),
+  ...(hasProjectionFilterProperty(stored, 'flowIds')
+    ? { flowIds: normalized.flowIds }
+    : {}),
+  ...(hasProjectionFilterProperty(stored, 'workspaceIds')
+    ? { workspaceIds: normalized.workspaceIds }
+    : {})
+})
+
+const getCurrentFlowOwnerKey = (
+  ownerKeyByFlow: ReadonlyMap<ParsedAutomationFlow, string>,
+  automationFlow: ParsedAutomationFlow
+): string => {
+  const ownerKey = ownerKeyByFlow.get(automationFlow)
+
+  if (ownerKey === undefined) {
+    throw new Error('Automation-flow owner key was not calculated.')
+  }
+
+  return ownerKey
+}
+
+const getFlowsById = (
+  automationFlows: readonly ParsedAutomationFlow[]
+): ReadonlyMap<string, readonly ParsedAutomationFlow[]> => {
+  const flowsById = new Map<string, ParsedAutomationFlow[]>()
+
+  for (const automationFlow of automationFlows) {
+    flowsById.set(automationFlow.id, [
+      ...(flowsById.get(automationFlow.id) ?? []),
+      automationFlow
+    ])
+  }
+
+  return flowsById
+}
+
+const isLegacySourceSafelyOwnedByFlow = ({
+  automationFlow,
+  source,
+  workspaceRoot
+}: {
+  readonly automationFlow: ParsedAutomationFlow
+  readonly source: AutomationDiscoveredTaskSource
+  readonly workspaceRoot?: string
+}): boolean => {
+  if (
+    source.automationFlowOwnerKey !== undefined ||
+    source.automationFlowId !== automationFlow.id ||
+    (source.sourceType !== 'adapter-discovered' &&
+      !automationFlow.sourceTypes.includes(source.sourceType))
+  ) {
+    return false
+  }
+
+  if (automationFlow.scope === 'user') {
+    return (
+      source.workspaceId === undefined ||
+      source.workspaceId === AUTOMATION_NO_WORKSPACE_ID
+    )
+  }
+
+  return workspaceRoot !== undefined && source.workspaceId === workspaceRoot
+}
+
+const getLegacyCompatibleOwnerKeys = ({
+  flowsById,
+  ownerKeyByFlow,
+  source,
+  workspaceRoot
+}: {
+  readonly flowsById: ReadonlyMap<string, readonly ParsedAutomationFlow[]>
+  readonly ownerKeyByFlow: ReadonlyMap<ParsedAutomationFlow, string>
+  readonly source: AutomationDiscoveredTaskSource
+  readonly workspaceRoot?: string
+}): readonly string[] =>
+  Object.freeze(
+    (flowsById.get(source.automationFlowId) ?? [])
+      .filter((automationFlow) =>
+        isLegacySourceSafelyOwnedByFlow({
+          automationFlow,
+          source,
+          workspaceRoot
+        })
+      )
+      .map((automationFlow) =>
+        getCurrentFlowOwnerKey(ownerKeyByFlow, automationFlow)
+      )
+  )
+
+const filterDiscoveredSourcesForCurrentOwners = ({
+  automationFlows,
+  ownerKeyByFlow,
+  sources,
+  workspaceRoot
+}: {
+  readonly automationFlows: readonly ParsedAutomationFlow[]
+  readonly ownerKeyByFlow: ReadonlyMap<ParsedAutomationFlow, string>
+  readonly sources: readonly AutomationDiscoveredTaskSource[]
+  readonly workspaceRoot?: string
+}): readonly AutomationDiscoveredTaskSource[] => {
+  const flowsById = getFlowsById(automationFlows)
+  const currentOwnerKeys = new Set(ownerKeyByFlow.values())
+  const exactOwnerKeysWithSources = new Set(
+    sources
+      .map((source) => source.automationFlowOwnerKey)
+      .filter((ownerKey): ownerKey is string =>
+        ownerKey !== undefined && currentOwnerKeys.has(ownerKey)
+      )
+  )
+
+  return Object.freeze(
+    sources.filter((source) => {
+      if (source.automationFlowOwnerKey !== undefined) {
+        return currentOwnerKeys.has(source.automationFlowOwnerKey)
+      }
+
+      const compatibleOwnerKeys = getLegacyCompatibleOwnerKeys({
+        flowsById,
+        ownerKeyByFlow,
+        source,
+        workspaceRoot
+      })
+
+      return (
+        compatibleOwnerKeys.length > 0 &&
+        compatibleOwnerKeys.some(
+          (ownerKey) => !exactOwnerKeysWithSources.has(ownerKey)
+        )
+      )
+    })
+  )
+}
+
+const sourceMatchesCandidate = (
+  source: AutomationDiscoveredTaskSource,
+  candidate: AutomationFlowTaskCandidate
+): boolean =>
+  source.automationFlowId === candidate.automationFlowId &&
+  source.sourceItemId === candidate.sourceItemId
+
+const findTaskSource = (
+  sources: readonly AutomationDiscoveredTaskSource[],
+  candidate: AutomationFlowTaskCandidate
+): AutomationDiscoveredTaskSource | undefined => {
+  const matchingSources = sources.filter((source) =>
+    sourceMatchesCandidate(source, candidate)
+  )
+
+  if (candidate.automationFlowOwnerKey !== undefined) {
+    return (
+      matchingSources.find(
+        (source) =>
+          source.automationFlowOwnerKey === candidate.automationFlowOwnerKey
+      ) ??
+      matchingSources.find(
+        (source) => source.automationFlowOwnerKey === undefined
+      )
+    )
+  }
+
+  return matchingSources.find(
+    (source) => source.automationFlowOwnerKey === undefined
+  )
+}
 
 const mapFlowRows = (
   flows: readonly ParsedAutomationFlow[],
   candidates: readonly AutomationFlowTaskCandidate[],
-  diagnostics: readonly AutomationDiagnostic[]
+  diagnostics: readonly AutomationDiagnostic[],
+  workspaceRoot: string | undefined
 ): readonly AutomationFlowRow[] =>
   Object.freeze(
     flows.map((flow) =>
@@ -424,7 +742,11 @@ const mapFlowRows = (
         status: flow.status,
         taskCount: candidates.filter(
           (candidate) => candidate.automationFlowId === flow.id
-        ).length
+        ).length,
+        workspaceId:
+          flow.scope === 'user'
+            ? AUTOMATION_NO_WORKSPACE_ID
+            : (workspaceRoot ?? AUTOMATION_NO_WORKSPACE_ID)
       })
     )
   )
@@ -443,14 +765,37 @@ const createReportOverlays = (
         return []
       }
 
+      const sourceSnapshot = run.taskSourceSnapshot
+
       return [
         Object.freeze({
           automationFlowId: run.automationFlowId,
           completedAt: report.completedAt,
+          engine: sourceSnapshot?.engine ?? run.engine,
+          ...(sourceSnapshot?.priority !== undefined
+            ? { priority: sourceSnapshot.priority }
+            : {}),
+          ...(sourceSnapshot?.relativePath !== undefined
+            ? { relativePath: sourceSnapshot.relativePath }
+            : {}),
           reportId: report.reportId,
           sourceItemId: run.sourceItemId,
+          ...(sourceSnapshot?.sourcePath !== undefined
+            ? { sourcePath: sourceSnapshot.sourcePath }
+            : run.sourcePath !== undefined
+              ? { sourcePath: run.sourcePath }
+              : {}),
+          ...(sourceSnapshot?.sourceType !== undefined
+            ? { sourceType: sourceSnapshot.sourceType }
+            : {}),
+          ...(sourceSnapshot?.sourceUri !== undefined
+            ? { sourceUri: sourceSnapshot.sourceUri }
+            : {}),
           taskId: report.taskId,
-          title: report.title
+          title: report.title,
+          ...(sourceSnapshot?.workspaceId !== undefined
+            ? { workspaceId: sourceSnapshot.workspaceId }
+            : {})
         })
       ]
     })
@@ -503,29 +848,56 @@ export const registerAutomationHandlers = ({
     await ensureInitialized()
 
     const workspaceRoot = getWorkspaceRoot(event, getActiveWorkspaceRoot, request)
-    const filters = request?.filters ?? (await store.loadFilterState())
-    const projectionFilters = Object.freeze({
-      ...filters,
-      ...(workspaceRoot !== undefined ? { workspaceId: workspaceRoot } : {})
-    })
     const library = await loadAutomationFlowLibrary({ homePath, workspaceRoot })
     let runs = await store.listRuns()
-    let discoveredSources = await store.listDiscoveredTaskSources()
-    const discoveredFlowIds = new Set(
-      discoveredSources.map((source) => source.automationFlowId)
+    const ownerKeyByFlow = new Map(
+      library.automationFlows.map((automationFlow) => [
+        automationFlow,
+        createAutomationFlowOwnerKey({ automationFlow, workspaceRoot })
+      ])
     )
-    const discoveryRunFlowIds = new Set(
-      runs
-        .filter((run) => run.runKind === 'discovery')
-        .map((run) => run.automationFlowId)
-    )
+    let discoveredSources = filterDiscoveredSourcesForCurrentOwners({
+      automationFlows: library.automationFlows,
+      ownerKeyByFlow,
+      sources: await store.listDiscoveredTaskSources(),
+      workspaceRoot
+    })
+    const hasDiscoveredSources = (automationFlow: ParsedAutomationFlow): boolean => {
+      const ownerKey = getCurrentFlowOwnerKey(ownerKeyByFlow, automationFlow)
+
+      return discoveredSources.some((source) =>
+        source.automationFlowOwnerKey === undefined
+          ? isLegacySourceSafelyOwnedByFlow({
+              automationFlow,
+              source,
+              workspaceRoot
+            })
+          : source.automationFlowOwnerKey === ownerKey
+      )
+    }
+    const hasActiveDiscoveryRun = (
+      automationFlow: ParsedAutomationFlow
+    ): boolean => {
+      const ownerKey = getCurrentFlowOwnerKey(ownerKeyByFlow, automationFlow)
+
+      return runs.some(
+        (run) =>
+          run.runKind === 'discovery' &&
+          isAutomationRunLockActive(run) &&
+          getStoredAutomationFlowOwnerKey({
+            automationFlowId: run.automationFlowId,
+            automationFlowOwnerKey: run.automationFlowOwnerKey,
+            workspaceRoot: run.workspaceRoot
+          }) === ownerKey
+      )
+    }
     const discoveryDiagnostics: AutomationDiagnostic[] = []
 
     for (const automationFlow of library.automationFlows) {
       if (
         automationFlow.lifecycle !== 'enabled' ||
-        discoveredFlowIds.has(automationFlow.id) ||
-        discoveryRunFlowIds.has(automationFlow.id)
+        hasDiscoveredSources(automationFlow) ||
+        hasActiveDiscoveryRun(automationFlow)
       ) {
         continue
       }
@@ -534,18 +906,22 @@ export const registerAutomationHandlers = ({
         await runtime.startDiscoveryRun({ automationFlow, workspaceRoot })
       } catch (error) {
         discoveryDiagnostics.push(
-          createDiagnostic(
+          mapAutomationRunStartError(
+            error,
             'automationDiscovery.runCapabilityUnavailable',
-            error instanceof Error
-              ? error.message
-              : 'Discovery run could not be started.'
+            'Discovery run could not be started.'
           )
         )
       }
     }
 
     runs = await store.listRuns()
-    discoveredSources = await store.listDiscoveredTaskSources()
+    discoveredSources = filterDiscoveredSourcesForCurrentOwners({
+      automationFlows: library.automationFlows,
+      ownerKeyByFlow,
+      sources: await store.listDiscoveredTaskSources(),
+      workspaceRoot
+    })
     const decisions = await store.listDecisions()
     const reports = await store.listReports()
     const index = buildAutomationIndex({
@@ -554,6 +930,30 @@ export const registerAutomationHandlers = ({
       reports: createReportOverlays(reports, runs),
       runs: createRunOverlays(runs)
     })
+    const diagnostics = Object.freeze([
+      ...library.diagnostics.map(mapFlowDiagnostic),
+      ...discoveryDiagnostics,
+      ...index.diagnostics.map(mapFlowDiagnostic)
+    ])
+    const flowRows = mapFlowRows(
+      library.automationFlows,
+      index.candidates,
+      diagnostics,
+      workspaceRoot
+    )
+    const storedFilters = await store.loadFilterState()
+    const projectionFilters = normalizeAutomationProjectionFilters({
+      currentWorkspaceId: workspaceRoot,
+      filters: request?.filters ?? storedFilters,
+      flows: flowRows
+    })
+    const normalizedStoredFilters = normalizeStoredProjectionFiltersForPersistence({
+      normalized: projectionFilters,
+      stored: storedFilters
+    })
+    if (!areProjectionFiltersEqual(normalizedStoredFilters, storedFilters)) {
+      await store.saveFilterState(normalizedStoredFilters)
+    }
     const filteredBuckets = Object.freeze({
       done: applyTaskFilters(index.projection.buckets.done, projectionFilters),
       needsMe: applyTaskFilters(
@@ -567,11 +967,6 @@ export const registerAutomationHandlers = ({
       )
     })
     const filteredTasks = applyTaskFilters(index.projection.tasks, projectionFilters)
-    const diagnostics = Object.freeze([
-      ...library.diagnostics.map(mapFlowDiagnostic),
-      ...discoveryDiagnostics,
-      ...index.diagnostics.map(mapFlowDiagnostic)
-    ])
     const projection: AutomationProjection = Object.freeze({
       buckets: Object.freeze({
         done: Object.freeze(filteredBuckets.done.map(mapTask)),
@@ -582,11 +977,12 @@ export const registerAutomationHandlers = ({
       decisions,
       diagnostics,
       filters: projectionFilters,
-      flows: mapFlowRows(library.automationFlows, index.candidates, diagnostics),
+      flows: flowRows,
       generatedAt: now(),
       reports,
       runs: Object.freeze(runs.map(mapRunSummary)),
-      tasks: Object.freeze(filteredTasks.map(mapTask))
+      tasks: Object.freeze(filteredTasks.map(mapTask)),
+      ...(workspaceRoot !== undefined ? { workspaceRoot } : {})
     })
 
     return Object.freeze({
@@ -737,11 +1133,7 @@ export const registerAutomationHandlers = ({
     const taskSource =
       candidate === undefined
         ? undefined
-        : context.discoveredSources.find(
-            (source) =>
-              source.automationFlowId === candidate.automationFlowId &&
-              source.sourceItemId === candidate.sourceItemId
-          )
+        : findTaskSource(context.discoveredSources, candidate)
     const automationFlow = context.flows.find(
       (flow) => flow.id === candidate?.automationFlowId
     )
@@ -774,11 +1166,10 @@ export const registerAutomationHandlers = ({
     } catch (error) {
       return {
         accepted: false,
-        diagnostic: createDiagnostic(
+        diagnostic: mapAutomationRunStartError(
+          error,
           'automationAdapter.runCapabilityUnavailable',
-          error instanceof Error
-            ? error.message
-            : 'Required adapter capabilities are unavailable.'
+          'Required adapter capabilities are unavailable.'
         )
       } satisfies AutomationCommandResponse
     }
@@ -786,22 +1177,103 @@ export const registerAutomationHandlers = ({
 
   ipcMain.handle(AUTOMATION_CHANNELS.resumeRun, async (_event, rawCommand) => {
     const command = assertRecord(rawCommand, 'Automation resume command')
-    const result = await runtime.resumeRun({
-      runId: assertString(command.runId, 'Run id')
-    })
+    const runId = assertString(command.runId, 'Run id')
 
-    return { accepted: true, runId: result.runId } satisfies AutomationCommandResponse
+    try {
+      const result = await runtime.resumeRun({ runId })
+
+      return { accepted: true, runId: result.runId } satisfies AutomationCommandResponse
+    } catch (error) {
+      return {
+        accepted: false,
+        diagnostic: createDiagnostic(
+          'automationRun.resumeFailed',
+          error instanceof Error
+            ? error.message
+            : 'Automation run could not be resumed.'
+        ),
+        runId
+      } satisfies AutomationCommandResponse
+    }
   })
 
   ipcMain.handle(AUTOMATION_CHANNELS.cancelRun, async (_event, rawCommand) => {
     const command = assertRecord(rawCommand, 'Automation cancel command')
-    const run = await runtime.cancelRun(assertString(command.runId, 'Run id'))
+    const runId = assertString(command.runId, 'Run id')
 
-    return { accepted: true, runId: run.runId } satisfies AutomationCommandResponse
+    try {
+      const run = await runtime.cancelRun(runId)
+
+      return { accepted: true, runId: run.runId } satisfies AutomationCommandResponse
+    } catch (error) {
+      return {
+        accepted: false,
+        diagnostic:
+          error instanceof AutomationRunCancellationError &&
+          error.diagnostic !== undefined
+            ? error.diagnostic
+            : createDiagnostic(
+                'automationRun.cancelFailed',
+                error instanceof Error
+                  ? error.message
+                  : 'Automation run could not be cancelled.'
+              ),
+        runId
+      } satisfies AutomationCommandResponse
+    }
   })
 
   ipcMain.handle(AUTOMATION_CHANNELS.submitDecision, async (_event, rawCommand) => {
     const command = assertSubmitDecisionRequest(rawCommand)
+    let pendingDecision: Awaited<
+      ReturnType<AutomationStore['claimDecisionForResume']>
+    >
+
+    try {
+      pendingDecision = await store.claimDecisionForResume(command.decisionId)
+    } catch {
+      const currentDecision = (await store.listDecisions()).find(
+        (decision) => decision.decisionId === command.decisionId
+      )
+
+      return {
+        accepted: false,
+        decisionId: command.decisionId,
+        diagnostic: createDiagnostic(
+          'automationRun.decisionUnavailable',
+          'automationRun.decisionUnavailable'
+        ),
+        ...(currentDecision?.runId !== undefined
+          ? { runId: currentDecision.runId }
+          : {})
+      } satisfies AutomationCommandResponse
+    }
+
+    try {
+      await runtime.resumeRun({
+        response: command.response,
+        runId: pendingDecision.runId
+      })
+    } catch (error) {
+      await store.rollbackDecisionResumeClaim(pendingDecision.decisionId).catch(() => {
+        // Keep the original adapter startup failure as the user-visible result.
+      })
+
+      return {
+        accepted: false,
+        decisionId: pendingDecision.decisionId,
+        diagnostic: Object.freeze({
+          code: 'automationRun.resumeFailed',
+          diagnosticId: 'automation:automationRun.resumeFailed',
+          message: 'automationRun.resumeFailed',
+          messageKey: 'automation.diagnostics.automationRun.resumeFailed',
+          severity: 'error',
+          ...(error instanceof Error ? { technicalMessage: error.message } : {})
+        }),
+        runId: pendingDecision.runId
+      } satisfies AutomationCommandResponse
+    }
+
     const decision = await store.resolveDecision(
       command.decisionId,
       command.response

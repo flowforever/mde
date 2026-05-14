@@ -8,6 +8,7 @@ export type {
   AgentChatDiagnostic,
   AgentChatEngineId,
   AgentChatEvent,
+  AgentChatHost,
   AgentChatListSessionsRequest,
   AgentChatMessage,
   AgentChatReleaseWorkspaceSubscriptionsRequest,

@@ -121,7 +121,7 @@ describe('createAgentChatRuntime', () => {
     const firstProbeCapabilities = vi.fn<AgentChatEngineAdapter['probeCapabilities']>(
       () =>
         Promise.resolve({
-          engineId: 'codex',
+          engineId: 'codex' as const,
           nativeVersion: 'codex-cli 0.130.0',
           verdict: 'supported'
         })
@@ -183,6 +183,42 @@ describe('createAgentChatRuntime', () => {
     ).resolves.toMatchObject({
       available: false,
       reason: 'engine-not-registered'
+    })
+  })
+
+  it('hides availability when a supported engine is not authenticated', async () => {
+    const adapter: AgentChatEngineAdapter = {
+      ...createRecordingAdapter({}),
+      probeCapabilities: vi.fn(() =>
+        Promise.resolve({
+          authenticated: false,
+          diagnostic: {
+            code: 'authentication-required' as const,
+            message: 'authentication-required',
+            recoverable: true
+          },
+          engineId: 'codex' as const,
+          verdict: 'unsupported' as const
+        })
+      )
+    }
+    const runtime = createAgentChatRuntime({
+      adapters: [adapter],
+      fileStore: createTestFileStore(),
+      now: () => '2026-05-12T00:00:00.000Z'
+    })
+
+    await expect(
+      runtime.getAvailability({
+        selectedEngineId: 'codex',
+        workspaceRoot: '/workspace'
+      })
+    ).resolves.toMatchObject({
+      available: false,
+      diagnostic: {
+        code: 'authentication-required'
+      },
+      reason: 'authentication-required'
     })
   })
 

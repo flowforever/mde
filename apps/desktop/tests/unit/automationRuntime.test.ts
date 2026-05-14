@@ -6,7 +6,10 @@ import type { AutomationFlow, AutomationFlowTaskCandidate } from '@mde/automatio
 import { describe, expect, it } from 'vitest'
 
 import { createAutomationAdapterRegistry } from '../../src/main/services/automation/automationAdapterRegistry'
-import { createFakeAgentCliAdapter } from '../../src/main/services/automation/agentCliAdapters'
+import {
+  createFakeAgentCliAdapter,
+  type AgentCliAdapter
+} from '../../src/main/services/automation/agentCliAdapters'
 import { createAutomationRuntime } from '../../src/main/services/automation/automationRuntime'
 import { createAutomationStore } from '../../src/main/services/automation/automationStore'
 import { createMdeRuntimeBridge } from '../../src/main/services/automation/mdeRuntimeBridge'
@@ -169,6 +172,77 @@ describe('automationRuntime', () => {
     })
   })
 
+  it('persists final reports emitted by a resumed adapter turn', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const store = createAutomationStore({ appDataPath })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([
+        createFakeAgentCliAdapter({
+          commandPath: '/fake/bin/codex',
+          engine: 'codex',
+          resumeRunEvents: [
+            {
+              outcome: 'succeeded',
+              summary: 'Finished after approval',
+              title: 'READY Ship task',
+              type: 'final-report'
+            }
+          ],
+          taskRunEvents: [
+            {
+              prompt: 'Approve before applying changes.',
+              type: 'decision-required'
+            }
+          ]
+        })
+      ]),
+      createId: (prefix) => `${prefix}-resume`,
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    const blocked = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot),
+      workspaceRoot
+    })
+    const resumed = await runtime.resumeRun({
+      response: 'approved',
+      runId: blocked.runId
+    })
+
+    expect(blocked).toMatchObject({
+      decision: {
+        prompt: 'Approve before applying changes.',
+        status: 'pending'
+      },
+      state: 'needs-me'
+    })
+    expect(resumed).toMatchObject({
+      adapterSessionLineage: ['adapter-session-resume'],
+      runId: 'run-resume'
+    })
+    await expect(store.listReports()).resolves.toMatchObject([
+      {
+        outcome: 'succeeded',
+        reportId: 'report-resume',
+        runId: 'run-resume',
+        summary: 'Finished after approval',
+        taskId: 'task-a',
+        title: 'READY Ship task'
+      }
+    ])
+    await expect(store.listRuns()).resolves.toMatchObject([
+      {
+        runId: 'run-resume',
+        state: 'done'
+      }
+    ])
+  })
+
   it('creates terminal reports and deterministic phase progress from the flow and events', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
     const workspaceRoot = await createTempRoot('mde-workspace-')
@@ -273,5 +347,59 @@ describe('automationRuntime', () => {
       'abandon',
       'open-native-session'
     ])
+  })
+
+  it('does not mark a run cancelled when the adapter rejects cancellation', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      cancelRun: () =>
+        Promise.resolve(
+          Object.freeze({
+            accepted: false,
+            diagnostic: {
+              code: 'automationRun.cancelFailed',
+              diagnosticId: 'adapter:cancel-rejected',
+              message: 'Cancel rejected',
+              messageKey: 'automation.diagnostics.automationRun.cancelFailed',
+              severity: 'error' as const,
+              technicalMessage: 'Cancel rejected'
+            }
+          })
+        )
+    })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+    await store.createRun({
+      adapterSessionId: 'adapter-session-1',
+      automationFlowId: 'flow-a',
+      engine: 'codex',
+      runId: 'run-cancel-rejected',
+      runKind: 'task',
+      state: 'running',
+      taskId: 'task-a',
+      workspaceRoot
+    })
+
+    await expect(runtime.cancelRun('run-cancel-rejected')).rejects.toMatchObject({
+      diagnostic: {
+        code: 'automationRun.cancelFailed'
+      },
+      runId: 'run-cancel-rejected'
+    })
+    await expect(store.getRun('run-cancel-rejected')).resolves.toMatchObject({
+      state: 'running'
+    })
   })
 })

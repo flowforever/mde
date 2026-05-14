@@ -33,6 +33,7 @@ import {
   createFakeAgentCliAdapter,
   createJsonlAgentCliAdapter
 } from './services/automation/agentCliAdapters'
+import { createAgentChatAutomationAdapter } from './services/automation/agentChatAutomationAdapter'
 import { createAutomationRuntime } from './services/automation/automationRuntime'
 import { createAutomationRuntimeCoordinator } from './services/automation/automationRuntimeCoordinator'
 import { createAutomationRuntimeOwner } from './services/automation/automationRuntimeOwner'
@@ -620,13 +621,15 @@ const bootstrap = async (): Promise<void> => {
           })
         ]
       : [
-          createFakeAgentCliAdapter({
-            ...(automationAdapterCapabilities !== undefined
-              ? { capabilities: automationAdapterCapabilities }
-              : {}),
-            commandPath: 'codex',
-            engine: 'codex'
-          }),
+          automationAdapterCapabilities === undefined
+            ? createAgentChatAutomationAdapter({
+                runtime: agentChatRuntime
+              })
+            : createFakeAgentCliAdapter({
+                capabilities: automationAdapterCapabilities,
+                commandPath: 'codex',
+                engine: 'codex'
+              }),
           createFakeAgentCliAdapter({
             ...(automationAdapterCapabilities !== undefined
               ? { capabilities: automationAdapterCapabilities }

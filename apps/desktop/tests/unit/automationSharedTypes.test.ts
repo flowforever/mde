@@ -84,7 +84,10 @@ describe('automation shared IPC contract', () => {
       decisions: [],
       diagnostics: [],
       filters: {
-        archivedVisible: false
+        archivedVisible: false,
+        bucket: 'ready',
+        flowIds: ['workspace-flow'],
+        workspaceIds: ['/workspace', 'mde:no-workspace']
       },
       flows: [
         {
@@ -94,7 +97,8 @@ describe('automation shared IPC contract', () => {
           scope: 'workspace',
           sourceTypes: ['workspace-markdown'],
           status: 'formal',
-          taskCount: 1
+          taskCount: 1,
+          workspaceId: '/workspace'
         }
       ],
       generatedAt: '2026-05-10T07:24:00.000Z',

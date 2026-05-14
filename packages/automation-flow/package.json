@@ -1,6 +1,6 @@
 {
   "name": "@mde/automation-flow",
-  "version": "1.5.16",
+  "version": "1.5.19",
   "private": true,
   "type": "module",
   "exports": {

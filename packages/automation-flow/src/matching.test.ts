@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest'
 
+import { createAutomationTaskCandidateFromDiscoveredSource } from './discovery'
 import {
   createAutomationFlowTaskCandidate,
   matchesAutomationFlowSourceItem,
   orderAutomationFlowTaskCandidates
 } from './matching'
+import { createAutomationTaskId } from './taskIdentity'
 import type { AutomationFlow } from './types'
 
 const makeWorkspaceFlow = (
@@ -201,12 +203,52 @@ describe('matchesAutomationFlowSourceItem', () => {
 
     expect(allowedCandidate).toMatchObject({
       engine: 'codex',
-      taskId: 'workspace-flow:workspace:.mde/docs/tasks/ready.md'
+      taskId: createAutomationTaskId({
+        automationFlowId: flow.id,
+        sourceItemId: 'workspace:.mde/docs/tasks/ready.md'
+      })
     })
     expect(fallbackCandidate).toMatchObject({
       engine: 'codex',
-      taskId: 'workspace-flow:workspace:.mde/docs/tasks/fallback.md'
+      taskId: createAutomationTaskId({
+        automationFlowId: flow.id,
+        sourceItemId: 'workspace:.mde/docs/tasks/fallback.md'
+      })
     })
+  })
+
+  test('uses the shared task id strategy for scanned and discovered candidates', () => {
+    const flow = makeWorkspaceFlow(['.mde/docs/tasks/**/*.md'])
+    const sourceItemId =
+      'workspace-markdown:/workspace-a:.mde/docs/tasks/ready.md'
+    const scannedCandidate = createAutomationFlowTaskCandidate(flow, {
+      automationStatus: 'ready',
+      relativePath: '.mde/docs/tasks/ready.md',
+      sourceItemId,
+      sourceType: 'workspace-markdown',
+      title: 'READY Use shared identity'
+    })
+    const discoveredCandidate = createAutomationTaskCandidateFromDiscoveredSource(
+      flow,
+      {
+        automationFlowId: flow.id,
+        discoveredAt: '2026-05-10T08:00:00.000Z',
+        relativePath: '.mde/docs/tasks/ready.md',
+        sourceItemId,
+        sourceSnapshotHash: 'snapshot-a',
+        sourceType: 'workspace-markdown',
+        title: 'READY Use shared identity',
+        workspaceId: '/workspace-a'
+      }
+    )
+
+    expect(scannedCandidate?.taskId).toBe(discoveredCandidate?.taskId)
+    expect(scannedCandidate?.taskId).toBe(
+      createAutomationTaskId({
+        automationFlowId: flow.id,
+        sourceItemId
+      })
+    )
   })
 
   test('orders candidates by pick order, source priority, then source item id', () => {

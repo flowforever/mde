@@ -89,28 +89,24 @@ describe("AutomationCenterWindow shell", () => {
       COMPONENT_IDS.automation.centerWindow,
     );
 
-    const signalStack = screen.getByRole("region", { name: "Signal Stack" });
-    expect(signalStack).toHaveAttribute(
+    expect(screen.getByRole("region", { name: "Signal Stack" })).toHaveAttribute(
       "data-component-id",
       COMPONENT_IDS.automation.signalStack,
     );
-    expect(await screen.findByRole("region", { name: "Needs me" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Running" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Ready" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Done" })).toBeInTheDocument();
-    const loadedSignalStack = screen.getByRole("region", {
-      name: "Signal Stack",
+    let loadedTaskTitle: HTMLElement | undefined;
+    await waitFor(() => {
+      const signalStack = screen.getByRole("region", { name: "Signal Stack" });
+      loadedTaskTitle = within(signalStack).getByText("READY Loaded task");
+      expect(loadedTaskTitle).toBeInTheDocument();
     });
-    const loadedTaskTitle = await within(loadedSignalStack).findByText(
-      "READY Loaded task",
-    );
-    expect(loadedTaskTitle.closest("article")).toHaveAttribute(
+    expect(loadedTaskTitle?.closest("button")).toHaveAttribute(
       "data-component-id",
-      COMPONENT_IDS.automation.taskCard,
+      COMPONENT_IDS.automation.signalTaskRow,
     );
     expect(
-      within(loadedSignalStack).queryByText("Review release notes"),
+      within(screen.getByRole("region", { name: "Signal Stack" })).queryByText(
+        "Review release notes",
+      ),
     ).not.toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Flowline" })).toHaveAttribute(
@@ -137,6 +133,15 @@ describe("AutomationCenterWindow shell", () => {
     render(<AutomationCenterWindow automationApi={emptyApi} />);
 
     expect(screen.getByText("Loading automation tasks...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Workspace flows" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("separator", { name: "Resize Automation Center sidebar" }),
+    ).toHaveAttribute(
+      "data-component-id",
+      COMPONENT_IDS.automation.sidebarResizeHandle,
+    );
     expect(await screen.findByText("No automation tasks yet.")).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Setup diagnostics" }),
@@ -144,7 +149,12 @@ describe("AutomationCenterWindow shell", () => {
       "data-component-id",
       COMPONENT_IDS.automation.diagnosticList,
     );
-    expect(screen.queryByText("Adapter setup is incomplete.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Automation setup needs attention. Check the automation-flow configuration.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Adapter setup is incomplete.")).not.toBeInTheDocument();
 
     const failingApi = {
       ...emptyApi,

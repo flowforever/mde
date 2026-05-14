@@ -15,6 +15,7 @@ export type { AutomationRunKind, AutomationRunState } from '@mde/automation-flow
 export interface AutomationTaskCard {
   readonly activeRunId?: string
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly bucket: AutomationTaskBucket
   readonly engine?: AgentEngineId
   readonly latestReportId?: string
@@ -23,6 +24,7 @@ export interface AutomationTaskCard {
   readonly sourceItemId: string
   readonly sourcePath?: string
   readonly sourceType?: AutomationFlowSourceType
+  readonly sourceUri?: string
   readonly taskId: string
   readonly title: string
   readonly workspaceId?: string
@@ -38,6 +40,7 @@ export interface AutomationFlowRow {
   readonly sourceTypes: readonly AutomationFlowSourceType[]
   readonly status: AutomationFlowStatus
   readonly taskCount: number
+  readonly workspaceId?: string
 }
 
 export interface AutomationDiagnostic {
@@ -60,7 +63,7 @@ export interface AutomationDecision {
   readonly resolvedAt?: string
   readonly response?: string
   readonly runId: string
-  readonly status: 'approved' | 'pending' | 'rejected' | 'resolved'
+  readonly status: 'approved' | 'pending' | 'rejected' | 'resolved' | 'resuming'
   readonly taskId: string
   readonly type: 'approval' | 'choice' | 'input'
 }
@@ -144,11 +147,17 @@ export interface AutomationFlowDefinitionDocument {
   readonly diagnostics: readonly AutomationDiagnostic[]
 }
 
+export type AutomationProjectionBucketFilter =
+  | 'needsMe'
+  | 'running'
+  | 'ready'
+  | 'done'
+
 export interface AutomationProjectionFilters {
   readonly archivedVisible?: boolean
-  readonly bucket?: AutomationTaskBucket
-  readonly flowId?: string
-  readonly workspaceId?: string
+  readonly bucket?: AutomationProjectionBucketFilter
+  readonly flowIds?: readonly string[]
+  readonly workspaceIds?: readonly string[]
 }
 
 export interface AutomationProjection {
@@ -167,6 +176,7 @@ export interface AutomationProjection {
   readonly runs: readonly AutomationRunSummary[]
   readonly selectedTaskId?: string
   readonly tasks: readonly AutomationTaskCard[]
+  readonly workspaceRoot?: string
 }
 
 export interface AutomationGetProjectionRequest {

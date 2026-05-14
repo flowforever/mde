@@ -20,6 +20,7 @@ import type {
   AgentChatContextManifest,
   AgentChatDiagnostic,
   AgentChatEvent,
+  AgentChatHost,
   AgentChatMessage,
   AgentChatSession,
 } from '../../../shared/agentChat';
@@ -29,6 +30,7 @@ import { COMPONENT_IDS } from '../componentIds';
 interface AgentChatPanelProps {
   readonly api: AgentChatApi;
   readonly contextManifest: AgentChatContextManifest;
+  readonly host?: AgentChatHost;
   readonly onClose: () => void;
   readonly text: AppText;
   readonly workspaceRoot: string;
@@ -280,6 +282,7 @@ const createSendContextManifest = (input: {
 export function AgentChatPanel({
   api,
   contextManifest,
+  host = 'editor',
   onClose,
   text,
   workspaceRoot,
@@ -517,7 +520,7 @@ export function AgentChatPanel({
   const createDraftSession = useCallback(async (): Promise<AgentChatSession> => {
     const session = await api.createDraftSession({
       engineId: 'codex',
-      host: 'editor',
+      host,
       sessionPurpose: contextManifest.sessionPurpose,
       workspaceRoot,
     });
@@ -526,7 +529,7 @@ export function AgentChatPanel({
     setActiveSessionId(session.sessionId);
 
     return session;
-  }, [api, contextManifest.sessionPurpose, workspaceRoot]);
+  }, [api, contextManifest.sessionPurpose, host, workspaceRoot]);
 
   const ensureActiveSession = useCallback(async (): Promise<AgentChatSession> => {
     if (activeSession) {

@@ -35,6 +35,19 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.automation-status-message {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--panel-text-strong);
+  background: var(--panel-surface);
+  border: 1px solid var(--warning);
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .automation-kicker {
   margin: 0 0 8px;
   color: var(--panel-muted);
@@ -483,6 +496,59 @@
   gap: 10px;
 }
 
+.automation-flat-queue {
+  display: grid;
+  gap: 8px;
+}
+
+.automation-signal-empty {
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+
+.automation-task-row {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr) minmax(90px, auto);
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 8px 10px;
+  color: var(--panel-text);
+  text-align: left;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+}
+
+.automation-task-row--selected {
+  border-color: var(--panel-active-border);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.automation-task-row__status,
+.automation-task-row__meta {
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.automation-task-row__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--panel-text-strong);
+  font-size: 13px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-task-row__meta {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .automation-bucket {
   min-width: 0;
 }
@@ -565,6 +631,95 @@
   border: 1px solid var(--accent);
   font-size: 12px;
   font-weight: 760;
+}
+
+.automation-ready-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.automation-ready-preview h2 {
+  margin: 0;
+}
+
+.automation-ready-preview dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.automation-ready-preview dl div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.automation-ready-preview dt {
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.automation-ready-preview dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--panel-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-flowline-start,
+.automation-agent-chat-button {
+  min-height: 32px;
+  padding: 0 11px;
+  color: #fff;
+  background: #155eef;
+  border: 1px solid #155eef;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 18%);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.automation-agent-chat-entry {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+}
+
+.automation-agent-chat-entry--open {
+  top: 18px;
+  width: min(420px, calc(100vw - 36px));
+}
+
+.automation-agent-chat-entry .agent-chat-panel {
+  height: 100%;
+  max-height: calc(100vh - 36px);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 22%);
+}
+
+.automation-agent-chat-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.automation-agent-chat-collapse {
+  position: absolute;
+  top: 10px;
+  right: 44px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  color: var(--panel-muted);
+  background: transparent;
+  border: 0;
 }
 
 .automation-diagnostic-list,

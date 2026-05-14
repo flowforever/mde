@@ -24,6 +24,13 @@ const createViewModel = (): AutomationCenterViewModel => ({
       sourceItemId: 'source-done',
       taskId: 'done-task',
       title: 'DONE archived task'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      sourceItemId: 'raw-secret-source-id',
+      taskId: 'unsafe-source-task',
+      title: 'READY unknown source task'
     }
   ],
   needsMeTasks: [
@@ -43,7 +50,18 @@ const createViewModel = (): AutomationCenterViewModel => ({
       relativePath: '.mde/docs/tasks/ready.md',
       sourceItemId: 'source-ready',
       taskId: 'ready-task',
-      title: 'READY visible task'
+      title: 'READY visible task',
+      workspaceId: '/workspace'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      sourceItemId: 'source-user',
+      sourcePath: '/Users/private/.mde/prompts/personal.md',
+      sourceType: 'user-prompt',
+      taskId: 'user-task',
+      title: 'READY personal task',
+      workspaceId: 'mde:no-workspace'
     }
   ],
   runningTasks: [
@@ -52,10 +70,109 @@ const createViewModel = (): AutomationCenterViewModel => ({
       bucket: 'running',
       sourceItemId: 'source-running',
       taskId: 'running-task',
-      title: 'RUNNING task'
+      title: 'RUNNING task',
+      workspaceId: '/workspaces/project-b'
     }
   ],
-  tasks: []
+  tasks: [
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'needs-me',
+      sourceItemId: 'source-needs-me',
+      taskId: 'needs-me-task',
+      title: 'READY needs input'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'running',
+      sourceItemId: 'source-running',
+      taskId: 'running-task',
+      title: 'RUNNING task'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      relativePath: '.mde/docs/tasks/ready.md',
+      sourceItemId: 'source-ready',
+      taskId: 'ready-task',
+      title: 'READY visible task',
+      workspaceId: '/workspaces/project-a'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      sourceItemId: 'source-user',
+      sourcePath: '/Users/private/.mde/prompts/personal.md',
+      sourceType: 'user-prompt',
+      taskId: 'user-task',
+      title: 'READY personal task',
+      workspaceId: 'mde:no-workspace'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'done',
+      sourceItemId: 'source-done',
+      taskId: 'done-task',
+      title: 'DONE archived task'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      sourceItemId: 'raw-secret-source-id',
+      taskId: 'unsafe-source-task',
+      title: 'READY unknown source task'
+    }
+  ],
+  visibleTasks: [
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'needs-me',
+      sourceItemId: 'source-needs-me',
+      taskId: 'needs-me-task',
+      title: 'READY needs input'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'running',
+      sourceItemId: 'source-running',
+      taskId: 'running-task',
+      title: 'RUNNING task',
+      workspaceId: '/workspaces/project-b'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      relativePath: '.mde/docs/tasks/ready.md',
+      sourceItemId: 'source-ready',
+      taskId: 'ready-task',
+      title: 'READY visible task',
+      workspaceId: '/workspaces/project-a'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      sourceItemId: 'source-user',
+      sourcePath: '/Users/private/.mde/prompts/personal.md',
+      sourceType: 'user-prompt',
+      taskId: 'user-task',
+      title: 'READY personal task',
+      workspaceId: 'mde:no-workspace'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'done',
+      sourceItemId: 'source-done',
+      taskId: 'done-task',
+      title: 'DONE archived task'
+    },
+    {
+      automationFlowId: 'flow-a',
+      bucket: 'ready',
+      sourceItemId: 'raw-secret-source-id',
+      taskId: 'unsafe-source-task',
+      title: 'READY unknown source task'
+    }
+  ]
 })
 
 describe('SignalStack', () => {
@@ -63,44 +180,54 @@ describe('SignalStack', () => {
     cleanup()
   })
 
-  it('renders four task buckets and keeps diagnostics out of task cards', () => {
+  it('renders a flat task queue and keeps diagnostics out of task rows', () => {
     render(<SignalStack text={text} viewModel={createViewModel()} />)
 
-    for (const bucketName of ['Needs me', 'Running', 'Ready', 'Done']) {
-      expect(screen.getByRole('region', { name: bucketName })).toHaveAttribute(
-        'data-component-id',
-        COMPONENT_IDS.automation.bucket
-      )
-    }
-
-    expect(screen.getByText('READY needs input').closest('article')).toHaveAttribute(
+    expect(screen.getAllByRole('button')).toHaveLength(6)
+    expect(screen.getByText('READY needs input').closest('button')).toHaveAttribute(
       'data-component-id',
-      COMPONENT_IDS.automation.taskCard
+      COMPONENT_IDS.automation.signalTaskRow
     )
-    expect(screen.getByText('READY visible task').closest('article')).toHaveAttribute(
+    expect(screen.getByText('READY visible task').closest('button')).toHaveAttribute(
       'data-component-id',
-      COMPONENT_IDS.automation.taskCard
+      COMPONENT_IDS.automation.signalTaskRow
     )
-    expect(screen.getByText('RUNNING task').closest('article')).toHaveAttribute(
+    expect(screen.getByText('RUNNING task').closest('button')).toHaveAttribute(
       'data-component-id',
-      COMPONENT_IDS.automation.taskCard
+      COMPONENT_IDS.automation.signalTaskRow
     )
-    expect(screen.getByText('DONE archived task').closest('article')).toHaveAttribute(
+    expect(screen.getByText('DONE archived task').closest('button')).toHaveAttribute(
       'data-component-id',
-      COMPONENT_IDS.automation.taskCard
+      COMPONENT_IDS.automation.signalTaskRow
     )
-    expect(screen.queryByText('.mde/docs/tasks/ready.md')).not.toBeInTheDocument()
+    expect(screen.getByText('Selected automation-flow sources')).toBeInTheDocument()
+    expect(screen.getByText('project-a')).toBeInTheDocument()
+    expect(screen.getByText('project-b')).toBeInTheDocument()
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument()
+    expect(screen.getAllByText('No workspace').length).toBeGreaterThan(0)
+    expect(screen.getByText('Source: .mde/docs/tasks/ready.md')).toBeInTheDocument()
+    expect(screen.getByText('Source: Personal prompts')).toBeInTheDocument()
+    expect(screen.queryByText('/Users/private/.mde/prompts/personal.md'))
+      .not.toBeInTheDocument()
+    expect(screen.getAllByText('Source: Unknown source').length)
+      .toBeGreaterThan(0)
+    expect(screen.queryByText('raw-secret-source-id')).not.toBeInTheDocument()
 
     const diagnosticList = screen.getByRole('region', {
       name: 'Setup diagnostics'
     })
-    expect(within(diagnosticList).getByText('Adapter setup is incomplete.'))
-      .toBeInTheDocument()
+    expect(
+      within(diagnosticList).getByText(
+        'Automation setup needs attention. Check the automation-flow configuration.'
+      )
+    ).toBeInTheDocument()
+    expect(within(diagnosticList).queryByText('Adapter setup is incomplete.'))
+      .not.toBeInTheDocument()
     expect(within(diagnosticList).queryByText('READY visible task'))
       .not.toBeInTheDocument()
   })
 
-  it('renders bucket-level empty states', () => {
+  it('renders a flat queue empty state', () => {
     render(
       <SignalStack
         text={text}
@@ -110,11 +237,13 @@ describe('SignalStack', () => {
           doneTasks: [],
           needsMeTasks: [],
           readyTasks: [],
-          runningTasks: []
+          runningTasks: [],
+          tasks: [],
+          visibleTasks: []
         }}
       />
     )
 
-    expect(screen.getAllByText('No tasks in this bucket.')).toHaveLength(4)
+    expect(screen.getByText('No automation tasks yet.')).toBeInTheDocument()
   })
 })

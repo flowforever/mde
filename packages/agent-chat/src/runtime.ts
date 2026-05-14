@@ -109,7 +109,7 @@ const createAvailabilityCacheKey = (input: {
 const mapCapabilityReportToAvailability = (
   report: AgentChatCapabilityReport
 ): AgentChatAvailabilityResponse =>
-  report.verdict === 'supported'
+  report.verdict === 'supported' && report.authenticated !== false
     ? {
         available: true,
         engineId: report.engineId
@@ -118,7 +118,10 @@ const mapCapabilityReportToAvailability = (
         available: false,
         diagnostic: report.diagnostic,
         engineId: report.engineId,
-        reason: 'protocol-unsupported'
+        reason:
+          report.authenticated === false
+            ? 'authentication-required'
+            : 'protocol-unsupported'
       }
 
 export const createAgentChatRuntime = (

@@ -5,6 +5,10 @@ import type {
   AutomationFlowSourceItem,
   AutomationSourceStatus
 } from '@mde/automation-flow'
+import {
+  createUserPromptSourceItemId,
+  createWorkspaceMarkdownSourceItemId
+} from '@mde/automation-flow'
 
 import type { AutomationDiagnostic } from '../../../shared/automation'
 import { getWorkspaceTaskRoot, type WorkspaceTaskKind } from './automationPathSafety'
@@ -185,7 +189,10 @@ export const scanWorkspaceMarkdownSources = async ({
             : Object.freeze({
                 automationStatus: source.automationStatus,
                 relativePath,
-                sourceItemId: `workspace:${relativePath}`,
+                sourceItemId: createWorkspaceMarkdownSourceItemId({
+                  relativePath,
+                  workspaceId: workspaceRoot
+                }),
                 sourcePath: filePath,
                 sourceType: 'workspace-markdown',
                 tags: source.tags,
@@ -224,7 +231,10 @@ export const scanUserPromptSources = async ({
             : Object.freeze({
                 automationStatus: source.automationStatus,
                 relativePath,
-                sourceItemId: `user-prompt:${relativePath}`,
+                sourceItemId: createUserPromptSourceItemId({
+                  relativePath,
+                  userPromptRoot
+                }),
                 sourcePath: filePath,
                 sourceType: 'user-prompt',
                 tags: source.tags,

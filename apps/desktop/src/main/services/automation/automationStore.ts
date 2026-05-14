@@ -1,5 +1,7 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { setTimeout as delay } from 'node:timers/promises'
+import { dirname, join } from 'node:path'
 
 import type {
   AgentEngineId,
@@ -7,6 +9,7 @@ import type {
   AutomationRunKind,
   AutomationRunState
 } from '@mde/automation-flow'
+import { isValidAutomationDiscoverySourceInput } from '@mde/automation-flow'
 
 import type {
   AutomationProjectionFilters,
@@ -21,6 +24,7 @@ interface AutomationStoreOptions {
 }
 
 interface CreateRunInput {
+  readonly automationFlowOwnerKey?: string
   readonly adapterSessionId?: string
   readonly adapterSessionLineage?: readonly string[]
   readonly automationFlowId: string
@@ -79,6 +83,7 @@ export interface AutomationStoredRun {
   readonly adapterSessionId?: string
   readonly adapterSessionLineage?: readonly string[]
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly automationFlowSnapshot?: unknown
   readonly automationFlowSnapshotId?: string
   readonly engine: AgentEngineId
@@ -115,7 +120,7 @@ export interface AutomationStoredDecision {
   readonly resolvedAt?: string
   readonly response?: string
   readonly runId: string
-  readonly status: 'approved' | 'pending' | 'rejected' | 'resolved'
+  readonly status: 'approved' | 'pending' | 'rejected' | 'resolved' | 'resuming'
   readonly taskId: string
   readonly type: 'approval' | 'choice' | 'input'
 }
@@ -161,6 +166,9 @@ export interface AutomationStore {
   readonly listReports: () => Promise<readonly AutomationReportSummary[]>
   readonly listRuns: () => Promise<readonly AutomationStoredRun[]>
   readonly loadFilterState: () => Promise<AutomationProjectionFilters>
+  readonly claimDecisionForResume: (
+    decisionId: string
+  ) => Promise<AutomationStoredDecision>
   readonly markNeedsMe: (
     runId: string,
     decision: CreateDecisionInput
@@ -170,9 +178,13 @@ export interface AutomationStore {
     decisionId: string,
     response: string
   ) => Promise<AutomationStoredDecision>
+  readonly rollbackDecisionResumeClaim: (
+    decisionId: string
+  ) => Promise<AutomationStoredDecision>
   readonly replaceDiscoveredTaskSources: (
     automationFlowId: string,
-    sources: readonly AutomationDiscoveredTaskSource[]
+    sources: readonly AutomationDiscoveredTaskSource[],
+    ownerKey?: string
   ) => Promise<readonly AutomationDiscoveredTaskSource[]>
   readonly saveFilterState: (filters: AutomationProjectionFilters) => Promise<void>
   readonly updateRunState: (
@@ -189,6 +201,9 @@ export interface AutomationStore {
 const runStatesInFlight = new Set<AutomationRunState>(['running', 'starting'])
 
 const encodeStorageId = (id: string): string => `${encodeURIComponent(id)}.json`
+
+const encodeOwnerStorageId = (id: string): string =>
+  `owner-${createHash('sha256').update(id).digest('hex').slice(0, 32)}.json`
 
 export const getAutomationStorePaths = (
   appDataPath: string
@@ -214,11 +229,75 @@ const redactSensitiveText = (text: string): string =>
     )
     .replace(/\bBearer\s+[^\s,;]+/giu, 'Bearer [redacted]')
 
-const readJsonFile = async <Value>(filePath: string): Promise<Value> =>
-  JSON.parse(await readFile(filePath, 'utf8')) as Value
+const JSON_READ_RETRY_DELAYS_MS = Object.freeze([10, 40, 100])
+
+const isRetryableJsonReadError = (error: unknown): boolean =>
+  error instanceof SyntaxError
+
+const readJsonFile = async <Value>(filePath: string): Promise<Value> => {
+  let lastError: unknown
+
+  for (const retryDelayMs of [0, ...JSON_READ_RETRY_DELAYS_MS]) {
+    if (retryDelayMs > 0) {
+      await delay(retryDelayMs)
+    }
+
+    try {
+      return JSON.parse(await readFile(filePath, 'utf8')) as Value
+    } catch (error) {
+      lastError = error
+
+      if (!isRetryableJsonReadError(error)) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError
+}
 
 const writeJsonFile = async (filePath: string, value: unknown): Promise<void> => {
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+
+  try {
+    await mkdir(dirname(filePath), { recursive: true })
+    await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+    await rename(tempPath, filePath)
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+const normalizeStoredFilterState = (value: unknown): AutomationProjectionFilters => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return Object.freeze({})
+  }
+
+  const record = value as Record<string, unknown>
+  const flowIds = Array.isArray(record.flowIds)
+    ? record.flowIds.filter((item): item is string => typeof item === 'string')
+    : typeof record.flowId === 'string'
+      ? [record.flowId]
+      : undefined
+  const workspaceIds = Array.isArray(record.workspaceIds)
+    ? record.workspaceIds.filter((item): item is string => typeof item === 'string')
+    : typeof record.workspaceId === 'string'
+      ? [record.workspaceId]
+      : undefined
+
+  return Object.freeze({
+    ...(typeof record.archivedVisible === 'boolean'
+      ? { archivedVisible: record.archivedVisible }
+      : {}),
+    ...(typeof record.bucket === 'string'
+      ? { bucket: record.bucket as AutomationProjectionFilters['bucket'] }
+      : {}),
+    ...(flowIds !== undefined ? { flowIds: Object.freeze(flowIds) } : {}),
+    ...(workspaceIds !== undefined
+      ? { workspaceIds: Object.freeze(workspaceIds) }
+      : {})
+  })
 }
 
 const createDefaultRunFile = (run: AutomationStoredRun): StoredRunFile =>
@@ -256,13 +335,42 @@ const getTerminalRunState = (
   }
 }
 
+const isTerminalRunState = (state: AutomationRunState): boolean =>
+  state === 'cancelled' || state === 'done'
+
+const isTerminalReportOutcome = (
+  outcome: AutomationReportSummary['outcome']
+): boolean => outcome === 'cancelled' || outcome === 'failed' || outcome === 'succeeded'
+
+const resetResumingDecision = (
+  decision: AutomationStoredDecision
+): AutomationStoredDecision =>
+  Object.freeze({
+    createdAt: decision.createdAt,
+    decisionId: decision.decisionId,
+    prompt: decision.prompt,
+    runId: decision.runId,
+    status: 'pending',
+    taskId: decision.taskId,
+    type: decision.type
+  })
+
 export const createAutomationStore = ({
   appDataPath,
   now = () => new Date().toISOString()
 }: AutomationStoreOptions): AutomationStore => {
   const paths = getAutomationStorePaths(appDataPath)
-  const discoveredSourcesPath = (automationFlowId: string): string =>
-    join(paths.discoveredSourcesRoot, encodeStorageId(automationFlowId))
+  const decisionResumeClaims = new Set<string>()
+  const discoveredSourcesPath = (
+    automationFlowId: string,
+    ownerKey?: string
+  ): string =>
+    join(
+      paths.discoveredSourcesRoot,
+      ownerKey === undefined
+        ? encodeStorageId(automationFlowId)
+        : encodeOwnerStorageId(ownerKey)
+    )
   const runPath = (runId: string): string => join(paths.runsRoot, encodeStorageId(runId))
   const reportPath = (reportId: string): string =>
     join(paths.reportsRoot, encodeStorageId(reportId))
@@ -285,6 +393,56 @@ export const createAutomationStore = ({
 
   const saveRunFile = async (runFile: StoredRunFile): Promise<void> => {
     await writeJsonFile(runPath(runFile.run.runId), runFile)
+  }
+
+  const updateDecision = async (
+    decisionId: string,
+    update: (
+      decision: AutomationStoredDecision,
+      timestamp: string
+    ) => AutomationStoredDecision
+  ): Promise<AutomationStoredDecision> => {
+    const entries = await readdir(paths.runsRoot, { withFileTypes: true })
+
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) {
+        continue
+      }
+
+      const filePath = join(paths.runsRoot, entry.name)
+      const runFile = await readJsonFile<StoredRunFile>(filePath)
+      const decisionIndex = runFile.decisions.findIndex(
+        (decision) => decision.decisionId === decisionId
+      )
+
+      if (decisionIndex === -1) {
+        continue
+      }
+
+      const timestamp = now()
+      const storedDecision = update(runFile.decisions[decisionIndex], timestamp)
+      const decisions = Object.freeze(
+        runFile.decisions.map((decision, index) =>
+          index === decisionIndex ? storedDecision : decision
+        )
+      )
+
+      await writeJsonFile(
+        filePath,
+        Object.freeze({
+          ...runFile,
+          decisions,
+          run: Object.freeze({
+            ...runFile.run,
+            updatedAt: timestamp
+          })
+        })
+      )
+
+      return storedDecision
+    }
+
+    throw new Error('Automation decision not found')
   }
 
   const normalizeEvidencePath = async (
@@ -407,6 +565,9 @@ export const createAutomationStore = ({
           ? { adapterSessionLineage }
           : {}),
         automationFlowId: run.automationFlowId,
+        ...(run.automationFlowOwnerKey !== undefined
+          ? { automationFlowOwnerKey: run.automationFlowOwnerKey }
+          : {}),
         ...(run.automationFlowSnapshot !== undefined
           ? { automationFlowSnapshot: run.automationFlowSnapshot }
           : {}),
@@ -536,9 +697,32 @@ export const createAutomationStore = ({
     },
     async loadFilterState() {
       try {
-        return await readJsonFile<AutomationProjectionFilters>(filterStatePath)
+        return normalizeStoredFilterState(await readJsonFile<unknown>(filterStatePath))
       } catch {
         return Object.freeze({})
+      }
+    },
+    async claimDecisionForResume(decisionId) {
+      if (decisionResumeClaims.has(decisionId)) {
+        throw new Error('Automation decision is already being resumed')
+      }
+
+      decisionResumeClaims.add(decisionId)
+
+      try {
+        return await updateDecision(decisionId, (decision) => {
+          if (decision.status !== 'pending') {
+            throw new Error('Automation decision is not pending')
+          }
+
+          return Object.freeze({
+            ...decision,
+            status: 'resuming'
+          }) satisfies AutomationStoredDecision
+        })
+      } catch (error) {
+        decisionResumeClaims.delete(decisionId)
+        throw error
       }
     },
     async markNeedsMe(runId: string, decision: CreateDecisionInput) {
@@ -572,6 +756,12 @@ export const createAutomationStore = ({
     },
     async recoverInterruptedRuns() {
       const entries = await readdir(paths.runsRoot, { withFileTypes: true })
+      const terminalReportRunIds = new Set(
+        (await store.listReports())
+          .filter((report) => isTerminalReportOutcome(report.outcome))
+          .map((report) => report.runId)
+          .filter((runId): runId is string => runId !== undefined)
+      )
 
       await Promise.all(
         entries
@@ -579,85 +769,130 @@ export const createAutomationStore = ({
           .map(async (entry) => {
             const filePath = join(paths.runsRoot, entry.name)
             const runFile = await readJsonFile<StoredRunFile>(filePath)
+            const interrupted = runStatesInFlight.has(runFile.run.state)
+            const retryableResumingDecisionFound =
+              !isTerminalRunState(runFile.run.state) &&
+              !terminalReportRunIds.has(runFile.run.runId) &&
+              runFile.decisions.some((decision) => decision.status === 'resuming')
 
-            if (!runStatesInFlight.has(runFile.run.state)) {
+            if (!interrupted && !retryableResumingDecisionFound) {
               return
             }
 
+            const timestamp = now()
+            const interruptedRun = interrupted
+              ? ({
+                  ...runFile.run,
+                  interruptedAt: timestamp,
+                  recoverable: true,
+                  state: 'failed',
+                  updatedAt: timestamp
+                } satisfies AutomationStoredRun)
+              : runFile.run
+            const decisions = retryableResumingDecisionFound
+              ? Object.freeze(
+                  runFile.decisions.map((decision) =>
+                    decision.status === 'resuming'
+                      ? resetResumingDecision(decision)
+                      : decision
+                  )
+                )
+              : runFile.decisions
+            const run = retryableResumingDecisionFound
+              ? (() => {
+                  const runWithoutInterruptedAt = {
+                    ...interruptedRun
+                  } as {
+                    -readonly [Key in keyof AutomationStoredRun]: AutomationStoredRun[Key]
+                  }
+
+                  delete runWithoutInterruptedAt.interruptedAt
+
+                  return Object.freeze({
+                    ...runWithoutInterruptedAt,
+                    recoverable: false,
+                    state: 'needs-me',
+                    updatedAt: timestamp
+                  }) satisfies AutomationStoredRun
+                })()
+              : interruptedRun
+
             await writeJsonFile(filePath, {
               ...runFile,
-              run: {
-                ...runFile.run,
-                interruptedAt: now(),
-                recoverable: true,
-                state: 'failed',
-                updatedAt: now()
-              }
+              decisions,
+              run
             })
           })
       )
     },
     async resolveDecision(decisionId, response) {
-      const entries = await readdir(paths.runsRoot, { withFileTypes: true })
-
-      for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.json')) {
-          continue
-        }
-
-        const filePath = join(paths.runsRoot, entry.name)
-        const runFile = await readJsonFile<StoredRunFile>(filePath)
-        const decisionIndex = runFile.decisions.findIndex(
-          (decision) => decision.decisionId === decisionId
-        )
-
-        if (decisionIndex === -1) {
-          continue
-        }
-
-        const timestamp = now()
-        const storedDecision = Object.freeze({
-          ...runFile.decisions[decisionIndex],
-          resolvedAt: timestamp,
-          response: redactSensitiveText(response),
-          status: response === 'approved' ? 'approved' : 'resolved'
-        }) satisfies AutomationStoredDecision
-        const decisions = runFile.decisions.map((decision, index) =>
-          index === decisionIndex ? storedDecision : decision
-        )
-
-        await writeJsonFile(filePath, {
-          ...runFile,
-          decisions,
-          run: {
-            ...runFile.run,
-            recoverable: false,
-            state: 'running',
-            updatedAt: timestamp
+      try {
+        return await updateDecision(decisionId, (decision, timestamp) => {
+          if (decision.status !== 'resuming') {
+            throw new Error('Automation decision has not been claimed for resume')
           }
+
+          return Object.freeze({
+            ...decision,
+            resolvedAt: timestamp,
+            response: redactSensitiveText(response),
+            status: response === 'approved' ? 'approved' : 'resolved'
+          }) satisfies AutomationStoredDecision
         })
-
-        return storedDecision
+      } finally {
+        decisionResumeClaims.delete(decisionId)
       }
-
-      throw new Error('Automation decision not found')
     },
-    async replaceDiscoveredTaskSources(automationFlowId, sources) {
+    async rollbackDecisionResumeClaim(decisionId) {
+      try {
+        return await updateDecision(decisionId, (decision) => {
+          if (decision.status !== 'resuming') {
+            throw new Error('Automation decision is not being resumed')
+          }
+
+          return Object.freeze({
+            createdAt: decision.createdAt,
+            decisionId: decision.decisionId,
+            prompt: decision.prompt,
+            runId: decision.runId,
+            status: 'pending',
+            taskId: decision.taskId,
+            type: decision.type
+          }) satisfies AutomationStoredDecision
+        })
+      } finally {
+        decisionResumeClaims.delete(decisionId)
+      }
+    },
+    async replaceDiscoveredTaskSources(automationFlowId, sources, ownerKey) {
       const normalizedSources = Object.freeze(
-        sources.map((source) =>
+        sources.filter(isValidAutomationDiscoverySourceInput).map((source) =>
           Object.freeze({
             ...source,
-            automationFlowId
+            automationFlowId,
+            ...(ownerKey !== undefined ? { automationFlowOwnerKey: ownerKey } : {})
           })
         )
       )
 
-      await writeJsonFile(discoveredSourcesPath(automationFlowId), normalizedSources)
+      await writeJsonFile(
+        discoveredSourcesPath(automationFlowId, ownerKey),
+        normalizedSources
+      )
 
       return normalizedSources
     },
     async saveFilterState(filters: AutomationProjectionFilters) {
-      await writeJsonFile(filterStatePath, filters)
+      await writeJsonFile(filterStatePath, {
+        ...(filters.archivedVisible !== undefined
+          ? { archivedVisible: filters.archivedVisible }
+          : {}),
+        ...(filters.bucket !== undefined ? { bucket: filters.bucket } : {}),
+        ...(filters.flowIds !== undefined ? { flowIds: filters.flowIds } : {}),
+        ...(filters.workspaceIds !== undefined
+          ? { workspaceIds: filters.workspaceIds }
+          : {})
+      })
     },
     async updateRunState(runId, input) {
       const runFile = await loadRunFile(runId)

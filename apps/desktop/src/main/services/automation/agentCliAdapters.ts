@@ -87,6 +87,12 @@ export interface AgentCliResumeInput {
   readonly workspaceRoot?: string
 }
 
+export interface AgentCliCancelInput {
+  readonly adapterSessionId?: string
+  readonly runId: string
+  readonly workspaceRoot?: string
+}
+
 export interface AgentCliOpenNativeSessionInput {
   readonly adapterSessionId: string
   readonly workspaceRoot?: string
@@ -111,7 +117,7 @@ export interface AgentCliCapabilityProbeReport {
 }
 
 export interface AgentCliAdapter {
-  readonly cancelRun: (runId: string) => Promise<AgentCliCommandResult>
+  readonly cancelRun: (input: AgentCliCancelInput) => Promise<AgentCliCommandResult>
   readonly engine: AgentEngineId
   readonly openNativeSession: (
     input: AgentCliOpenNativeSessionInput
@@ -129,6 +135,7 @@ interface CreateFakeAgentCliAdapterInput {
   readonly commandPath: string
   readonly discoverySources?: readonly AutomationDiscoveredTaskSource[]
   readonly engine: AgentEngineId
+  readonly resumeRunEvents?: readonly AgentCliNormalizedEvent[]
   readonly taskRunEvents?: readonly AgentCliNormalizedEvent[]
   readonly version?: string
   readonly workspaceSupported?: boolean
@@ -305,6 +312,7 @@ export const createFakeAgentCliAdapter = ({
   commandPath,
   discoverySources = [],
   engine,
+  resumeRunEvents = [],
   taskRunEvents = [],
   version,
   workspaceSupported = true
@@ -332,16 +340,29 @@ export const createFakeAgentCliAdapter = ({
         commandPath,
         detected: true,
         diagnostics: Object.freeze(
-          missingCapabilities.map((capability) =>
-            createAdapterDiagnostic(
-              'automationAdapter.missingRequiredCapability',
-              'automationAdapter.diagnostics.missingRequiredCapability',
-              `Missing required capability: ${capability}.`
+          [
+            ...(!authenticated
+              ? [
+                  createAdapterDiagnostic(
+                    'automationAdapter.authenticationRequired',
+                    'automationAdapter.diagnostics.authenticationRequired',
+                    'Adapter authentication is required.'
+                  )
+                ]
+              : []),
+            ...missingCapabilities.map((capability) =>
+              createAdapterDiagnostic(
+                'automationAdapter.missingRequiredCapability',
+                'automationAdapter.diagnostics.missingRequiredCapability',
+                `Missing required capability: ${capability}.`
+              )
             )
-          )
+          ]
         ),
         engine,
-        verdict: getCapabilityVerdict(true, mergedCapabilities),
+        verdict: authenticated
+          ? getCapabilityVerdict(true, mergedCapabilities)
+          : 'unsupported',
         ...(version !== undefined ? { version } : {}),
         workspaceSupported
       }))
@@ -353,7 +374,8 @@ export const createFakeAgentCliAdapter = ({
           Object.freeze({
             adapterSessionId: input.adapterSessionId,
             type: 'session-started'
-          })
+          }),
+          ...resumeRunEvents
         ])
       }))
     },

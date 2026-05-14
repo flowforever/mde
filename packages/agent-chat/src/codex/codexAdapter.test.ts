@@ -179,9 +179,12 @@ describe('createCodexAgentChatAdapter', () => {
       execFile: vi.fn<AgentChatProcessRunner['execFile']>((_command, args) =>
         Promise.resolve({
           stderr: '',
-          stdout: args.includes('--version')
-            ? 'codex-cli 0.130.0'
-            : 'export type UserInput = { "type": "text", text: string, text_elements: [] };'
+          stdout:
+            args[0] === 'login' && args[1] === 'status'
+              ? 'Logged in using ChatGPT'
+              : args.includes('--version')
+                ? 'codex-cli 0.130.0'
+                : 'export type UserInput = { "type": "text", text: string, text_elements: [] };'
         })
       ),
       spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
@@ -203,6 +206,10 @@ describe('createCodexAgentChatAdapter', () => {
         async (_command, args) => {
           if (args.includes('--version')) {
             return { stderr: '', stdout: 'codex-cli 0.130.0' }
+          }
+
+          if (args[0] === 'login' && args[1] === 'status') {
+            return { stderr: '', stdout: 'Logged in using ChatGPT' }
           }
 
           if (args.includes('--help')) {
@@ -236,6 +243,7 @@ describe('createCodexAgentChatAdapter', () => {
       adapter.probeCapabilities({ workspaceRoot: '/workspace' })
     ).resolves.toMatchObject({
       engineId: 'codex',
+      authenticated: true,
       nativeVersion: 'codex-cli 0.130.0',
       verdict: 'supported'
     })
@@ -243,6 +251,40 @@ describe('createCodexAgentChatAdapter', () => {
       call[1].includes('generate-ts')
     )
     expect(generateCall?.[2]?.timeoutMs).toBeGreaterThanOrEqual(20_000)
+  })
+
+  it('requires a successful Codex login status for V1 availability', async () => {
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>((_command, args) =>
+        Promise.resolve({
+          stderr: '',
+          stdout: args.includes('--version')
+            ? 'codex-cli 0.130.0'
+            : 'Not logged in'
+        })
+      ),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => {
+        throw new Error('spawn not expected')
+      })
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      processRunner
+    })
+
+    await expect(
+      adapter.probeCapabilities({ workspaceRoot: '/workspace' })
+    ).resolves.toMatchObject({
+      authenticated: false,
+      diagnostic: {
+        code: 'authentication-required'
+      },
+      verdict: 'unsupported'
+    })
+    expect(processRunner.execFile).not.toHaveBeenCalledWith(
+      'codex',
+      expect.arrayContaining(['generate-ts']),
+      expect.anything()
+    )
   })
 
   it('initializes the Codex app-server before reading native sessions', async () => {

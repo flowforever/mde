@@ -63,7 +63,15 @@ describe('projectAutomationFlowSignalStack', () => {
 
   test('terminal report takes precedence over rediscovered source', () => {
     const result = projectAutomationFlowSignalStack({
-      candidates: [candidate],
+      candidates: [
+        {
+          ...candidate,
+          relativePath: '.mde/docs/tasks/ready.md',
+          sourcePath: '/workspace/.mde/docs/tasks/ready.md',
+          sourceUri: 'file:///workspace/.mde/docs/tasks/ready.md',
+          workspaceId: '/workspace'
+        }
+      ],
       reports: [
         {
           automationFlowId: 'flow',
@@ -81,7 +89,83 @@ describe('projectAutomationFlowSignalStack', () => {
     expect(result.buckets.done).toEqual([
       expect.objectContaining({
         bucket: 'done',
-        latestReportId: 'report-1'
+        latestReportId: 'report-1',
+        relativePath: '.mde/docs/tasks/ready.md',
+        sourcePath: '/workspace/.mde/docs/tasks/ready.md',
+        sourceUri: 'file:///workspace/.mde/docs/tasks/ready.md',
+        workspaceId: '/workspace'
+      })
+    ])
+  })
+
+  test('Done uses persisted source snapshot metadata when no candidate exists', () => {
+    const result = projectAutomationFlowSignalStack({
+      candidates: [],
+      reports: [
+        {
+          automationFlowId: 'flow',
+          completedAt: '2026-05-10T08:00:00.000Z',
+          reportId: 'report-1',
+          relativePath: '.mde/docs/tasks/ready.md',
+          sourceItemId: candidate.sourceItemId,
+          sourcePath: '/workspace/.mde/docs/tasks/ready.md',
+          sourceType: 'workspace-markdown',
+          sourceUri: 'file:///workspace/.mde/docs/tasks/ready.md',
+          taskId: candidate.taskId,
+          title: 'Previous report',
+          workspaceId: '/workspace'
+        }
+      ],
+      runs: []
+    })
+
+    expect(result.buckets.done).toEqual([
+      expect.objectContaining({
+        bucket: 'done',
+        relativePath: '.mde/docs/tasks/ready.md',
+        sourcePath: '/workspace/.mde/docs/tasks/ready.md',
+        sourceType: 'workspace-markdown',
+        sourceUri: 'file:///workspace/.mde/docs/tasks/ready.md',
+        workspaceId: '/workspace'
+      })
+    ])
+  })
+
+  test('does not attach one flow owner report to another flow owner for the same source', () => {
+    const nextOwnerCandidate = {
+      ...candidate,
+      automationFlowId: 'flow-b',
+      taskId: 'flow-b:workspace:.mde/docs/tasks/ready.md'
+    }
+
+    const result = projectAutomationFlowSignalStack({
+      candidates: [nextOwnerCandidate],
+      reports: [
+        {
+          automationFlowId: 'flow',
+          completedAt: '2026-05-10T08:00:00.000Z',
+          reportId: 'report-1',
+          sourceItemId: candidate.sourceItemId,
+          taskId: candidate.taskId,
+          title: 'Previous owner report'
+        }
+      ],
+      runs: []
+    })
+
+    expect(result.buckets.ready).toEqual([
+      expect.objectContaining({
+        automationFlowId: 'flow-b',
+        bucket: 'ready',
+        taskId: nextOwnerCandidate.taskId
+      })
+    ])
+    expect(result.buckets.done).toEqual([
+      expect.objectContaining({
+        automationFlowId: 'flow',
+        bucket: 'done',
+        latestReportId: 'report-1',
+        taskId: candidate.taskId
       })
     ])
   })

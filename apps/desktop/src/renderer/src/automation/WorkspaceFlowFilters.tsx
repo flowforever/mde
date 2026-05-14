@@ -4,15 +4,32 @@ import type { JSX } from 'react'
 
 import { COMPONENT_IDS } from '../componentIds'
 import type { AppText } from '../i18n/appLanguage'
-import type { AutomationFlowRow } from '../../../shared/automation'
+import type {
+  AutomationFlowRow,
+  AutomationProjectionBucketFilter,
+  AutomationProjectionFilters
+} from '../../../shared/automation'
+
+type AutomationFlowScope = AutomationFlowRow['scope']
+
+export interface AutomationFlowCreateTarget {
+  readonly scope: AutomationFlowScope
+  readonly workspaceId?: string
+}
 
 interface WorkspaceFlowFiltersProps {
   readonly flows: readonly AutomationFlowRow[]
-  readonly onCreateFlow?: () => void
+  readonly onCreateFlow?: (target?: AutomationFlowCreateTarget) => void
   readonly onEditFlow?: (flow: AutomationFlowRow) => void
+  readonly onArchiveFlow?: (flow: AutomationFlowRow) => void
   readonly onReturnToWorkspace?: () => void
-  readonly onSelectFlow?: (flowId: string | undefined) => void
-  readonly selectedFlowId?: string
+  readonly onRestoreFlow?: (flow: AutomationFlowRow) => void
+  readonly onSetFlowLifecycle?: (
+    flow: AutomationFlowRow,
+    lifecycle: Extract<AutomationFlowRow['lifecycle'], 'disabled' | 'enabled'>
+  ) => void
+  readonly onUpdateFilters?: (filters: AutomationProjectionFilters) => void
+  readonly filters?: AutomationProjectionFilters
   readonly taskStackCounts?: AutomationTaskStackCounts
   readonly text: AppText
   readonly workspaceName?: string
@@ -27,11 +44,20 @@ interface AutomationTaskStackCounts {
 
 interface WorkspaceFlowGroup {
   readonly flows: readonly AutomationFlowRow[]
+  readonly scope: AutomationFlowScope
   readonly subtitle: string
   readonly title: string
+  readonly workspaceId?: string
+}
+
+interface ArchivedVisibilityOverride {
+  readonly filters: AutomationProjectionFilters
+  readonly visible: boolean
 }
 
 type FlowSourceKind = 'bug' | 'personal' | 'requirement' | 'task'
+
+const AUTOMATION_NO_WORKSPACE_ID = 'mde:no-workspace'
 
 const EMPTY_TASK_STACK_COUNTS: AutomationTaskStackCounts = Object.freeze({
   done: 0,
@@ -39,6 +65,7 @@ const EMPTY_TASK_STACK_COUNTS: AutomationTaskStackCounts = Object.freeze({
   ready: 0,
   running: 0
 })
+const EMPTY_FILTERS: AutomationProjectionFilters = Object.freeze({})
 
 const getStatusLight = (
   flow: AutomationFlowRow
@@ -133,18 +160,56 @@ const getFlowSourceLabel = (flow: AutomationFlowRow, text: AppText): string => {
   }
 }
 
+const hasControlCharacters = (value: string): boolean =>
+  Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+
+    return codePoint <= 0x1f || codePoint === 0x7f
+  })
+
+const getWorkspaceDisplayTitle = (workspaceName: string, text: AppText): string => {
+  const trimmedName = workspaceName.trim()
+  const normalized = trimmedName.replace(/\\/gu, '/')
+  const pathName = normalized.includes('/')
+    ? normalized.split('/').filter(Boolean).at(-1)
+    : trimmedName
+
+  if (
+    pathName === undefined ||
+    pathName === '.' ||
+    pathName === '..' ||
+    pathName.length === 0 ||
+    hasControlCharacters(pathName)
+  ) {
+    return text('automation.workspaceUnknown')
+  }
+
+  return pathName
+}
+
 export const WorkspaceFlowFilters = ({
   flows,
+  onArchiveFlow,
   onCreateFlow,
   onEditFlow,
   onReturnToWorkspace,
-  onSelectFlow,
-  selectedFlowId,
+  onRestoreFlow,
+  onSetFlowLifecycle,
+  onUpdateFilters,
+  filters = EMPTY_FILTERS,
   taskStackCounts = EMPTY_TASK_STACK_COUNTS,
   text,
   workspaceName = text('automation.workspaceUnknown')
 }: WorkspaceFlowFiltersProps): JSX.Element => {
-  const [showArchivedFlows, setShowArchivedFlows] = useState(false)
+  const archivedVisible = filters.archivedVisible ?? false
+  const [archivedOverride, setArchivedOverride] =
+    useState<ArchivedVisibilityOverride | null>(null)
+  const showArchivedFlows =
+    archivedOverride?.filters === filters
+      ? archivedOverride.visible
+      : archivedVisible
+  const selectedFlowIds = filters.flowIds ?? []
+  const selectedWorkspaceIds = filters.workspaceIds ?? []
   const visibleFlows = flows.filter(
     (flow) => showArchivedFlows || flow.lifecycle !== 'archived'
   )
@@ -157,44 +222,87 @@ export const WorkspaceFlowFilters = ({
   const workspaceGroups: readonly WorkspaceFlowGroup[] = [
     {
       flows: workspaceFlows,
+      scope: 'workspace',
       subtitle: formatCount(
         workspaceFlows.length,
         text('automation.automationFlowsLabel')
       ),
-      title: workspaceName
+      title: getWorkspaceDisplayTitle(workspaceName, text),
+      workspaceId: workspaceFlows[0]?.workspaceId
     },
-    ...(userFlows.length === 0
-      ? []
-      : [
-          {
-            flows: userFlows,
-            subtitle: text('automation.personalAutomationFlows'),
-            title: text('automation.noWorkspace')
-          }
-        ])
+    {
+      flows: userFlows,
+      scope: 'user',
+      subtitle: text('automation.personalAutomationFlows'),
+      title: text('automation.noWorkspace'),
+      workspaceId: AUTOMATION_NO_WORKSPACE_ID
+    }
   ]
   const taskStackRows = [
     {
+      bucket: 'needsMe',
       count: taskStackCounts.needsMe,
       description: text('automation.needsMeDescription'),
       label: text('automation.needsMe')
     },
     {
+      bucket: 'running',
       count: taskStackCounts.running,
       description: text('automation.runningDescription'),
       label: text('automation.running')
     },
     {
+      bucket: 'ready',
       count: taskStackCounts.ready,
       description: text('automation.readyDescription'),
       label: text('automation.ready')
     },
     {
+      bucket: 'done',
       count: taskStackCounts.done,
       description: text('automation.doneDescription'),
       label: text('automation.done')
     }
-  ] as const
+  ] as const satisfies readonly {
+    readonly bucket: AutomationProjectionBucketFilter
+    readonly count: number
+    readonly description: string
+    readonly label: string
+  }[]
+  const allVisibleFlowIds = visibleFlows.map((flow) => flow.automationFlowId)
+  const normalizeSelectedFlowIds = (
+    nextFlowIds: readonly string[]
+  ): readonly string[] =>
+    nextFlowIds.length === allVisibleFlowIds.length && allVisibleFlowIds.length > 1
+      ? []
+      : nextFlowIds
+  const isFlowSelected = (flowId: string): boolean =>
+    selectedFlowIds.length === 0 || selectedFlowIds.includes(flowId)
+  const toggleFlow = (flowId: string): void => {
+    const nextFlowIds =
+      selectedFlowIds.length === 0
+        ? allVisibleFlowIds.length <= 1
+          ? [flowId]
+          : allVisibleFlowIds.filter((item) => item !== flowId)
+        : selectedFlowIds.includes(flowId)
+          ? selectedFlowIds.filter((item) => item !== flowId)
+          : [...selectedFlowIds, flowId]
+
+    onUpdateFilters?.({
+      ...filters,
+      flowIds: normalizeSelectedFlowIds(nextFlowIds)
+    })
+  }
+  const toggleWorkspace = (workspaceId: string): void => {
+    const nextWorkspaceIds = selectedWorkspaceIds.includes(workspaceId)
+      ? selectedWorkspaceIds.filter((item) => item !== workspaceId)
+      : [...selectedWorkspaceIds, workspaceId]
+
+    onUpdateFilters?.({
+      ...filters,
+      workspaceIds: nextWorkspaceIds
+    })
+  }
 
   return (
     <section
@@ -218,7 +326,14 @@ export const WorkspaceFlowFilters = ({
           aria-label={text('automation.newAutomationFlow')}
           className="explorer-icon-button"
           data-component-id={COMPONENT_IDS.automation.newFlowButton}
-          onClick={onCreateFlow}
+          onClick={() => {
+            onCreateFlow?.({
+              scope: 'workspace',
+              ...(workspaceFlows[0]?.workspaceId !== undefined
+                ? { workspaceId: workspaceFlows[0].workspaceId }
+                : {})
+            })
+          }}
           title={text('automation.newAutomationFlow')}
           type="button"
         >
@@ -233,17 +348,25 @@ export const WorkspaceFlowFilters = ({
         >
           <p className="automation-kicker">{text('automation.taskStack')}</p>
           {taskStackRows.map((row) => (
-            <article
+            <button
+              aria-pressed={(filters.bucket ?? 'ready') === row.bucket}
               className="automation-task-stack-row"
-              data-component-id={COMPONENT_IDS.automation.taskStackStatusRow}
+              data-component-id={COMPONENT_IDS.automation.bucketFilterButton}
               key={row.label}
+              onClick={() => {
+                onUpdateFilters?.({
+                  ...filters,
+                  bucket: row.bucket
+                })
+              }}
+              type="button"
             >
               <h3>
                 {row.label}
                 <span>{row.count}</span>
               </h3>
               <p>{row.description}</p>
-            </article>
+            </button>
           ))}
         </section>
         <section
@@ -266,7 +389,16 @@ export const WorkspaceFlowFilters = ({
                 checked={showArchivedFlows}
                 data-component-id={COMPONENT_IDS.automation.archivedToggle}
                 onChange={(event) => {
-                  setShowArchivedFlows(event.currentTarget.checked)
+                  const checked = event.currentTarget.checked
+
+                  setArchivedOverride({
+                    filters,
+                    visible: checked
+                  })
+                  onUpdateFilters?.({
+                    ...filters,
+                    archivedVisible: checked
+                  })
                 }}
                 type="checkbox"
               />
@@ -284,12 +416,22 @@ export const WorkspaceFlowFilters = ({
                 <summary>
                   <input
                     aria-label={group.title}
-                    checked
+                    checked={
+                      group.workspaceId !== undefined &&
+                      selectedWorkspaceIds.includes(group.workspaceId)
+                    }
                     className="automation-workspace-check"
+                    data-component-id={COMPONENT_IDS.automation.workspaceFilterToggle}
                     onClick={(event) => {
-                      event.preventDefault()
+                      event.stopPropagation()
                     }}
-                    readOnly
+                    onChange={() => {
+                      const workspaceId = group.workspaceId
+
+                      if (workspaceId !== undefined) {
+                        toggleWorkspace(workspaceId)
+                      }
+                    }}
                     type="checkbox"
                   />
                   <div>
@@ -310,9 +452,18 @@ export const WorkspaceFlowFilters = ({
                         workspace: group.title
                       })}
                       className="automation-icon-action"
+                      data-component-id={
+                        COMPONENT_IDS.automation.workspaceAddFlowButton
+                      }
                       onClick={(event) => {
                         event.stopPropagation()
-                        onCreateFlow?.()
+                        onCreateFlow?.({
+                          scope: group.scope,
+                          ...(group.scope === 'workspace' &&
+                          group.workspaceId !== undefined
+                            ? { workspaceId: group.workspaceId }
+                            : {})
+                        })
                       }}
                       title={text('automation.newAutomationFlow')}
                       type="button"
@@ -330,8 +481,17 @@ export const WorkspaceFlowFilters = ({
                           workspace: group.title
                         })}
                         className="automation-mini-action"
+                        data-component-id={
+                          COMPONENT_IDS.automation.workspaceAddFlowButton
+                        }
                         onClick={() => {
-                          onCreateFlow?.()
+                          onCreateFlow?.({
+                            scope: group.scope,
+                            ...(group.scope === 'workspace' &&
+                            group.workspaceId !== undefined
+                              ? { workspaceId: group.workspaceId }
+                              : {})
+                          })
                         }}
                         type="button"
                       >
@@ -341,7 +501,16 @@ export const WorkspaceFlowFilters = ({
                   ) : null}
                   {group.flows.map((flow) => {
                     const statusLight = getStatusLight(flow)
-                    const selected = selectedFlowId === flow.automationFlowId
+                    const selected = isFlowSelected(flow.automationFlowId)
+                    const hasDefinition = flow.definitionPath !== undefined
+                    const canEnable =
+                      hasDefinition && flow.lifecycle === 'disabled'
+                    const canDisable =
+                      hasDefinition && flow.lifecycle === 'enabled'
+                    const canArchive =
+                      hasDefinition && flow.lifecycle !== 'archived'
+                    const canRestore =
+                      hasDefinition && flow.lifecycle === 'archived'
 
                     return (
                       <article
@@ -357,23 +526,23 @@ export const WorkspaceFlowFilters = ({
                           data-component-id={COMPONENT_IDS.automation.statusLight}
                           role="img"
                         />
-                        <button
-                          aria-label={flow.name}
-                          aria-pressed={selected}
+                        <label
                           className="automation-flow-row__name"
                           data-component-id={
-                            COMPONENT_IDS.automation.flowFilterButton
+                            COMPONENT_IDS.automation.flowFilterToggle
                           }
-                          onClick={() => {
-                            onSelectFlow?.(
-                              selected ? undefined : flow.automationFlowId
-                            )
-                          }}
-                          type="button"
                         >
+                          <input
+                            aria-label={flow.name}
+                            checked={selected}
+                            onChange={() => {
+                              toggleFlow(flow.automationFlowId)
+                            }}
+                            type="checkbox"
+                          />
                           <span>{flow.name}</span>
                           <small>{getFlowSourceLabel(flow, text)}</small>
-                        </button>
+                        </label>
                         <details className="automation-flow-menu">
                           <summary
                             aria-label={text('automation.flowActions')}
@@ -406,6 +575,8 @@ export const WorkspaceFlowFilters = ({
                                 data-component-id={
                                   COMPONENT_IDS.automation.flowMenuItem
                                 }
+                                disabled
+                                title={text('automation.stopFlowDeferred')}
                                 type="button"
                               >
                                 {text('automation.stopFlow')}
@@ -416,6 +587,12 @@ export const WorkspaceFlowFilters = ({
                                 data-component-id={
                                   COMPONENT_IDS.automation.flowMenuItem
                                 }
+                                disabled={!canEnable}
+                                onClick={() => {
+                                  if (canEnable) {
+                                    onSetFlowLifecycle?.(flow, 'enabled')
+                                  }
+                                }}
                                 type="button"
                               >
                                 {text('automation.enableFlow')}
@@ -426,6 +603,12 @@ export const WorkspaceFlowFilters = ({
                                 data-component-id={
                                   COMPONENT_IDS.automation.flowMenuItem
                                 }
+                                disabled={!canDisable}
+                                onClick={() => {
+                                  if (canDisable) {
+                                    onSetFlowLifecycle?.(flow, 'disabled')
+                                  }
+                                }}
                                 type="button"
                               >
                                 {text('automation.disableFlow')}
@@ -436,6 +619,12 @@ export const WorkspaceFlowFilters = ({
                                 data-component-id={
                                   COMPONENT_IDS.automation.flowMenuItem
                                 }
+                                disabled={!canArchive}
+                                onClick={() => {
+                                  if (canArchive) {
+                                    onArchiveFlow?.(flow)
+                                  }
+                                }}
                                 type="button"
                               >
                                 {text('automation.archiveFlow')}
@@ -446,6 +635,12 @@ export const WorkspaceFlowFilters = ({
                                 data-component-id={
                                   COMPONENT_IDS.automation.flowMenuItem
                                 }
+                                disabled={!canRestore}
+                                onClick={() => {
+                                  if (canRestore) {
+                                    onRestoreFlow?.(flow)
+                                  }
+                                }}
                                 type="button"
                               >
                                 {text('automation.restoreFlow')}

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createAutomationTaskId,
   createAutomationTaskCandidateFromDiscoveredSource,
   normalizeAutomationDiscoveredTaskSources
-} from './discovery'
+} from './index'
 import type { AutomationFlow } from './types'
 
 const flow: AutomationFlow = {
@@ -103,7 +104,10 @@ describe('automation-flow discovery', () => {
       automationFlowId: 'flow-a',
       sourceItemId: 'local-a',
       sourceType: 'local-file',
-      taskId: 'flow-a:local-a'
+      taskId: createAutomationTaskId({
+        automationFlowId: 'flow-a',
+        sourceItemId: 'local-a'
+      })
     })
     expect(
       createAutomationTaskCandidateFromDiscoveredSource(
@@ -111,5 +115,58 @@ describe('automation-flow discovery', () => {
         source
       )
     ).toBeNull()
+  })
+
+  it('rejects unsafe discovery source metadata before normalization', () => {
+    const sources = normalizeAutomationDiscoveredTaskSources({
+      automationFlow: flow,
+      discoveredAt: '2026-05-10T08:00:00.000Z',
+      sources: [
+        {
+          relativePath: '.mde/docs/tasks/safe.md',
+          sourceItemId: 'safe-source',
+          sourcePath: '/workspace/.mde/docs/tasks/safe.md',
+          sourceType: 'local-file',
+          sourceUri: 'file:///workspace/.mde/docs/tasks/safe.md',
+          title: 'READY Safe source'
+        },
+        {
+          relativePath: '../secrets.md',
+          sourceItemId: 'traversal-relative',
+          sourceType: 'local-file',
+          title: 'READY Traversal relative path'
+        },
+        {
+          sourceItemId: 'control\u0000source',
+          sourceType: 'remote-issue',
+          sourceUri: 'https://github.com/flowforever/mde/issues/1',
+          title: 'READY Control char'
+        },
+        {
+          sourceItemId: 'unsafe-uri',
+          sourceType: 'remote-doc',
+          sourceUri: 'javascript:alert(1)',
+          title: 'READY Unsafe URI'
+        },
+        {
+          sourceItemId: 'unsafe-source-path',
+          sourcePath: 'https://example.com/raw-path',
+          sourceType: 'local-file',
+          title: 'READY Unsafe source path'
+        },
+        {
+          sourceItemId: 'unknown-source-type',
+          sourceType: 'unknown-source' as never,
+          title: 'READY Unknown source type'
+        }
+      ]
+    })
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]).toMatchObject({
+      sourceItemId: 'safe-source',
+      sourceType: 'local-file',
+      title: 'READY Safe source'
+    })
   })
 })

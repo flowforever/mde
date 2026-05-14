@@ -13,6 +13,7 @@ import type {
 } from './types'
 
 export interface FakeAgentChatAdapterOptions {
+  readonly authenticated?: boolean
   readonly engineId: AgentChatEngineId
   readonly supported?: boolean
 }
@@ -62,6 +63,7 @@ async function* emitFakeTurn(
 export const createFakeAgentChatAdapter = (
   options: FakeAgentChatAdapterOptions
 ): AgentChatEngineAdapter => {
+  const authenticated = options.authenticated ?? true
   const supported = options.supported ?? true
 
   return {
@@ -84,9 +86,18 @@ export const createFakeAgentChatAdapter = (
       Promise.resolve(
         supported
           ? {
+              authenticated,
               engineId: options.engineId,
               nativeVersion: 'fake',
-              verdict: 'supported'
+              verdict: authenticated ? 'supported' : 'unsupported',
+              ...(authenticated
+                ? {}
+                : {
+                    diagnostic: createAgentChatDiagnostic({
+                      code: 'authentication-required',
+                      recoverable: true
+                    })
+                  })
             }
           : {
               diagnostic: createAgentChatDiagnostic({

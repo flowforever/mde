@@ -19,40 +19,45 @@
 
 ## Automation Center
 
-Automation Center 覆盖独立自动化窗口、任务队列和右侧 Flowline 详情。
+Automation Center 覆盖独立自动化窗口、任务队列和右侧流程线详情。
 
 | Standard Name | Component ID | 中文名 | 位置 | 代码位置 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| Automation Archived Toggle | `automation.archived-toggle` | 自动化归档开关 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 控制是否显示已归档 automation-flow。 |
-| Automation Bucket | `automation.bucket` | 自动化任务队列 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | Needs me、Running、Ready、Done 中的单个任务队列。 |
+| Automation Agent Chat Button | `automation.agent-chat-button` | 自动化 Agent Chat 按钮 | 自动化中心右下角 | `apps/desktop/src/renderer/src/automation/AutomationAgentChatEntry.tsx` | 在 Codex Agent Chat 可用时打开自动化任务聊天面板。 |
+| Automation Agent Chat Close Button | `automation.agent-chat-close-button` | 自动化 Agent Chat 关闭按钮 | 自动化中心右下角 | `apps/desktop/src/renderer/src/automation/AutomationAgentChatEntry.tsx` | 折叠自动化任务聊天面板。 |
+| Automation Agent Chat Entry | `automation.agent-chat-entry` | 自动化 Agent Chat 入口 | 自动化中心右下角 | `apps/desktop/src/renderer/src/automation/AutomationAgentChatEntry.tsx` | Automation Center 复用 Agent Chat 的挂载容器。 |
+| Automation Archived Toggle | `automation.archived-toggle` | 自动化归档开关 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 控制是否显示已归档自动化流程。 |
+| Automation Bucket Filter Button | `automation.bucket-filter-button` | 自动化状态过滤按钮 | 自动化任务堆栈 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 在 Task Stack 中选择 Ready、Running、Needs me 或 Done。 |
 | Automation Center Window | `automation.center-window` | 自动化中心窗口 | 独立自动化窗口 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | Automation Center 渲染根容器。 |
-| Automation Decision Approve Button | `automation.decision-approve-button` | 自动化决策批准按钮 | 自动化 Flowline | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 在 Needs me 决策中批准并继续同一个自动化运行。 |
-| Automation Decision Panel | `automation.decision-panel` | 自动化决策面板 | 自动化 Flowline | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 显示当前任务的待处理决策提示。 |
-| Automation Diagnostic List | `automation.diagnostic-list` | 自动化诊断列表 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 自动化设置与运行诊断列表。 |
-| Automation Editor Close Button | `automation.editor-close-button` | 自动化编辑器关闭按钮 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 关闭右侧 automation-flow 编辑模式。 |
-| Automation Editor Host | `automation.editor-host` | 自动化编辑器容器 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 复用 Markdown 编辑器的 automation-flow 编辑区域。 |
-| Automation Editor Save Button | `automation.editor-save-button` | 自动化编辑器保存按钮 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 保存当前 automation-flow Markdown。 |
-| Automation Flow Context Menu | `automation.flow-context-menu` | 自动化 Flow 操作菜单 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个 automation-flow 的操作菜单。 |
-| Automation Flow Filter Button | `automation.flow-filter-button` | 自动化 Flow 过滤按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 选择单个 automation-flow 以过滤 Signal Stack 任务。 |
-| Automation Flow Menu Item | `automation.flow-menu-item` | 自动化 Flow 菜单项 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个 automation-flow 的编辑、启停、归档、恢复操作。 |
-| Automation Flow Row | `automation.flow-row` | 自动化 Flow 行 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个 automation-flow 的列表行。 |
-| Automation Flow Toolbar | `automation.flow-toolbar` | 自动化 Flow 工具栏 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与现有 Explorer 左侧 panel 一致的 flow 操作工具栏。 |
-| Automation Signal Stack | `automation.signal-stack` | 自动化 Signal Stack | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 自动化任务状态队列。 |
-| Automation Task Card | `automation.task-card` | 自动化任务卡片 | Signal Stack | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 单个自动化任务卡片。 |
+| Automation Decision Approve Button | `automation.decision-approve-button` | 自动化决策批准按钮 | 自动化流程线 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 在 Needs me 决策中批准并继续同一个自动化运行。 |
+| Automation Decision Panel | `automation.decision-panel` | 自动化决策面板 | 自动化流程线 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 显示当前任务的待处理决策提示。 |
+| Automation Decision Status Message | `automation.decision-status-message` | 自动化决策状态消息 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 提交人工决策失败时显示本地化的用户可读状态消息。 |
+| Automation Diagnostic List | `automation.diagnostic-list` | 自动化诊断列表 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 自动化设置与运行诊断列表。 |
+| Automation Editor Close Button | `automation.editor-close-button` | 自动化编辑器关闭按钮 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 关闭右侧自动化流程编辑模式。 |
+| Automation Editor Host | `automation.editor-host` | 自动化编辑器容器 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 复用 Markdown 编辑器的自动化流程编辑区域。 |
+| Automation Editor Save Button | `automation.editor-save-button` | 自动化编辑器保存按钮 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 保存当前自动化流程 Markdown。 |
+| Automation Flow Context Menu | `automation.flow-context-menu` | 自动化流程操作菜单 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个自动化流程的操作菜单。 |
+| Automation Flow Filter Toggle | `automation.flow-filter-toggle` | 自动化流程多选开关 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 将单个自动化流程加入或移出多选过滤范围。 |
+| Automation Flow Menu Item | `automation.flow-menu-item` | 自动化流程菜单项 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个自动化流程的编辑、启停、归档、恢复操作。 |
+| Automation Flow Row | `automation.flow-row` | 自动化流程行 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个自动化流程的列表行。 |
+| Automation Flow Toolbar | `automation.flow-toolbar` | 自动化流程工具栏 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与现有 Explorer 左侧 panel 一致的流程操作工具栏。 |
+| Automation Signal Stack | `automation.signal-stack` | 自动化信号队列 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 自动化任务状态队列。 |
 | Automation Task Stack | `automation.task-stack` | 自动化任务堆栈 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与 prototype 对齐的 Needs me、Running、Ready、Done 状态入口组。 |
-| Automation Task Stack Status Row | `automation.task-stack-status-row` | 自动化任务堆栈状态行 | 自动化任务堆栈 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | Task Stack 中的单个状态入口。 |
-| Automation Template Picker | `automation.template-picker` | 自动化模板选择器 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 新建 automation-flow 时选择内置模板。 |
-| Automation Validation Panel | `automation.validation-panel` | 自动化验证面板 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 显示 automation-flow 验证结果和诊断。 |
-| Automation Flowline | `automation.flowline` | 自动化 Flowline | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 选中任务的 Flowline 详情区。 |
-| Automation Flowline Phase | `automation.flowline-phase` | 自动化 Flowline 阶段 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | Flowline 中由任务/运行数据生成的阶段项。 |
-| Automation New Flow Button | `automation.new-flow-button` | 新建自动化 Flow 按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 新建 automation-flow 的入口按钮。 |
+| Automation Template Picker | `automation.template-picker` | 自动化模板选择器 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 新建自动化流程时选择内置模板。 |
+| Automation Validation Panel | `automation.validation-panel` | 自动化验证面板 | 自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 显示自动化流程验证结果和诊断。 |
+| Automation Flowline | `automation.flowline` | 自动化流程线 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 选中任务的流程线详情区。 |
+| Automation Flowline Phase | `automation.flowline-phase` | 自动化流程线阶段 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 流程线中由任务/运行数据生成的阶段项。 |
+| Automation Flowline Start Button | `automation.flowline-start-button` | 自动化流程线启动按钮 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 从就绪流程线预览启动选中的 Ready 任务。 |
+| Automation New Flow Button | `automation.new-flow-button` | 新建自动化流程按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 新建自动化流程的入口按钮。 |
 | Automation Return Workspace Button | `automation.return-workspace-button` | 返回工作区按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 从 Automation Center 切回原工作区窗口。 |
 | Automation Sidebar Resize Handle | `automation.sidebar-resize-handle` | 自动化侧边栏宽度调节柄 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 与现有 Explorer 一致的左右拖拽调宽入口。 |
-| Automation Start Task Button | `automation.start-task-button` | 启动自动化任务按钮 | Signal Stack | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 从 Ready 队列启动单个自动化任务。 |
-| Automation Status Light | `automation.status-light` | 自动化状态灯 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 用颜色和无障碍标签表示 flow 状态。 |
-| Automation Workspace Filter Card | `automation.workspace-filter-card` | 自动化工作区过滤卡片 | 自动化工作区过滤面板 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个工作区及其 automation-flow 列表容器。 |
-| Automation Workspace Filter Panel | `automation.workspace-filter-panel` | 自动化工作区过滤面板 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与 prototype 对齐的 Workspaces flow filters 分组。 |
-| Automation Workspace Filters | `automation.workspace-filters` | 自动化工作区过滤器 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 工作区、flow、归档状态过滤入口。 |
+| Automation Signal Task Row | `automation.signal-task-row` | 自动化信号任务行 | 信号队列 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 扁平队列中的单个投影任务行。 |
+| Automation Status Light | `automation.status-light` | 自动化状态灯 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 用颜色和无障碍标签表示流程状态。 |
+| Automation Workspace Add Flow Button | `automation.workspace-add-flow-button` | 自动化工作区新增流程按钮 | 自动化工作区过滤面板 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 在某个工作区或 No workspace 分组下新建自动化流程。 |
+| Automation Workspace Filter Card | `automation.workspace-filter-card` | 自动化工作区过滤卡片 | 自动化工作区过滤面板 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个工作区及其自动化流程列表容器。 |
+| Automation Workspace Filter Panel | `automation.workspace-filter-panel` | 自动化工作区过滤面板 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与 prototype 对齐的工作区流程过滤分组。 |
+| Automation Workspace Filter Toggle | `automation.workspace-filter-toggle` | 自动化工作区多选开关 | 自动化工作区过滤面板 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 将工作区或 No workspace 范围加入或移出多选过滤范围。 |
+| Automation Workspace Filters | `automation.workspace-filters` | 自动化工作区过滤器 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 工作区、流程、归档状态过滤入口。 |
 
 ## 工作区管理
 

@@ -3,6 +3,7 @@ import type {
   AutomationFlowSourceItem,
   AutomationFlowTaskCandidate
 } from './types'
+import { createAutomationTaskId } from './taskIdentity'
 
 const normalizePath = (path: string): string =>
   path.replace(/\\/gu, '/').replace(/^\.\//u, '').replace(/^\/+/u, '')
@@ -179,7 +180,10 @@ export const createAutomationFlowTaskCandidate = (
     sourceItemId: sourceItem.sourceItemId,
     sourcePath: sourceItem.sourcePath,
     sourceType: sourceItem.sourceType,
-    taskId: `${automationFlow.id}:${sourceItem.sourceItemId}`,
+    taskId: createAutomationTaskId({
+      automationFlowId: automationFlow.id,
+      sourceItemId: sourceItem.sourceItemId
+    }),
     title: sourceItem.title,
     workspaceId: sourceItem.workspaceId
   })

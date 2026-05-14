@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { COMPONENT_NAME_ID_MAP } from "../../src/renderer/src/componentIds";
 
 interface ManualComponentRow {
+  readonly codePath: string;
   readonly componentId: string;
   readonly standardName: string;
 }
@@ -77,7 +78,8 @@ const parseManualComponentRows = (markdown: string): readonly ManualComponentRow
         cells[0] !== "Standard Name" &&
         cells[0].length > 0,
     )
-    .map(([standardName, componentId]) => ({
+    .map(([standardName, componentId, , , codePath]) => ({
+      codePath: normalizeMarkdownCodeCell(codePath),
       componentId: normalizeMarkdownCodeCell(componentId),
       standardName,
     }));
@@ -104,11 +106,36 @@ describe("component naming reference", () => {
     }
 
     for (const entry of mappedEntries) {
-      expect(concreteManualRows).toContainEqual({
-        componentId: entry.componentId,
-        standardName: entry.standardName,
-      });
+      expect(
+        concreteManualRows.some(
+          (row) =>
+            row.componentId === entry.componentId &&
+            row.standardName === entry.standardName &&
+            typeof row.codePath === "string",
+        ),
+      ).toBe(true);
     }
+  });
+
+  it("keeps automation component manual code locations on their owning source files", async () => {
+    const manual = await readFile(MANUAL_PATH, "utf8");
+    const manualRows = parseManualComponentRows(manual);
+
+    expect(manualRows).toContainEqual({
+      codePath: "apps/desktop/src/renderer/src/automation/SignalStack.tsx",
+      componentId: "automation.diagnostic-list",
+      standardName: "Automation Diagnostic List",
+    });
+    expect(manualRows).toContainEqual({
+      codePath: "apps/desktop/src/renderer/src/automation/SignalStack.tsx",
+      componentId: "automation.signal-stack",
+      standardName: "Automation Signal Stack",
+    });
+    expect(manualRows).toContainEqual({
+      codePath: "apps/desktop/src/renderer/src/automation/QuietFlowline.tsx",
+      componentId: "automation.flowline",
+      standardName: "Automation Flowline",
+    });
   });
 
   it("binds every concrete component id to a renderer data-component-id constant reference", async () => {

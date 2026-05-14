@@ -8,7 +8,11 @@ import type {
   AutomationRunState
 } from '@mde/automation-flow'
 
-import type { AgentCliCapabilityProbeReport } from './agentCliAdapters'
+import type {
+  AgentCliCommandResult,
+  AgentCliCapabilityProbeReport,
+  AgentCliNormalizedEvent
+} from './agentCliAdapters'
 import type { AutomationAdapterRegistry } from './automationAdapterRegistry'
 import type {
   AutomationStoredDecision,
@@ -18,6 +22,7 @@ import type {
 import type { MdeRuntimeBridge } from './mdeRuntimeBridge'
 import type { AutomationReportSummary } from '../../../shared/automation'
 import { createAutomationPromptBundle } from './automationPromptBundle'
+import { createAutomationFlowOwnerKey } from './automationFlowOwnerIdentity'
 import { createAutomationRunLockKey } from './automationRunLocks'
 
 export type AutomationRuntimeAction =
@@ -86,6 +91,24 @@ interface GetRunActionsInput {
   readonly engine: AgentEngineId
   readonly runId: string
   readonly workspaceRoot?: string
+}
+
+export class AutomationRunCancellationError extends Error {
+  readonly diagnostic?: AgentCliCommandResult['diagnostic']
+  readonly runId: string
+
+  constructor({
+    diagnostic,
+    runId
+  }: {
+    readonly diagnostic?: AgentCliCommandResult['diagnostic']
+    readonly runId: string
+  }) {
+    super(diagnostic?.technicalMessage ?? 'Automation run cancellation was not accepted.')
+    this.name = 'AutomationRunCancellationError'
+    this.diagnostic = diagnostic
+    this.runId = runId
+  }
 }
 
 export interface AutomationRuntime {
@@ -185,6 +208,9 @@ const createSourceSnapshotFromCandidate = (
 ): AutomationDiscoveredTaskSource =>
   Object.freeze({
     automationFlowId: candidate.automationFlowId,
+    ...(candidate.automationFlowOwnerKey !== undefined
+      ? { automationFlowOwnerKey: candidate.automationFlowOwnerKey }
+      : {}),
     discoveredAt: new Date(0).toISOString(),
     ...(candidate.engine !== undefined ? { engine: candidate.engine } : {}),
     ...(candidate.externalId !== undefined ? { externalId: candidate.externalId } : {}),
@@ -280,11 +306,75 @@ export const createAutomationRuntime = ({
     )
   }
 
+  const persistTaskAdapterEvents = async ({
+    events,
+    runId,
+    taskId
+  }: {
+    readonly events: readonly AgentCliNormalizedEvent[]
+    readonly runId: string
+    readonly taskId: string
+  }): Promise<AutomationStoredDecision | undefined> => {
+    let decision: AutomationStoredDecision | undefined
+
+    for (const event of events) {
+      if (
+        event.type === 'phase-update' &&
+        event.phaseTitle !== undefined &&
+        event.status !== undefined
+      ) {
+        await store.appendEvent(runId, {
+          eventId: createId('event'),
+          summary: `${event.phaseTitle}: ${event.status}`,
+          type: 'phase-update'
+        })
+      }
+
+      if (event.type === 'decision-required' && event.prompt !== undefined) {
+        decision = await store.markNeedsMe(runId, {
+          decisionId: createId('decision'),
+          prompt: event.prompt,
+          taskId,
+          type: 'input'
+        })
+      }
+
+      if (
+        event.type === 'final-report' &&
+        event.outcome !== undefined &&
+        event.title !== undefined
+      ) {
+        await store.createReport({
+          outcome: event.outcome,
+          reportId: createId('report'),
+          runId,
+          ...(event.summary !== undefined ? { summary: event.summary } : {}),
+          taskId,
+          title: event.title
+        })
+      }
+    }
+
+    return decision
+  }
+
   const runtime: AutomationRuntime = {
     async cancelRun(runId) {
       const run = await store.getRun(runId)
+      const result = await adapterRegistry.cancelRun(run.engine, {
+        ...(run.adapterSessionId !== undefined
+          ? { adapterSessionId: run.adapterSessionId }
+          : {}),
+        runId,
+        ...(run.workspaceRoot !== undefined ? { workspaceRoot: run.workspaceRoot } : {})
+      })
 
-      await adapterRegistry.cancelRun(run.engine, runId)
+      if (!result.accepted) {
+        throw new AutomationRunCancellationError({
+          diagnostic: result.diagnostic,
+          runId
+        })
+      }
 
       return store.updateRunState(runId, {
         recoverable: false,
@@ -376,17 +466,27 @@ export const createAutomationRuntime = ({
         workspaceRoot: existingRun.workspaceRoot
       })
 
-      await adapterRegistry.resumeRun(existingRun.engine, {
+      const adapterResult = await adapterRegistry.resumeRun(existingRun.engine, {
         adapterSessionId: nextAdapterSessionId,
         promptBundle: `${promptBundle.prompt}\n\n## User Response\n\n${response}`,
         runId,
         workspaceRoot: existingRun.workspaceRoot
       })
-      const run = await store.updateRunState(runId, {
-        adapterSessionId: nextAdapterSessionId,
-        recoverable: false,
-        state: 'running'
+      await store.appendAdapterSession(runId, adapterResult.adapterSessionId)
+      await persistTaskAdapterEvents({
+        events: adapterResult.events,
+        runId,
+        taskId: existingRun.taskId
       })
+      const state = getStateAfterAdapterEvents(adapterResult.events)
+      const run =
+        state === 'done' || state === 'failed' || state === 'cancelled'
+          ? await store.getRun(runId)
+          : await store.updateRunState(runId, {
+              adapterSessionId: adapterResult.adapterSessionId,
+              recoverable: false,
+              state
+            })
 
       return Object.freeze({
         adapterSessionLineage: toLineage(run),
@@ -408,6 +508,10 @@ export const createAutomationRuntime = ({
       return result.accepted
     },
     async startDiscoveryRun({ automationFlow, workspaceRoot }) {
+      const automationFlowOwnerKey = createAutomationFlowOwnerKey({
+        automationFlow,
+        workspaceRoot
+      })
       const runLockKey = createDiscoveryRunLockKey({
         automationFlow,
         profileId,
@@ -450,6 +554,7 @@ export const createAutomationRuntime = ({
           adapterSessionId,
           adapterSessionLineage: [adapterSessionId],
           automationFlowId: automationFlow.id,
+          automationFlowOwnerKey,
           automationFlowSnapshot: automationFlow,
           automationFlowSnapshotId,
           engine: automationFlow.defaultEngine,
@@ -483,7 +588,8 @@ export const createAutomationRuntime = ({
         if (discoveredEvent?.type === 'discovered-task-sources') {
           await store.replaceDiscoveredTaskSources(
             automationFlow.id,
-            discoveredEvent.sources
+            discoveredEvent.sources,
+            automationFlowOwnerKey
           )
         }
 
@@ -509,6 +615,10 @@ export const createAutomationRuntime = ({
     },
     async startRun({ automationFlow, candidate, taskSource, workspaceRoot }) {
       const resolvedWorkspaceRoot = getWorkspaceRoot(workspaceRoot, candidate)
+      const automationFlowOwnerKey = createAutomationFlowOwnerKey({
+        automationFlow,
+        workspaceRoot: resolvedWorkspaceRoot
+      })
       const runLockKey = createAutomationRunLockKey({
         automationFlowId: automationFlow.id,
         profileId,
@@ -561,6 +671,7 @@ export const createAutomationRuntime = ({
           adapterSessionId,
           adapterSessionLineage: [adapterSessionId],
           automationFlowId: automationFlow.id,
+          automationFlowOwnerKey,
           automationFlowSnapshot: automationFlow,
           automationFlowSnapshotId,
           engine: candidate.engine,
@@ -626,37 +737,12 @@ export const createAutomationRuntime = ({
           taskSource: resolvedTaskSource,
           workspaceRoot: resolvedWorkspaceRoot
         })
-        let decision: AutomationStoredDecision | undefined
-
-        for (const event of adapterResult.events) {
-          if (event.type === 'phase-update') {
-            await store.appendEvent(runId, {
-              eventId: createId('event'),
-              summary: `${event.phaseTitle}: ${event.status}`,
-              type: 'phase-update'
-            })
-          }
-
-          if (event.type === 'decision-required') {
-            decision = await store.markNeedsMe(runId, {
-              decisionId: createId('decision'),
-              prompt: event.prompt,
-              taskId: candidate.taskId,
-              type: 'input'
-            })
-          }
-
-          if (event.type === 'final-report') {
-            await store.createReport({
-              outcome: event.outcome,
-              reportId: createId('report'),
-              runId,
-              ...(event.summary !== undefined ? { summary: event.summary } : {}),
-              taskId: candidate.taskId,
-              title: event.title
-            })
-          }
-        }
+        await store.appendAdapterSession(runId, adapterResult.adapterSessionId)
+        const decision = await persistTaskAdapterEvents({
+          events: adapterResult.events,
+          runId,
+          taskId: candidate.taskId
+        })
 
         const state = getStateAfterAdapterEvents(adapterResult.events)
 

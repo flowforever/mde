@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { resolveAutomationFlowOwnership } from './ownership'
+import { createAutomationTaskId } from './taskIdentity'
 import type { AutomationFlow } from './types'
 
 const makeFlow = (
@@ -66,7 +67,10 @@ describe('resolveAutomationFlowOwnership', () => {
     expect(result.candidates).toHaveLength(1)
     expect(result.candidates[0]).toMatchObject({
       automationFlowId: 'workspace-formal',
-      taskId: 'workspace-formal:workspace:.mde/docs/tasks/ready.md'
+      taskId: createAutomationTaskId({
+        automationFlowId: 'workspace-formal',
+        sourceItemId: sourceItem.sourceItemId
+      })
     })
   })
 

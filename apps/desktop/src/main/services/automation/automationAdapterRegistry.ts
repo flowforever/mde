@@ -1,8 +1,10 @@
 import type { AgentEngineId } from '@mde/automation-flow'
 
+import type { AutomationDiagnostic } from '../../../shared/automation'
 import type {
   AgentCliAdapter,
   AgentCliCommandResult,
+  AgentCliCancelInput,
   AgentCliOpenNativeSessionInput,
   AgentCliCapabilityProbeInput,
   AgentCliCapabilityProbeReport,
@@ -20,6 +22,68 @@ export const REQUIRED_RUN_CAPABILITIES = Object.freeze([
   'workingDirectory'
 ] as const satisfies readonly (keyof AgentCliCapabilitySet)[])
 
+export type AutomationAdapterCapabilityFailureReason =
+  | 'authentication-required'
+  | 'capability-unavailable'
+  | 'missing-required-capability'
+
+export class AutomationAdapterCapabilityError extends Error {
+  readonly diagnostics: readonly AutomationDiagnostic[]
+  readonly engine: AgentEngineId
+  readonly missingRequiredCapabilities: readonly (keyof AgentCliCapabilitySet)[]
+  readonly reason: AutomationAdapterCapabilityFailureReason
+  readonly report: AgentCliCapabilityProbeReport
+
+  constructor({
+    engine,
+    missingRequiredCapabilities,
+    reason,
+    report
+  }: {
+    readonly engine: AgentEngineId
+    readonly missingRequiredCapabilities: readonly (keyof AgentCliCapabilitySet)[]
+    readonly reason: AutomationAdapterCapabilityFailureReason
+    readonly report: AgentCliCapabilityProbeReport
+  }) {
+    super(
+      reason === 'authentication-required'
+        ? 'Adapter authentication is required.'
+        : 'Required adapter capabilities are unavailable.'
+    )
+    this.name = 'AutomationAdapterCapabilityError'
+    this.diagnostics = report.diagnostics
+    this.engine = engine
+    this.missingRequiredCapabilities = missingRequiredCapabilities
+    this.reason = reason
+    this.report = report
+  }
+}
+
+const getMissingRequiredCapabilities = (
+  capabilities: AgentCliCapabilitySet
+): readonly (keyof AgentCliCapabilitySet)[] =>
+  Object.freeze(
+    REQUIRED_RUN_CAPABILITIES.filter((capability) => !capabilities[capability])
+  )
+
+const getCapabilityFailureReason = ({
+  missingRequiredCapabilities,
+  report
+}: {
+  readonly missingRequiredCapabilities: readonly (keyof AgentCliCapabilitySet)[]
+  readonly report: AgentCliCapabilityProbeReport
+}): AutomationAdapterCapabilityFailureReason => {
+  if (!report.authenticated) {
+    return 'authentication-required'
+  }
+
+  if (missingRequiredCapabilities.length > 0) {
+    return 'missing-required-capability'
+  }
+
+  return 'capability-unavailable'
+}
+
 export interface AutomationAdapterRegistry {
   readonly assertCanStartRun: (
     engine: AgentEngineId,
@@ -27,7 +91,7 @@ export interface AutomationAdapterRegistry {
   ) => Promise<AgentCliCapabilityProbeReport>
   readonly cancelRun: (
     engine: AgentEngineId,
-    runId: string
+    input: AgentCliCancelInput
   ) => Promise<AgentCliCommandResult>
   readonly openNativeSession: (
     engine: AgentEngineId,
@@ -74,26 +138,36 @@ export const createAutomationAdapterRegistry = (
       input: AgentCliCapabilityProbeInput
     ) {
       const report = await probe(engine, input)
+      const missingRequiredCapabilities = getMissingRequiredCapabilities(
+        report.capabilities
+      )
 
       if (
+        !report.authenticated ||
         report.verdict !== 'full' ||
-        !REQUIRED_RUN_CAPABILITIES.every(
-          (capability) => report.capabilities[capability]
-        )
+        missingRequiredCapabilities.length > 0
       ) {
-        throw new Error('Required adapter capabilities are unavailable.')
+        throw new AutomationAdapterCapabilityError({
+          engine,
+          missingRequiredCapabilities,
+          reason: getCapabilityFailureReason({
+            missingRequiredCapabilities,
+            report
+          }),
+          report
+        })
       }
 
       return report
     },
-    async cancelRun(engine, runId) {
+    async cancelRun(engine, input) {
       const adapter = adapterByEngine.get(engine)
 
       if (adapter === undefined) {
         throw new Error(`No adapter registered for ${engine}.`)
       }
 
-      return adapter.cancelRun(runId)
+      return adapter.cancelRun(input)
     },
     async openNativeSession(engine, input) {
       const adapter = adapterByEngine.get(engine)

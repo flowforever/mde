@@ -54,7 +54,48 @@ describe('automationSourceScanner', () => {
         title: 'Implement automation'
       }
     ])
+    expect(result.sourceItems[0]?.sourceItemId).toEqual(
+      expect.stringContaining('workspace-markdown:')
+    )
     expect(result.diagnostics).toEqual([])
+  })
+
+  it('creates owner-safe workspace source ids before projection overlays', async () => {
+    const workspaceA = await createTempRoot('mde-workspace-a-')
+    const workspaceB = await createTempRoot('mde-workspace-b-')
+    const relativeSegments = ['.mde', 'docs', 'tasks', 'ready.md']
+
+    await mkdir(join(workspaceA, '.mde', 'docs', 'tasks'), {
+      recursive: true
+    })
+    await mkdir(join(workspaceB, '.mde', 'docs', 'tasks'), {
+      recursive: true
+    })
+    await writeFile(
+      join(workspaceA, ...relativeSegments),
+      readyMarkdown('Implement automation')
+    )
+    await writeFile(
+      join(workspaceB, ...relativeSegments),
+      readyMarkdown('Implement automation')
+    )
+
+    const first = await scanWorkspaceMarkdownSources({
+      workspaceRoot: workspaceA
+    })
+    const second = await scanWorkspaceMarkdownSources({
+      workspaceRoot: workspaceB
+    })
+
+    expect(first.sourceItems[0]?.relativePath).toBe(
+      second.sourceItems[0]?.relativePath
+    )
+    expect(first.sourceItems[0]?.sourceItemId).not.toBe(
+      second.sourceItems[0]?.sourceItemId
+    )
+    expect(first.sourceItems[0]?.sourceItemId).not.toBe(
+      `workspace:${first.sourceItems[0]?.relativePath}`
+    )
   })
 
   it('reports malformed source frontmatter as diagnostics', async () => {
@@ -98,5 +139,8 @@ describe('automationSourceScanner', () => {
         title: 'Research automation'
       }
     ])
+    expect(result.sourceItems[0]?.sourceItemId).toEqual(
+      expect.stringContaining('user-prompt:')
+    )
   })
 })

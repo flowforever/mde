@@ -66,6 +66,7 @@ export interface AgentChatContextManifest {
 }
 
 export type AgentChatDiagnosticCode =
+  | 'authentication-required'
   | 'attachment-write-failed'
   | 'changed-files-unavailable'
   | 'engine-missing'
@@ -156,6 +157,7 @@ export interface AgentChatCapabilityProbeInput {
 }
 
 export interface AgentChatCapabilityReport {
+  readonly authenticated?: boolean
   readonly diagnostic?: AgentChatDiagnostic
   readonly engineId: AgentChatEngineId
   readonly nativeVersion?: string
@@ -280,6 +282,7 @@ export interface AgentChatAvailabilityResponse {
   readonly reason?:
     | 'engine-not-registered'
     | 'engine-not-selected'
+    | 'authentication-required'
     | 'protocol-unsupported'
     | 'workspace-missing'
 }

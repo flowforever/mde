@@ -97,6 +97,66 @@ describe("app language preferences", () => {
     expect(chineseText("editor.linkSlashDescription")).toContain("Markdown");
   });
 
+  it("covers automation decision submit failure text in English and Chinese", () => {
+    const englishText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+    const chineseText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);
+
+    expect(
+      englishText("automation.diagnostics.automationRun.resumeFailed"),
+    ).toBe(
+      "Automation run could not be resumed. Check the task status and try again.",
+    );
+    expect(
+      englishText(
+        "automation.diagnostics.automationAdapter.authenticationRequired",
+      ),
+    ).toBe("Sign in to Codex before starting automation.");
+    expect(englishText("automation.submitDecisionFailed")).toContain(
+      "Decision could not be submitted",
+    );
+    expect(
+      chineseText("automation.diagnostics.automationRun.resumeFailed"),
+    ).toBe("无法继续自动化运行，请检查任务状态后重试。");
+    expect(
+      chineseText(
+        "automation.diagnostics.automationAdapter.authenticationRequired",
+      ),
+    ).toBe("请先登录 Codex，再启动自动化。");
+  });
+
+  it("covers neutral automation source metadata text in English and Chinese", () => {
+    const englishText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
+    const chineseText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);
+
+    expect(englishText("automation.selectedAutomationSources")).toBe(
+      "Selected automation-flow sources",
+    );
+    expect(
+      englishText("automation.taskSourceHint", {
+        source: ".mde/docs/tasks/ready.md",
+      }),
+    ).toBe("Source: .mde/docs/tasks/ready.md");
+    expect(chineseText("automation.selectedAutomationSources")).toBe(
+      "已选择的自动化流程来源",
+    );
+    expect(
+      chineseText("automation.taskSourceHint", {
+        source: ".mde/docs/tasks/ready.md",
+      }),
+    ).toBe("来源：.mde/docs/tasks/ready.md");
+  });
+
+  it("uses polished Chinese Automation Center labels", () => {
+    const chineseText = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.zh);
+
+    expect(chineseText("automation.activeFlows")).toBe("活跃流程");
+    expect(chineseText("automation.showArchivedFlows")).toBe("显示已归档流程");
+    expect(chineseText("automation.workspaceFlows")).toBe("工作区流程");
+    expect(chineseText("automation.signalStack")).toBe("信号队列");
+    expect(chineseText("automation.flowline")).toBe("流程线");
+    expect(chineseText("automation.readyFlowline")).toBe("就绪流程线");
+  });
+
   it("formats parameterized language pack text", () => {
     const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 

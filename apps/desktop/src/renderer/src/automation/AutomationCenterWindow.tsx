@@ -9,11 +9,12 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import type { AppText } from "../i18n/appLanguage";
+import type { AppText, AppTextKey } from "../i18n/appLanguage";
 import {
   BUILT_IN_APP_LANGUAGE_PACKS,
   createAppText,
   getAppLanguagePack,
+  isAppTextKey,
   readAppLanguagePreference,
   readCustomAppLanguagePacks,
 } from "../i18n/appLanguage";
@@ -29,21 +30,28 @@ import type {
   AutomationProjectionFilters
 } from "../../../shared/automation";
 import type { MdeWindowApi } from "../../../shared/windowApi";
+import type { AgentChatApi } from "../../../shared/agentChat";
 import { createAutomationCenterViewModel } from "./automationViewModel";
+import { AutomationAgentChatEntry } from "./AutomationAgentChatEntry";
 import { AutomationFlowEditorHost } from "./AutomationFlowEditorHost";
 import { SignalStack } from "./SignalStack";
-import { WorkspaceFlowFilters } from "./WorkspaceFlowFilters";
+import {
+  WorkspaceFlowFilters,
+  type AutomationFlowCreateTarget,
+} from "./WorkspaceFlowFilters";
 import { QuietFlowline } from "./QuietFlowline";
 import "./styles.css";
 
 declare global {
   interface Window {
     readonly mdeAutomation?: AutomationApi;
+    readonly agentChatApi?: AgentChatApi;
     readonly mdeWindow?: MdeWindowApi;
   }
 }
 
 interface AutomationCenterWindowProps {
+  readonly agentChatApi?: AgentChatApi;
   readonly automationApi?: AutomationApi;
   readonly text?: AppText;
 }
@@ -53,6 +61,13 @@ const AUTOMATION_SIDEBAR_WIDTH_MAX = 440;
 const AUTOMATION_SIDEBAR_WIDTH_MIN = 220;
 const AUTOMATION_SIDEBAR_WIDTH_STORAGE_KEY =
   "mde.automationCenter.sidebarWidth";
+
+const AUTOMATION_DECISION_DIAGNOSTIC_KEYS = {
+  "automationRun.decisionUnavailable":
+    "automation.diagnostics.automationRun.decisionUnavailable",
+  "automationRun.resumeFailed":
+    "automation.diagnostics.automationRun.resumeFailed",
+} as const satisfies Record<string, AppTextKey>;
 
 type AutomationEditorState =
   | {
@@ -100,18 +115,48 @@ const readAutomationSidebarWidth = (): number => {
     : AUTOMATION_SIDEBAR_WIDTH_DEFAULT;
 };
 
+const getDecisionSubmitFailureMessage = (
+  diagnostic: AutomationDiagnostic | undefined,
+  text: AppText,
+): string => {
+  const textKey =
+    diagnostic !== undefined &&
+    diagnostic.code in AUTOMATION_DECISION_DIAGNOSTIC_KEYS
+      ? AUTOMATION_DECISION_DIAGNOSTIC_KEYS[
+          diagnostic.code as keyof typeof AUTOMATION_DECISION_DIAGNOSTIC_KEYS
+        ]
+      : undefined;
+
+  return text(textKey ?? "automation.submitDecisionFailed");
+};
+
+const getAutomationCommandFailureMessage = (
+  diagnostic: AutomationDiagnostic | undefined,
+  text: AppText,
+  fallbackKey: AppTextKey,
+): string =>
+  diagnostic?.messageKey !== undefined && isAppTextKey(diagnostic.messageKey)
+    ? text(diagnostic.messageKey)
+    : text(fallbackKey);
+
 export const AutomationCenterWindow = ({
+  agentChatApi,
   automationApi,
   text = createDefaultText(),
 }: AutomationCenterWindowProps = {}): JSX.Element => {
   const resolvedAutomationApi = automationApi ?? window.mdeAutomation;
+  const resolvedAgentChatApi = agentChatApi ?? window.agentChatApi;
   const [projection, setProjection] = useState<AutomationProjection | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(
+    undefined,
+  );
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">(
     "loading",
   );
   const [editorState, setEditorState] = useState<AutomationEditorState | null>(
     null,
   );
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(readAutomationSidebarWidth);
   const automationCenterRef = useRef<HTMLElement | null>(null);
@@ -227,31 +272,40 @@ export const AutomationCenterWindow = ({
   }, [isResizingSidebar, updateSidebarWidthFromPointer]);
 
   const viewModel =
-    projection === null ? null : createAutomationCenterViewModel(projection);
+    projection === null
+      ? null
+      : createAutomationCenterViewModel(projection, selectedTaskId);
+  const agentChatWorkspaceRoot = projection?.workspaceRoot;
   const effectiveLoadState =
     resolvedAutomationApi === undefined ? "error" : loadState;
   const createDefaultSetup = useCallback(
     (
       templates: readonly AutomationFlowTemplateSummary[],
+      target: AutomationFlowCreateTarget = { scope: "workspace" },
     ): AutomationCreateFlowFromTemplateRequest => ({
       defaultEngine: "codex",
       flowId: `automation-flow-${(projection?.flows.length ?? 0) + 1}`,
-      scope: "workspace",
+      scope: target.scope,
       templateId:
-        templates.find((template) => template.templateId === "local-dev-task")
+        templates.find(
+          (template) =>
+            template.templateId === "local-dev-task" &&
+            template.allowedScopes.includes(target.scope),
+        )?.templateId ??
+        templates.find((template) => template.allowedScopes.includes(target.scope))
           ?.templateId ??
         templates[0]?.templateId ??
         "local-dev-task",
     }),
     [projection?.flows.length],
   );
-  const openCreateEditor = useCallback(async () => {
+  const openCreateEditor = useCallback(async (target?: AutomationFlowCreateTarget) => {
     if (resolvedAutomationApi === undefined) {
       return;
     }
 
     const { templates } = await resolvedAutomationApi.listTemplates();
-    const setup = createDefaultSetup(templates);
+    const setup = createDefaultSetup(templates, target);
 
     setEditorState({
       diagnostics: [],
@@ -333,16 +387,86 @@ export const AutomationCenterWindow = ({
     },
     [refreshProjection, resolvedAutomationApi],
   );
+  const setFlowLifecycle = useCallback(
+    async (
+      flow: AutomationFlowRow,
+      lifecycle: "disabled" | "enabled",
+    ): Promise<void> => {
+      if (
+        resolvedAutomationApi === undefined ||
+        flow.definitionPath === undefined
+      ) {
+        return;
+      }
+
+      await resolvedAutomationApi.setFlowLifecycle({
+        filePath: flow.definitionPath,
+        lifecycle,
+      });
+      await refreshProjection();
+    },
+    [refreshProjection, resolvedAutomationApi],
+  );
+  const archiveFlow = useCallback(
+    async (flow: AutomationFlowRow): Promise<void> => {
+      if (
+        resolvedAutomationApi === undefined ||
+        flow.definitionPath === undefined
+      ) {
+        return;
+      }
+
+      await resolvedAutomationApi.archiveFlow({
+        filePath: flow.definitionPath,
+      });
+      await refreshProjection();
+    },
+    [refreshProjection, resolvedAutomationApi],
+  );
+  const restoreFlow = useCallback(
+    async (flow: AutomationFlowRow): Promise<void> => {
+      if (
+        resolvedAutomationApi === undefined ||
+        flow.definitionPath === undefined
+      ) {
+        return;
+      }
+
+      await resolvedAutomationApi.restoreFlow({
+        filePath: flow.definitionPath,
+      });
+      await refreshProjection();
+    },
+    [refreshProjection, resolvedAutomationApi],
+  );
   const startTask = useCallback(
     async (taskId: string) => {
       if (resolvedAutomationApi === undefined) {
         return;
       }
 
-      await resolvedAutomationApi.startRun({ taskId });
-      await refreshProjection();
+      setStatusMessage(null);
+      try {
+        const result = await resolvedAutomationApi.startRun({ taskId });
+
+        if (!result.accepted) {
+          setStatusMessage(
+            getAutomationCommandFailureMessage(
+              result.diagnostic,
+              text,
+              "automation.startTaskFailed",
+            ),
+          );
+        }
+      } catch {
+        setStatusMessage(text("automation.startTaskFailed"));
+      } finally {
+        await refreshProjection().catch(() => {
+          setLoadState("error");
+        });
+      }
     },
-    [refreshProjection, resolvedAutomationApi],
+    [refreshProjection, resolvedAutomationApi, text],
   );
   const submitDecision = useCallback(
     async (decisionId: string, response: string) => {
@@ -350,40 +474,38 @@ export const AutomationCenterWindow = ({
         return;
       }
 
-      await resolvedAutomationApi.submitDecision({ decisionId, response });
-      await refreshProjection();
+      setStatusMessage(null);
+
+      try {
+        const result = await resolvedAutomationApi.submitDecision({
+          decisionId,
+          response,
+        });
+
+        if (!result.accepted) {
+          setStatusMessage(
+            getDecisionSubmitFailureMessage(result.diagnostic, text),
+          );
+        }
+      } catch {
+        setStatusMessage(text("automation.submitDecisionFailed"));
+      } finally {
+        await refreshProjection();
+      }
     },
-    [refreshProjection, resolvedAutomationApi],
+    [refreshProjection, resolvedAutomationApi, text],
   );
-  const selectFlowFilter = useCallback(
-    async (flowId: string | undefined) => {
+  const updateFilters = useCallback(
+    async (nextFilters: AutomationProjectionFilters) => {
       if (resolvedAutomationApi === undefined) {
         return;
       }
 
-      const currentFilters = projection?.filters ?? {};
-      const nextFilters: AutomationProjectionFilters =
-        flowId === undefined
-          ? {
-              ...(currentFilters.archivedVisible !== undefined
-                ? { archivedVisible: currentFilters.archivedVisible }
-                : {}),
-              ...(currentFilters.bucket !== undefined
-                ? { bucket: currentFilters.bucket }
-                : {}),
-              ...(currentFilters.workspaceId !== undefined
-                ? { workspaceId: currentFilters.workspaceId }
-                : {}),
-            }
-          : {
-              ...currentFilters,
-              flowId,
-            };
-
       await resolvedAutomationApi.updateFilters({ filters: nextFilters });
+      setSelectedTaskId(undefined);
       await refreshProjection();
     },
-    [projection?.filters, refreshProjection, resolvedAutomationApi],
+    [refreshProjection, resolvedAutomationApi],
   );
   const returnToWorkspace = useCallback((): void => {
     void window.mdeWindow?.focusWorkspaceWindow();
@@ -407,127 +529,145 @@ export const AutomationCenterWindow = ({
         } as CSSProperties
       }
     >
-      {viewModel === null ? (
-        <section className="editor-pane automation-console-pane automation-console-pane--loading">
-          <section
-            aria-label={text("automation.signalStack")}
-            className="automation-signal-stack"
-            data-component-id={COMPONENT_IDS.automation.signalStack}
-          >
-            <h2>{text("automation.signalStack")}</h2>
-            {effectiveLoadState === "loading" ? (
-              <p>{text("automation.loadingProjection")}</p>
-            ) : null}
-            {effectiveLoadState === "error" ? (
-              <p>{text("automation.projectionError")}</p>
-            ) : null}
-          </section>
-        </section>
-      ) : (
-        <>
-          <WorkspaceFlowFilters
-            onCreateFlow={() => {
-              void openCreateEditor();
-            }}
-            onEditFlow={(flow) => {
-              void openEditEditor(flow);
-            }}
-            onReturnToWorkspace={returnToWorkspace}
-            onSelectFlow={(flowId) => {
-              void selectFlowFilter(flowId);
-            }}
-            flows={projection?.flows ?? []}
-            selectedFlowId={projection?.filters.flowId}
-            taskStackCounts={{
-              done: viewModel.doneTasks.length,
-              needsMe: viewModel.needsMeTasks.length,
-              ready: viewModel.readyTasks.length,
-              running: viewModel.runningTasks.length,
-            }}
-            text={text}
-            workspaceName={projection?.filters.workspaceId}
-          />
-          <div
-            aria-label={text("automation.resizeSidebar")}
-            aria-orientation="vertical"
-            aria-valuemax={AUTOMATION_SIDEBAR_WIDTH_MAX}
-            aria-valuemin={AUTOMATION_SIDEBAR_WIDTH_MIN}
-            aria-valuenow={sidebarWidth}
-            className="explorer-resize-handle automation-sidebar-resize-handle"
-            data-component-id={COMPONENT_IDS.automation.sidebarResizeHandle}
-            onKeyDown={resizeSidebarFromKeyboard}
-            onPointerDown={beginSidebarResize}
-            role="separator"
-            tabIndex={0}
-          />
-          <section
-            aria-label={text("automation.centerTitle")}
-            className={`editor-pane automation-console-pane${
-              editorState === null ? "" : " automation-console-pane--editor-open"
-            }`}
-          >
-            <div
-              className={`automation-console${
-                editorState === null ? "" : " automation-console--editor-open"
-              }`}
+      <WorkspaceFlowFilters
+        onArchiveFlow={(flow) => {
+          void archiveFlow(flow);
+        }}
+        onCreateFlow={(target) => {
+          void openCreateEditor(target);
+        }}
+        onEditFlow={(flow) => {
+          void openEditEditor(flow);
+        }}
+        onReturnToWorkspace={returnToWorkspace}
+        onRestoreFlow={(flow) => {
+          void restoreFlow(flow);
+        }}
+        onSetFlowLifecycle={(flow, lifecycle) => {
+          void setFlowLifecycle(flow, lifecycle);
+        }}
+        onUpdateFilters={(filters) => {
+          void updateFilters(filters);
+        }}
+        filters={projection?.filters ?? {}}
+        flows={projection?.flows ?? []}
+        taskStackCounts={{
+          done: viewModel?.doneTasks.length ?? 0,
+          needsMe: viewModel?.needsMeTasks.length ?? 0,
+          ready: viewModel?.readyTasks.length ?? 0,
+          running: viewModel?.runningTasks.length ?? 0,
+        }}
+        text={text}
+        workspaceName={agentChatWorkspaceRoot}
+      />
+      <div
+        aria-label={text("automation.resizeSidebar")}
+        aria-orientation="vertical"
+        aria-valuemax={AUTOMATION_SIDEBAR_WIDTH_MAX}
+        aria-valuemin={AUTOMATION_SIDEBAR_WIDTH_MIN}
+        aria-valuenow={sidebarWidth}
+        className="explorer-resize-handle automation-sidebar-resize-handle"
+        data-component-id={COMPONENT_IDS.automation.sidebarResizeHandle}
+        onKeyDown={resizeSidebarFromKeyboard}
+        onPointerDown={beginSidebarResize}
+        role="separator"
+        tabIndex={0}
+      />
+      <section
+        aria-label={text("automation.centerTitle")}
+        className={`editor-pane automation-console-pane${
+          editorState === null ? "" : " automation-console-pane--editor-open"
+        }${viewModel === null ? " automation-console-pane--loading" : ""}`}
+      >
+        <div
+          className={`automation-console${
+            editorState === null ? "" : " automation-console--editor-open"
+          }`}
+        >
+          {viewModel === null ? (
+            <section
+              aria-label={text("automation.signalStack")}
+              className="automation-signal-stack"
+              data-component-id={COMPONENT_IDS.automation.signalStack}
             >
-              {editorState === null ? (
-                <>
-                  <SignalStack
-                    onStartTask={(task) => {
-                      void startTask(task.taskId);
-                    }}
-                    text={text}
-                    viewModel={viewModel}
-                  />
-                  <QuietFlowline
-                    onSubmitDecision={(decisionId, response) => {
-                      void submitDecision(decisionId, response);
-                    }}
-                    text={text}
-                    viewModel={viewModel}
-                  />
-                </>
-              ) : (
-                <AutomationFlowEditorHost
-                  document={editorState.document}
-                  key={editorState.document?.path ?? editorState.mode}
-                  mode={editorState.mode}
-                  onClose={() => {
-                    setEditorState(null);
-                  }}
-                  onCreateFromTemplate={createFlowFromTemplate}
-                  onSaveDocument={(markdown) => {
-                    if (editorState.document === undefined) {
-                      throw new Error(text("automation.saveFlowFailed"));
-                    }
+              <h2>{text("automation.signalStack")}</h2>
+              {effectiveLoadState === "loading" ? (
+                <p>{text("automation.loadingProjection")}</p>
+              ) : null}
+              {effectiveLoadState === "error" ? (
+                <p>{text("automation.projectionError")}</p>
+              ) : null}
+            </section>
+          ) : editorState === null ? (
+            <>
+              {statusMessage !== null ? (
+                <p
+                  className="automation-status-message"
+                  data-component-id={COMPONENT_IDS.automation.decisionStatusMessage}
+                  role="alert"
+                >
+                  {statusMessage}
+                </p>
+              ) : null}
+              <SignalStack
+                onSelectTask={(task) => {
+                  setStatusMessage(null);
+                  setSelectedTaskId(task.taskId);
+                }}
+                selectedTaskId={viewModel.selectedTask?.taskId}
+                text={text}
+                viewModel={viewModel}
+              />
+              <QuietFlowline
+                onStartTask={(taskId) => {
+                  void startTask(taskId);
+                }}
+                onSubmitDecision={(decisionId, response) => {
+                  void submitDecision(decisionId, response);
+                }}
+                text={text}
+                viewModel={viewModel}
+              />
+              <AutomationAgentChatEntry
+                agentChatApi={resolvedAgentChatApi}
+                text={text}
+                workspaceRoot={agentChatWorkspaceRoot}
+              />
+            </>
+          ) : (
+            <AutomationFlowEditorHost
+              document={editorState.document}
+              key={editorState.document?.path ?? editorState.mode}
+              mode={editorState.mode}
+              onClose={() => {
+                setEditorState(null);
+              }}
+              onCreateFromTemplate={createFlowFromTemplate}
+              onSaveDocument={(markdown) => {
+                if (editorState.document === undefined) {
+                  throw new Error(text("automation.saveFlowFailed"));
+                }
 
-                    return saveEditorDocument(editorState.document, markdown);
-                  }}
-                  onSetupChange={(setup) => {
-                    setEditorState((current) =>
-                      current?.mode === "create" ? { ...current, setup } : current,
-                    );
-                  }}
-                  setup={
-                    editorState.mode === "create" ? editorState.setup : undefined
-                  }
-                  setupDiagnostics={
-                    editorState.mode === "create"
-                      ? editorState.diagnostics
-                      : undefined
-                  }
-                  templates={
-                    editorState.mode === "create" ? editorState.templates : undefined
-                  }
-                  text={text}
-                  workspaceRoot={projection?.filters.workspaceId}
-                />
-              )}
-            </div>
-          </section>
-        </>
-      )}
+                return saveEditorDocument(editorState.document, markdown);
+              }}
+              onSetupChange={(setup) => {
+                setEditorState((current) =>
+                  current?.mode === "create" ? { ...current, setup } : current,
+                );
+              }}
+              setup={editorState.mode === "create" ? editorState.setup : undefined}
+              setupDiagnostics={
+                editorState.mode === "create" ? editorState.diagnostics : undefined
+              }
+              templates={
+                editorState.mode === "create" ? editorState.templates : undefined
+              }
+              text={text}
+              workspaceRoot={agentChatWorkspaceRoot}
+            />
+          )}
+        </div>
+      </section>
     </main>
   );
 };

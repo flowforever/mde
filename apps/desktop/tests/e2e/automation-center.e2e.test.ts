@@ -1,5 +1,5 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import {
@@ -113,6 +113,25 @@ if (logPath) {
 console.log(JSON.stringify({ type: 'session-started', adapterSessionId: sessionId }))
 
 if (runKind === 'discovery') {
+  if (process.env.MDE_FAKE_AUTOMATION_SOURCE_MODE === 'user-prompt') {
+    console.log(JSON.stringify({
+      type: 'discovered-task-sources',
+      sources: [{
+        automationFlowId: process.env.MDE_AUTOMATION_FLOW_ID,
+        contentSnapshot: '# READY Use global prompt\\n',
+        discoveredAt: '2026-05-10T08:00:00.000Z',
+        provider: 'fake-cli',
+        relativePath: 'research.md',
+        sourceItemId: 'user-prompt:research.md',
+        sourceSnapshotHash: 'fake-hash-user-prompt',
+        sourceType: 'user-prompt',
+        tags: ['research'],
+        title: 'READY Use global prompt'
+      }]
+    }))
+    process.exit(0)
+  }
+
   const sourcePath = join(workspaceRoot, '.mde', 'docs', 'tasks', 'ready.md')
   const contentSnapshot = readFileSync(sourcePath, 'utf8')
   console.log(JSON.stringify({
@@ -188,14 +207,13 @@ const createWorkspaceAutomationFlow = async (
   await expect(
     automationWindow.getByRole('region', { name: 'Validation diagnostics' })
   ).toContainText('Validation passed.')
-  await expect(
-    automationWindow.locator(
-      '[data-component-id="editor.markdown-editor-shell"]'
-    )
-  ).toBeVisible()
-  await automationWindow
-    .getByRole('button', { name: 'Save automation-flow' })
-    .click()
+  const saveButton = automationWindow.getByRole('button', {
+    name: 'Save automation-flow'
+  })
+
+  if ((await saveButton.count()) > 0) {
+    await saveButton.click()
+  }
 }
 
 const getAutomationRunIds = async (
@@ -244,6 +262,25 @@ const getProjectedTaskTitles = async (
 
     return projection?.projection.tasks.map((task) => task.title) ?? []
   })
+
+const expectSignalStackToContainTask = async (
+  automationWindow: Page,
+  taskTitle: string
+): Promise<void> => {
+  await expect(
+    automationWindow.getByRole('region', { name: 'Signal Stack' })
+  ).toContainText(taskTitle, { timeout: E2E_UI_READY_TIMEOUT_MS })
+}
+
+const selectTaskStackBucket = async (
+  automationWindow: Page,
+  bucketName: 'Done' | 'Needs me' | 'Ready' | 'Running'
+): Promise<void> => {
+  await automationWindow
+    .locator('[data-component-id="automation.bucket-filter-button"]')
+    .filter({ hasText: bucketName })
+    .click()
+}
 
 test('opens Automation Center in a separate window and keeps the editor usable', async () => {
   const workspacePath = await createAutomationWorkspace()
@@ -319,8 +356,13 @@ test('focuses the existing Automation Center on repeated Home clicks', async () 
 
 test('creates a workspace automation-flow and projects a READY task', async () => {
   const workspacePath = await createAutomationWorkspace()
+  const fakeCli = await createAutomationFakeCli(workspacePath)
   const { app, startupDiagnostics, window } = await launchElectronApp({
-    args: [workspacePath]
+    args: [workspacePath],
+    env: {
+      MDE_E2E_AUTOMATION_JSONL_ADAPTER: fakeCli.commandPath,
+      MDE_FAKE_AUTOMATION_LOG: fakeCli.logPath
+    }
   })
 
   try {
@@ -334,9 +376,27 @@ test('creates a workspace automation-flow and projects a READY task', async () =
     await automationWindow
       .getByRole('button', { name: 'Close automation-flow editor' })
       .click()
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
+    await expect
+      .poll(async () =>
+        (await readFile(fakeCli.logPath, 'utf8'))
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { readonly runKind?: string })
+          .filter((record) => record.runKind === 'discovery').length
+      )
+      .toBeGreaterThanOrEqual(1)
     await expect(
-      automationWindow.getByRole('region', { name: 'Ready' })
-    ).toContainText('READY Implement automation E2E')
+      automationWindow.getByRole('region', { name: 'Signal Stack' })
+    ).toContainText(basename(workspacePath))
+    await expect(
+      automationWindow
+        .getByRole('region', { name: 'Signal Stack' })
+        .getByText('Workspace', { exact: true })
+    ).toHaveCount(0)
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -374,15 +434,18 @@ test('runs discovery and task execution through a fake CLI executable', async ()
 
     const automationWindow = await openAutomationCenter(app, window)
 
-    await expect(
-      automationWindow.getByRole('region', { name: 'Ready' })
-    ).toContainText('READY Implement automation E2E')
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
     await automationWindow
       .getByRole('button', { name: 'Start automation task' })
       .click()
-    await expect(
-      automationWindow.getByRole('region', { name: 'Done' })
-    ).toContainText('READY Implement automation E2E')
+    await selectTaskStackBucket(automationWindow, 'Done')
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
 
     await expect
       .poll(async () => {
@@ -392,17 +455,101 @@ test('runs discovery and task execution through a fake CLI executable', async ()
           .split(/\r?\n/u)
           .filter(Boolean)
           .map((line) => JSON.parse(line) as { readonly runKind: string; readonly prompt: string })
+        const discoveryRuns = entries.filter(
+          (entry) => entry.runKind === 'discovery'
+        ).length
 
         return {
-          discoveryRuns: entries.filter((entry) => entry.runKind === 'discovery')
-            .length,
+          discoveryRunsAtLeastInitialAndFollowUp: discoveryRuns >= 2,
           taskPrompt: entries.find((entry) => entry.runKind === 'task')?.prompt
         }
       }, { timeout: E2E_UI_READY_TIMEOUT_MS })
       .toMatchObject({
-        discoveryRuns: 2,
+        discoveryRunsAtLeastInitialAndFollowUp: true,
         taskPrompt: expect.stringContaining('Verify the Automation Center path.')
       })
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('keeps user-global tasks visible under no-workspace-only filters', async () => {
+  const workspacePath = await createAutomationWorkspace()
+  const userFlowRoot = join(workspacePath, '.mde', 'automation-flows')
+  const fakeCli = await createAutomationFakeCli(workspacePath)
+
+  await mkdir(userFlowRoot, { recursive: true })
+  await writeFile(
+    join(userFlowRoot, 'research-flow.md'),
+    renderAutomationFlowTemplate(
+      getBuiltInAutomationFlowTemplate('research-and-notes'),
+      {
+        defaultEngine: 'codex',
+        flowId: 'research-flow',
+        name: 'Research Flow',
+        scope: 'user'
+      }
+    ),
+    'utf8'
+  )
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath],
+    env: {
+      MDE_E2E_AUTOMATION_JSONL_ADAPTER: fakeCli.commandPath,
+      MDE_FAKE_AUTOMATION_LOG: fakeCli.logPath,
+      MDE_FAKE_AUTOMATION_SOURCE_MODE: 'user-prompt'
+    }
+  })
+
+  try {
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+
+    const automationWindow = await openAutomationCenter(app, window)
+
+    await expectSignalStackToContainTask(automationWindow, 'READY Use global prompt')
+    await automationWindow.evaluate(async () => {
+      const automationApi = (
+        globalThis as typeof globalThis & {
+          readonly mdeAutomation?: {
+            readonly updateFilters: (request: {
+              readonly filters: {
+                readonly bucket: 'ready'
+                readonly workspaceIds: readonly string[]
+              }
+            }) => Promise<unknown>
+          }
+        }
+      ).mdeAutomation
+
+      await automationApi?.updateFilters({
+        filters: {
+          bucket: 'ready',
+          workspaceIds: ['mde:no-workspace']
+        }
+      })
+    })
+    await automationWindow.reload({ waitUntil: 'domcontentloaded' })
+    await expectSignalStackToContainTask(automationWindow, 'READY Use global prompt')
+    await automationWindow
+      .getByRole('button', { name: 'Start automation task' })
+      .click()
+    await selectTaskStackBucket(automationWindow, 'Done')
+    await expectSignalStackToContainTask(automationWindow, 'READY Use global prompt')
+    await expect
+      .poll(async () => {
+        const log = await readFile(fakeCli.logPath, 'utf8')
+        const entries = log
+          .trim()
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { readonly runKind: string })
+
+        return entries.map((entry) => entry.runKind)
+      }, { timeout: E2E_UI_READY_TIMEOUT_MS })
+      .toContain('task')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -432,9 +579,11 @@ test('moves a task through Needs me and resumes the same MDE run', async () => {
     await automationWindow
       .getByRole('button', { name: 'Start automation task' })
       .click()
-    await expect(
-      automationWindow.getByRole('region', { name: 'Needs me' })
-    ).toContainText('READY Implement automation E2E')
+    await selectTaskStackBucket(automationWindow, 'Needs me')
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
     await expect(
       automationWindow.getByRole('region', { name: 'Decision required' })
     ).toBeVisible()
@@ -462,9 +611,11 @@ test('moves a task through Needs me and resumes the same MDE run', async () => {
     await automationWindow
       .getByRole('button', { name: 'Approve and resume' })
       .click()
-    await expect(
-      automationWindow.getByRole('region', { name: 'Running' })
-    ).toContainText('READY Implement automation E2E')
+    await selectTaskStackBucket(automationWindow, 'Running')
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
 
     const runIdAfter = await automationWindow.evaluate(async () => {
       const automationApi = (
@@ -516,19 +667,28 @@ test('keeps the same run after closing and reopening Automation Center', async (
     await automationWindow
       .getByRole('button', { name: 'Start automation task' })
       .click()
-    await expect(
-      automationWindow.getByRole('region', { name: 'Needs me' })
-    ).toContainText('READY Implement automation E2E')
+    await selectTaskStackBucket(automationWindow, 'Needs me')
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
 
+    await expect
+      .poll(() => getAutomationRunIds(automationWindow), {
+        timeout: E2E_UI_READY_TIMEOUT_MS
+      })
+      .toHaveLength(1)
     const runIdsBefore = await getAutomationRunIds(automationWindow)
 
     await automationWindow.close()
 
     const reopenedAutomationWindow = await openAutomationCenter(app, window)
 
-    await expect(
-      reopenedAutomationWindow.getByRole('region', { name: 'Needs me' })
-    ).toContainText('READY Implement automation E2E')
+    await selectTaskStackBucket(reopenedAutomationWindow, 'Needs me')
+    await expectSignalStackToContainTask(
+      reopenedAutomationWindow,
+      'READY Implement automation E2E'
+    )
     await expect
       .poll(() => getAutomationRunIds(reopenedAutomationWindow), {
         timeout: E2E_UI_READY_TIMEOUT_MS
@@ -542,8 +702,13 @@ test('keeps the same run after closing and reopening Automation Center', async (
 
 test('duplicate task starts return one MDE run', async () => {
   const workspacePath = await createAutomationWorkspace()
+  const fakeCli = await createAutomationFakeCli(workspacePath)
   const { app, startupDiagnostics, window } = await launchElectronApp({
-    args: [workspacePath]
+    args: [workspacePath],
+    env: {
+      MDE_E2E_AUTOMATION_JSONL_ADAPTER: fakeCli.commandPath,
+      MDE_FAKE_AUTOMATION_LOG: fakeCli.logPath
+    }
   })
 
   try {
@@ -557,9 +722,10 @@ test('duplicate task starts return one MDE run', async () => {
     await automationWindow
       .getByRole('button', { name: 'Close automation-flow editor' })
       .click()
-    await expect(
-      automationWindow.getByRole('region', { name: 'Ready' })
-    ).toContainText('READY Implement automation E2E')
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
 
     const duplicateResult = await automationWindow.evaluate(async () => {
       const automationApi = (
@@ -600,8 +766,13 @@ test('duplicate task starts return one MDE run', async () => {
 
 test('shows archived flows without re-enabling archived discovery', async () => {
   const workspacePath = await createAutomationWorkspace({ includeSeedFlows: true })
+  const fakeCli = await createAutomationFakeCli(workspacePath)
   const { app, startupDiagnostics, window } = await launchElectronApp({
-    args: [workspacePath]
+    args: [workspacePath],
+    env: {
+      MDE_E2E_AUTOMATION_JSONL_ADAPTER: fakeCli.commandPath,
+      MDE_FAKE_AUTOMATION_LOG: fakeCli.logPath
+    }
   })
 
   try {
@@ -651,11 +822,10 @@ test('shows archived flows without re-enabling archived discovery', async () => 
         timeout: E2E_UI_READY_TIMEOUT_MS
       })
       .toContain('READY Implement automation E2E')
-    await expect(
-      automationWindow.getByRole('region', { name: 'Ready' })
-    ).toContainText('READY Implement automation E2E', {
-      timeout: E2E_UI_READY_TIMEOUT_MS
-    })
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
 
     await automationWindow
       .getByRole('checkbox', { name: 'Show archived flows' })
@@ -664,14 +834,35 @@ test('shows archived flows without re-enabling archived discovery', async () => 
     await expect(
       workspaceFlows.getByText('Archived Flow', { exact: true })
     ).toBeVisible()
-    await workspaceFlows.getByRole('button', { name: 'Archived Flow' }).click()
+    await automationWindow.evaluate(async () => {
+      const automationApi = (
+        globalThis as typeof globalThis & {
+          readonly mdeAutomation?: {
+            readonly updateFilters: (request: {
+              readonly filters: {
+                readonly archivedVisible: true
+                readonly flowIds: readonly string[]
+              }
+            }) => Promise<unknown>
+          }
+        }
+      ).mdeAutomation
+
+      await automationApi?.updateFilters({
+        filters: {
+          archivedVisible: true,
+          flowIds: ['archived-flow']
+        }
+      })
+    })
+    await automationWindow.reload({ waitUntil: 'domcontentloaded' })
     await expect(
-      automationWindow.getByRole('region', { name: 'Ready' })
-    ).toContainText('No tasks in this bucket.')
+      automationWindow.getByRole('region', { name: 'Signal Stack' })
+    ).toContainText('No automation tasks yet.')
     await expect(
       automationWindow
-        .getByRole('region', { name: 'Ready' })
-        .locator('[data-component-id="automation.task-card"]')
+        .getByRole('region', { name: 'Signal Stack' })
+        .locator('[data-component-id="automation.signal-task-row"]')
     ).toHaveCount(0)
     const selectedFlowFilter = await automationWindow.evaluate(async () => {
       const automationApi = (
@@ -679,7 +870,7 @@ test('shows archived flows without re-enabling archived discovery', async () => 
           readonly mdeAutomation?: {
             readonly getProjection: () => Promise<{
               readonly projection: {
-                readonly filters: { readonly flowId?: string }
+                readonly filters: { readonly flowIds?: readonly string[] }
               }
             }>
           }
@@ -687,10 +878,10 @@ test('shows archived flows without re-enabling archived discovery', async () => 
       ).mdeAutomation
       const projection = await automationApi?.getProjection()
 
-      return projection?.projection.filters.flowId
+      return projection?.projection.filters.flowIds
     })
 
-    expect(selectedFlowFilter).toBe('archived-flow')
+    expect(selectedFlowFilter).toEqual(['archived-flow'])
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

@@ -47,10 +47,12 @@ const CODEX_GENERATE_TS_PROBE_TIMEOUT_MS = 30_000
 const now = (): string => new Date().toISOString()
 
 const createUnsupportedReport = (
-  details?: string
+  details?: string,
+  code: 'authentication-required' | 'protocol-unsupported' = 'protocol-unsupported'
 ): AgentChatCapabilityReport => ({
+  authenticated: code === 'authentication-required' ? false : undefined,
   diagnostic: createAgentChatDiagnostic({
-    code: 'protocol-unsupported',
+    code,
     details,
     recoverable: false
   }),
@@ -77,6 +79,20 @@ const readGeneratedProtocolSource = async (directory: string): Promise<string> =
 
 const hasRequiredProtocol = (source: string): boolean =>
   REQUIRED_PROTOCOL_MARKERS.every((marker) => source.includes(marker))
+
+const isLoggedIn = (stdout: string): boolean =>
+  /^logged in\b/iu.test(stdout.trim())
+
+const probeCodexLoginStatus = async (
+  options: CodexAgentChatAdapterOptions,
+  command: string
+): Promise<void> => {
+  const status = await options.processRunner.execFile(command, ['login', 'status'])
+
+  if (!isLoggedIn(status.stdout)) {
+    throw new Error(status.stdout.trim() || 'Codex is not logged in')
+  }
+}
 
 const createClient = (
   options: CodexAgentChatAdapterOptions
@@ -391,7 +407,18 @@ export const createCodexAgentChatAdapter = (
   return {
     createCapabilityCacheKey: async (): Promise<string | undefined> => {
       const version = await options.processRunner.execFile(command, ['--version'])
-      return version.stdout.trim()
+      try {
+        const loginStatus = await options.processRunner.execFile(command, [
+          'login',
+          'status'
+        ])
+
+        return `${version.stdout.trim()}:${loginStatus.stdout.trim()}`
+      } catch (error) {
+        return `${version.stdout.trim()}:login-status-unavailable:${
+          error instanceof Error ? error.message : 'unknown'
+        }`
+      }
     },
     engineId: 'codex',
     listNativeSessions: async (input) => {
@@ -410,6 +437,14 @@ export const createCodexAgentChatAdapter = (
       let tempDirectory: string | undefined
       try {
         const version = await options.processRunner.execFile(command, ['--version'])
+        try {
+          await probeCodexLoginStatus(options, command)
+        } catch (error) {
+          return createUnsupportedReport(
+            error instanceof Error ? error.message : 'Codex login status failed',
+            'authentication-required'
+          )
+        }
         await options.processRunner.execFile(command, ['app-server', '--help'])
         tempDirectory = await mkdtemp(join(tmpdir(), 'mde-codex-app-server-types-'))
         let generatedStdout = ''
@@ -443,6 +478,7 @@ export const createCodexAgentChatAdapter = (
         }
 
         return {
+          authenticated: true,
           engineId: 'codex',
           nativeVersion: version.stdout.trim(),
           verdict: 'supported'

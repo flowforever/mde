@@ -58,6 +58,56 @@ const pickActiveRun = (
 const getProjectedTaskTitle = (overlay: TaskOverlay): string =>
   overlay.candidate?.title ?? overlay.latestReport?.title ?? overlay.taskId
 
+const getDoneTaskMetadata = (
+  overlay: TaskOverlay
+): Pick<
+  AutomationProjectedTask,
+  | 'engine'
+  | 'priority'
+  | 'relativePath'
+  | 'sourcePath'
+  | 'sourceType'
+  | 'sourceUri'
+  | 'workspaceId'
+> =>
+  Object.freeze({
+    ...(overlay.candidate?.engine !== undefined
+      ? { engine: overlay.candidate.engine }
+      : overlay.latestReport?.engine !== undefined
+        ? { engine: overlay.latestReport.engine }
+        : {}),
+    ...(overlay.candidate?.priority !== undefined
+      ? { priority: overlay.candidate.priority }
+      : overlay.latestReport?.priority !== undefined
+        ? { priority: overlay.latestReport.priority }
+        : {}),
+    ...(overlay.candidate?.relativePath !== undefined
+      ? { relativePath: overlay.candidate.relativePath }
+      : overlay.latestReport?.relativePath !== undefined
+        ? { relativePath: overlay.latestReport.relativePath }
+        : {}),
+    ...(overlay.candidate?.sourcePath !== undefined
+      ? { sourcePath: overlay.candidate.sourcePath }
+      : overlay.latestReport?.sourcePath !== undefined
+        ? { sourcePath: overlay.latestReport.sourcePath }
+        : {}),
+    ...(overlay.candidate?.sourceType !== undefined
+      ? { sourceType: overlay.candidate.sourceType }
+      : overlay.latestReport?.sourceType !== undefined
+        ? { sourceType: overlay.latestReport.sourceType }
+        : {}),
+    ...(overlay.candidate?.sourceUri !== undefined
+      ? { sourceUri: overlay.candidate.sourceUri }
+      : overlay.latestReport?.sourceUri !== undefined
+        ? { sourceUri: overlay.latestReport.sourceUri }
+        : {}),
+    ...(overlay.candidate?.workspaceId !== undefined
+      ? { workspaceId: overlay.candidate.workspaceId }
+      : overlay.latestReport?.workspaceId !== undefined
+        ? { workspaceId: overlay.latestReport.workspaceId }
+        : {})
+  })
+
 const createProjectedTask = (
   overlay: TaskOverlay
 ): AutomationProjectedTask | null => {
@@ -67,13 +117,31 @@ const createProjectedTask = (
     return Object.freeze({
       activeRunId: activeRun.runId,
       automationFlowId: activeRun.automationFlowId,
+      ...(overlay.candidate?.automationFlowOwnerKey !== undefined
+        ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
+        : {}),
       bucket: 'needs-me',
       engine: overlay.candidate?.engine,
       latestReportId: overlay.latestReport?.reportId,
+      ...(overlay.candidate?.priority !== undefined
+        ? { priority: overlay.candidate.priority }
+        : {}),
+      ...(overlay.candidate?.relativePath !== undefined
+        ? { relativePath: overlay.candidate.relativePath }
+        : {}),
       sourceItemId: activeRun.sourceItemId,
+      ...(overlay.candidate?.sourcePath !== undefined
+        ? { sourcePath: overlay.candidate.sourcePath }
+        : {}),
       sourceType: overlay.candidate?.sourceType,
+      ...(overlay.candidate?.sourceUri !== undefined
+        ? { sourceUri: overlay.candidate.sourceUri }
+        : {}),
       taskId: overlay.taskId,
-      title: getProjectedTaskTitle(overlay)
+      title: getProjectedTaskTitle(overlay),
+      ...(overlay.candidate?.workspaceId !== undefined
+        ? { workspaceId: overlay.candidate.workspaceId }
+        : {})
     })
   }
 
@@ -81,20 +149,42 @@ const createProjectedTask = (
     return Object.freeze({
       activeRunId: activeRun.runId,
       automationFlowId: activeRun.automationFlowId,
+      ...(overlay.candidate?.automationFlowOwnerKey !== undefined
+        ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
+        : {}),
       bucket: 'running',
       engine: overlay.candidate?.engine,
       latestReportId: overlay.latestReport?.reportId,
+      ...(overlay.candidate?.priority !== undefined
+        ? { priority: overlay.candidate.priority }
+        : {}),
+      ...(overlay.candidate?.relativePath !== undefined
+        ? { relativePath: overlay.candidate.relativePath }
+        : {}),
       sourceItemId: activeRun.sourceItemId,
+      ...(overlay.candidate?.sourcePath !== undefined
+        ? { sourcePath: overlay.candidate.sourcePath }
+        : {}),
       sourceType: overlay.candidate?.sourceType,
+      ...(overlay.candidate?.sourceUri !== undefined
+        ? { sourceUri: overlay.candidate.sourceUri }
+        : {}),
       taskId: overlay.taskId,
-      title: getProjectedTaskTitle(overlay)
+      title: getProjectedTaskTitle(overlay),
+      ...(overlay.candidate?.workspaceId !== undefined
+        ? { workspaceId: overlay.candidate.workspaceId }
+        : {})
     })
   }
 
   if (overlay.latestReport !== undefined) {
     return Object.freeze({
       automationFlowId: overlay.latestReport.automationFlowId,
+      ...(overlay.candidate?.automationFlowOwnerKey !== undefined
+        ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
+        : {}),
       bucket: 'done',
+      ...getDoneTaskMetadata(overlay),
       latestReportId: overlay.latestReport.reportId,
       sourceItemId: overlay.latestReport.sourceItemId,
       taskId: overlay.taskId,
@@ -105,12 +195,30 @@ const createProjectedTask = (
   if (overlay.candidate !== undefined) {
     return Object.freeze({
       automationFlowId: overlay.candidate.automationFlowId,
+      ...(overlay.candidate.automationFlowOwnerKey !== undefined
+        ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
+        : {}),
       bucket: 'ready',
       engine: overlay.candidate.engine,
+      ...(overlay.candidate.priority !== undefined
+        ? { priority: overlay.candidate.priority }
+        : {}),
+      ...(overlay.candidate.relativePath !== undefined
+        ? { relativePath: overlay.candidate.relativePath }
+        : {}),
       sourceItemId: overlay.candidate.sourceItemId,
+      ...(overlay.candidate.sourcePath !== undefined
+        ? { sourcePath: overlay.candidate.sourcePath }
+        : {}),
       sourceType: overlay.candidate.sourceType,
+      ...(overlay.candidate.sourceUri !== undefined
+        ? { sourceUri: overlay.candidate.sourceUri }
+        : {}),
       taskId: overlay.taskId,
-      title: overlay.candidate.title
+      title: overlay.candidate.title,
+      ...(overlay.candidate.workspaceId !== undefined
+        ? { workspaceId: overlay.candidate.workspaceId }
+        : {})
     })
   }
 
