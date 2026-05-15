@@ -1734,6 +1734,34 @@ test('loads README markdown into the block editor surface', async () => {
   }
 })
 
+test('keeps the open Markdown editor content visible when another Explorer folder is selected', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [`--test-workspace=${workspacePath}`]
+  })
+
+  try {
+    await openNewWorkspace(window)
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+
+    const editor = window.getByTestId('markdown-block-editor')
+
+    await expect(editor).toBeVisible()
+    await expect(editor).toContainText('Fixture Workspace')
+    await expect(editor).toContainText('Root markdown file.')
+
+    await window.getByRole('button', { name: /docs folder/i }).click()
+
+    await expect(editor).toBeVisible()
+    await expect(editor).toContainText('Fixture Workspace')
+    await expect(editor).toContainText('Root markdown file.')
+    await expect(window).toHaveTitle(`README.md - ${await realpath(workspacePath)}`)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('syncs an open Markdown file after external disk changes', async () => {
   const workspacePath = await createFixtureWorkspace()
   const readmePath = join(workspacePath, 'README.md')

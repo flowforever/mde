@@ -2805,6 +2805,8 @@ export const App = (): React.JSX.Element => {
     state.draftMarkdown ??
     state.loadedFile?.contents ??
     "";
+  const editorSavedMarkdown =
+    historyPreview?.contents ?? state.loadedFile?.contents ?? "";
   const editorMarkdownAssetResolver = useMemo(
     () =>
       createDesktopMarkdownAssetResolver({
@@ -3975,7 +3977,7 @@ export const App = (): React.JSX.Element => {
                     ? collectMarkdownFilePaths(state.workspace.tree)
                     : []
                 }
-                markdown={editorMarkdown}
+                markdown={editorSavedMarkdown}
                 markdownAssetResolver={editorMarkdownAssetResolver}
                 onCreateLinkedMarkdown={createLinkedMarkdownWithEditorHost}
                 onExitHistoryPreview={closeHistoryPreview}

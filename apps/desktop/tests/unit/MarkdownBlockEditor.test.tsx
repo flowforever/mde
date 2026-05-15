@@ -1535,6 +1535,186 @@ describe("MarkdownBlockEditor accessibility", () => {
     });
   });
 
+  it("rehydrates the active draft when the BlockNote editor instance is recreated for the same document", async () => {
+    const user = userEvent.setup();
+    const onImageUpload = vi.fn();
+    const onMarkdownChange = vi.fn();
+    const onSaveRequest = vi.fn();
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Fixture Workspace"
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown="# Fixture Workspace"
+          onImageUpload={onImageUpload}
+          onMarkdownChange={onMarkdownChange}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    mockBlockNoteState.lastEditor?.blocksToMarkdownLossy.mockResolvedValue(
+      "# Unsaved automation draft",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /trigger editor change/i }),
+    );
+    await waitFor(() => {
+      expect(onMarkdownChange).toHaveBeenCalledWith(
+        "# Unsaved automation draft",
+      );
+    });
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Unsaved automation draft"
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Fixture Workspace"
+          onImageUpload={onImageUpload}
+          onMarkdownChange={onMarkdownChange}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    mockBlockNoteState.lastEditor = undefined;
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown="# Unsaved automation draft"
+          errorMessage={null}
+          isDirty
+          isSaving={false}
+          markdown="# Fixture Workspace"
+          onImageUpload={onImageUpload}
+          onMarkdownChange={onMarkdownChange}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+    expect(mockBlockNoteState.lastEditor).toBeDefined();
+    const recreatedEditor = mockBlockNoteState.lastEditor as unknown as {
+      readonly tryParseMarkdownToBlocks: ReturnType<typeof vi.fn>;
+    };
+
+    expect(
+      recreatedEditor.tryParseMarkdownToBlocks,
+    ).toHaveBeenCalledWith("# Unsaved automation draft");
+    expect(
+      recreatedEditor.tryParseMarkdownToBlocks,
+    ).not.toHaveBeenCalledWith("# Fixture Workspace");
+
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    await waitFor(() => {
+      expect(onSaveRequest).toHaveBeenCalledWith(
+        "# Unsaved automation draft",
+        "blur-autosave",
+      );
+    });
+  });
+
+  it("keeps clean recreated editor hydration out of the save path", async () => {
+    const user = userEvent.setup();
+    const onSaveRequest = vi.fn();
+    const savedMarkdown = "# Fixture Workspace";
+    const { rerender } = render(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={savedMarkdown}
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown={savedMarkdown}
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    mockBlockNoteState.lastEditor = undefined;
+
+    rerender(
+      <>
+        <MarkdownBlockEditor
+          colorScheme="light"
+          draftMarkdown={savedMarkdown}
+          errorMessage={null}
+          isDirty={false}
+          isSaving={false}
+          markdown={savedMarkdown}
+          onImageUpload={vi.fn()}
+          onMarkdownChange={vi.fn()}
+          onSaveRequest={onSaveRequest}
+          path="README.md"
+          text={text}
+          workspaceRoot="/workspace"
+        />
+        <button type="button">Outside editor</button>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(
+        mockBlockNoteState.lastEditor?.replaceBlocks,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: /outside editor/i }));
+
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 250);
+      });
+    });
+    expect(onSaveRequest).not.toHaveBeenCalled();
+  });
+
   it("passes pasted image files to the provided image upload handler", async () => {
     const onImageUpload = vi
       .fn()

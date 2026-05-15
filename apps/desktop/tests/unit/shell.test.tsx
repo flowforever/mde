@@ -16,6 +16,7 @@ import { COMPONENT_IDS } from "../../src/renderer/src/componentIds";
 interface MockMarkdownBlockEditorProps {
   readonly activeSearchMatchIndex?: number;
   readonly colorScheme: "dark" | "light";
+  readonly draftMarkdown: string;
   readonly errorMessage: string | null;
   readonly isDirty: boolean;
   readonly isReadOnly?: boolean;
@@ -26,6 +27,10 @@ interface MockMarkdownBlockEditorProps {
   readonly onMarkdownChange: (contents: string) => void;
   readonly onOpenLink?: (href: string) => void;
   readonly onRestoreHistoryPreview?: () => void;
+  readonly onSaveRequest?: (
+    contents?: string,
+    reason?: "blur-autosave" | "idle-autosave" | "manual",
+  ) => Promise<void> | void;
   readonly onSearchStateChange?: (state: {
     readonly activeMatchIndex: number;
     readonly matchCount: number;
@@ -61,7 +66,7 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
       React.useImperativeHandle(
         ref,
         () => ({
-          getMarkdown: () => Promise.resolve(props.markdown),
+          getMarkdown: () => Promise.resolve(props.draftMarkdown),
           getSelectionContext: async () => {
             await mockEditorState.selectionContextGate;
             return {
@@ -70,7 +75,7 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
             };
           },
         }),
-        [props.markdown],
+        [props.draftMarkdown],
       );
 
       return (
@@ -81,7 +86,11 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
           }}
         >
           <span>{props.path}</span>
-          <span>{props.markdown}</span>
+          <span>{props.draftMarkdown}</span>
+          <span
+            data-saved-markdown={props.markdown}
+            data-testid="mock-editor-saved-markdown"
+          />
           <span data-testid="mock-editor-color-scheme">
             {props.colorScheme}
           </span>
@@ -172,6 +181,21 @@ vi.mock("@mde/editor-react", async (importOriginal) => {
             type="button"
           >
             Open mock known workspace link
+          </button>
+          <button
+            onClick={() => {
+              if (props.isReadOnly) {
+                return;
+              }
+
+              void props.onSaveRequest?.(
+                props.draftMarkdown,
+                "blur-autosave",
+              );
+            }}
+            type="button"
+          >
+            Blur-save mock markdown
           </button>
         </section>
       );
@@ -3727,6 +3751,173 @@ describe("App shell", () => {
       screen.queryByRole("region", { name: /ai result/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("# Notes")).toBeVisible();
+  });
+
+  it("keeps the current Markdown draft visible when a different Explorer folder is selected", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [
+          { name: "README.md", path: "README.md", type: "file" },
+          {
+            children: [
+              { name: "intro.md", path: "docs/intro.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ],
+        type: "workspace",
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: "README.md",
+          recentFilePaths: ["README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("# Original")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /docs folder/i }));
+
+    const editor = screen.getByRole("region", { name: /mock editor/i });
+
+    expect(within(editor).getByText("# Original")).toBeVisible();
+    expect(within(editor).getByText("README.md")).toBeVisible();
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledTimes(1);
+    expect(editorApi.writeMarkdownFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps a dirty Markdown draft saveable after selecting a different Explorer folder", async () => {
+    const user = userEvent.setup();
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [
+          { name: "README.md", path: "README.md", type: "file" },
+          {
+            children: [
+              { name: "intro.md", path: "docs/intro.md", type: "file" },
+            ],
+            name: "docs",
+            path: "docs",
+            type: "directory",
+          },
+        ],
+        type: "workspace",
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# Original",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn().mockResolvedValue(undefined),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem(
+      "mde.workspaceFileHistory",
+      JSON.stringify([
+        {
+          lastOpenedFilePath: "README.md",
+          recentFilePaths: ["README.md"],
+          workspaceRoot: "/workspace",
+        },
+      ]),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("# Original")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: /change mock markdown/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /docs folder/i }));
+
+    const editor = screen.getByRole("region", { name: /mock editor/i });
+
+    expect(within(editor).getByText("# Changed 1")).toBeVisible();
+    expect(within(editor).getByTestId("mock-editor-saved-markdown")).toHaveAttribute(
+      "data-saved-markdown",
+      "# Original",
+    );
+    expect(within(editor).getByText("Unsaved changes")).toBeVisible();
+
+    await user.click(
+      within(editor).getByRole("button", { name: /blur-save mock markdown/i }),
+    );
+
+    await waitFor(() => {
+      expect(editorApi.writeMarkdownFile).toHaveBeenCalledWith(
+        "README.md",
+        "# Changed 1",
+        "/workspace",
+      );
+    });
   });
 
   it("keeps a cached AI result visible while the current Markdown file reloads", async () => {

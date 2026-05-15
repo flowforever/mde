@@ -9,6 +9,7 @@ import {
   createAppText,
 } from "../../src/renderer/src/i18n/appLanguage";
 import type { AppState } from "../../src/renderer/src/app/appTypes";
+import type { Workspace } from "../../src/shared/workspace";
 
 const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en);
 
@@ -30,6 +31,55 @@ const renderExplorerMarkup = (state: AppState): string =>
   );
 
 describe("history recovery visibility integration", () => {
+  const workspace: Workspace = {
+    name: "workspace",
+    rootPath: "/workspace",
+    tree: [
+      {
+        name: "README.md",
+        path: "README.md",
+        type: "file",
+      },
+      {
+        children: [
+          {
+            name: "intro.md",
+            path: "docs/intro.md",
+            type: "file",
+          },
+        ],
+        name: "docs",
+        path: "docs",
+        type: "directory",
+      },
+    ],
+  };
+
+  it("preserves the loaded Markdown document when Explorer focus moves to a directory", () => {
+    const loadedState = {
+      ...createInitialAppState(),
+      draftMarkdown: "# Current draft",
+      isDirty: true,
+      loadedFile: {
+        contents: "# Current",
+        path: "README.md",
+      },
+      selectedEntryPath: "README.md",
+      selectedFilePath: "README.md",
+      workspace,
+    };
+
+    const directorySelectedState = appReducer(loadedState, {
+      entryPath: "docs",
+      type: "explorer/entry-selected",
+    });
+
+    expect(directorySelectedState.loadedFile).toEqual(loadedState.loadedFile);
+    expect(directorySelectedState.draftMarkdown).toBe("# Current draft");
+    expect(directorySelectedState.selectedEntryPath).toBe("docs");
+    expect(directorySelectedState.selectedFilePath).toBe("README.md");
+  });
+
   it("drives the explorer recovery section from app history state", () => {
     const workspaceState = appReducer(createInitialAppState(), {
       type: "workspace/opened",

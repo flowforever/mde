@@ -323,6 +323,7 @@ export const MarkdownBlockEditor = forwardRef<
   const pendingBlurSaveTimeoutRef = useRef<number | null>(null);
   const latestDraftMarkdownRef = useRef(draftMarkdown);
   const lastSerializedEditorMarkdownRef = useRef<string | null>(null);
+  const activeEditorRef = useRef(editor);
   const textRef = useRef(text);
   const previousTextRef = useRef(text);
   const documentIdentity = useMemo(
@@ -346,10 +347,6 @@ export const MarkdownBlockEditor = forwardRef<
   useEffect(() => {
     textRef.current = text;
   }, [text]);
-  const persistedMarkdownDocument = useMemo(
-    () => splitMarkdownFrontmatter(markdown),
-    [markdown],
-  );
   const draftMarkdownDocument = useMemo(
     () => splitMarkdownFrontmatter(draftMarkdown),
     [draftMarkdown],
@@ -357,10 +354,10 @@ export const MarkdownBlockEditor = forwardRef<
   const editorMarkdown = useMemo(
     () =>
       prepareMarkdownForEditor(
-        persistedMarkdownDocument.body,
+        draftMarkdownDocument.body,
         markdownAssetResolver,
       ),
-    [markdownAssetResolver, persistedMarkdownDocument.body],
+    [draftMarkdownDocument.body, markdownAssetResolver],
   );
   const directoryOptions = useMemo<readonly LinkDirectoryOption[]>(() => {
     if (!linkDialogState) {
@@ -745,7 +742,8 @@ export const MarkdownBlockEditor = forwardRef<
 
         isHydratingRef.current = true;
         replaceEditorDocumentWithoutUndoHistory(editor, blocks as Block[]);
-        lastSerializedEditorMarkdownRef.current = markdown;
+        lastSerializedEditorMarkdownRef.current = draftMarkdown;
+        hasLocalChangesRef.current = draftMarkdown !== markdown;
         setParseErrorMessage(null);
         window.setTimeout(() => {
           if (isCurrent()) {
@@ -764,7 +762,7 @@ export const MarkdownBlockEditor = forwardRef<
         }
       }
     },
-    [editor, editorMarkdown, markdown],
+    [draftMarkdown, editor, editorMarkdown, markdown],
   );
 
   useImperativeHandle(
@@ -786,6 +784,18 @@ export const MarkdownBlockEditor = forwardRef<
     hasLocalChangesRef.current = false;
     lastSerializedEditorMarkdownRef.current = null;
   }, [documentIdentity]);
+
+  useEffect(() => {
+    if (activeEditorRef.current === editor) {
+      return;
+    }
+
+    activeEditorRef.current = editor;
+    pendingSaveAfterCurrentRef.current = null;
+    hasLocalChangesRef.current = false;
+    lastSerializedEditorMarkdownRef.current = null;
+    isHydratingRef.current = false;
+  }, [editor]);
 
   useEffect(() => {
     let isCurrent = true;

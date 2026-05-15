@@ -99,6 +99,32 @@ describe('appReducer', () => {
     expect(state.workspace).toEqual(workspace)
   })
 
+  it('keeps the current Markdown file loaded when selecting a directory entry', () => {
+    const loadedState = {
+      ...createInitialAppState(),
+      draftMarkdown: '# README draft',
+      isDirty: true,
+      loadedFile: {
+        contents: '# README',
+        path: 'README.md'
+      },
+      selectedEntryPath: 'README.md',
+      selectedFilePath: 'README.md',
+      workspace
+    }
+
+    const state = appReducer(loadedState, {
+      entryPath: 'docs',
+      type: 'explorer/entry-selected'
+    })
+
+    expect(state.loadedFile).toEqual(loadedState.loadedFile)
+    expect(state.draftMarkdown).toBe('# README draft')
+    expect(state.isDirty).toBe(true)
+    expect(state.selectedEntryPath).toBe('docs')
+    expect(state.selectedFilePath).toBe('README.md')
+  })
+
   it('tracks file loading for the selected file', () => {
     const state = appReducer(
       { ...createInitialAppState(), workspace },
