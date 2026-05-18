@@ -1,6 +1,6 @@
 {
   "name": "@mde/desktop",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "description": "MDE Electron desktop app.",
   "productName": "MDE",
   "private": true,

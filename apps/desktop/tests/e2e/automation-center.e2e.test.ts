@@ -866,6 +866,20 @@ const selectTaskByTitle = async (
   await taskRow.click()
 }
 
+const selectTaskByTitleAndWaitForFlowline = async (
+  automationWindow: Page,
+  taskTitle: string,
+  taskSourcePath: string
+): Promise<void> => {
+  await selectTaskByTitle(automationWindow, taskTitle)
+  await expect(
+    automationWindow.getByRole('region', { name: 'Flowline' })
+  ).toContainText(taskSourcePath, { timeout: E2E_UI_READY_TIMEOUT_MS })
+  await expect(
+    automationWindow.getByRole('button', { name: 'Start with selected executor' })
+  ).toBeEnabled({ timeout: E2E_UI_READY_TIMEOUT_MS })
+}
+
 const expectSelectedFlowlinePhaseStatus = async (
   automationWindow: Page,
   phaseTitle: string,
@@ -2025,7 +2039,11 @@ test('covers a valid automation-flow across lifecycle, task buckets, and Flowlin
       automationWindow.getByRole('button', { name: 'Start with selected executor' })
     ).toBeEnabled()
 
-    await selectTaskByTitle(automationWindow, 'READY Matrix done task')
+    await selectTaskByTitleAndWaitForFlowline(
+      automationWindow,
+      'READY Matrix done task',
+      '.mde/docs/tasks/done.md'
+    )
     await automationWindow
       .getByRole('button', { name: 'Start with selected executor' })
       .click()
@@ -2054,7 +2072,11 @@ test('covers a valid automation-flow across lifecycle, task buckets, and Flowlin
     )
 
     await selectTaskStackBucket(automationWindow, 'Ready')
-    await selectTaskByTitle(automationWindow, 'READY Matrix running requirement')
+    await selectTaskByTitleAndWaitForFlowline(
+      automationWindow,
+      'READY Matrix running requirement',
+      '.mde/docs/requirements/running.md'
+    )
     await automationWindow
       .getByRole('button', { name: 'Start with selected executor' })
       .click()
@@ -2083,7 +2105,11 @@ test('covers a valid automation-flow across lifecycle, task buckets, and Flowlin
     )
 
     await selectTaskStackBucket(automationWindow, 'Ready')
-    await selectTaskByTitle(automationWindow, 'READY Matrix needs me bug')
+    await selectTaskByTitleAndWaitForFlowline(
+      automationWindow,
+      'READY Matrix needs me bug',
+      '.mde/docs/bugs/needs-me.md'
+    )
     await automationWindow
       .getByRole('button', { name: 'Start with selected executor' })
       .click()
