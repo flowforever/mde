@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createAutomationExecutorSnapshotId,
+  createAutomationTaskDataId,
+  createAutomationTaskDataSnapshotId,
   createAutomationTaskId,
   createUserPromptSourceItemId,
   createWorkspaceMarkdownSourceItemId
@@ -61,6 +64,65 @@ describe('automation task identity', () => {
       createUserPromptSourceItemId({
         relativePath,
         userPromptRoot: '/prompt/root-b'
+      })
+    )
+  })
+
+  it('creates owner-scoped task data ids', () => {
+    expect(
+      createAutomationTaskDataId({
+        ownerKey: 'workspace:/repo:flow:flow-a',
+        sourceItemId: 'source-a'
+      })
+    ).not.toBe(
+      createAutomationTaskDataId({
+        ownerKey: 'workspace:/repo:flow:flow-b',
+        sourceItemId: 'source-a'
+      })
+    )
+  })
+
+  it('creates stable task data snapshot ids from source and payload hashes', () => {
+    expect(
+      createAutomationTaskDataSnapshotId({
+        normalizedTaskPayloadHash: 'payload-a',
+        sourceSnapshotHash: 'source-a',
+        taskDataId: 'task-data-a'
+      })
+    ).toBe(
+      createAutomationTaskDataSnapshotId({
+        normalizedTaskPayloadHash: 'payload-a',
+        sourceSnapshotHash: 'source-a',
+        taskDataId: 'task-data-a'
+      })
+    )
+    expect(
+      createAutomationTaskDataSnapshotId({
+        normalizedTaskPayloadHash: 'payload-b',
+        sourceSnapshotHash: 'source-a',
+        taskDataId: 'task-data-a'
+      })
+    ).not.toBe(
+      createAutomationTaskDataSnapshotId({
+        normalizedTaskPayloadHash: 'payload-a',
+        sourceSnapshotHash: 'source-a',
+        taskDataId: 'task-data-a'
+      })
+    )
+  })
+
+  it('creates executor snapshot ids from owner, executor, and definition fingerprint', () => {
+    expect(
+      createAutomationExecutorSnapshotId({
+        executorDefinitionFingerprint: 'fingerprint-a',
+        executorId: 'implementation',
+        ownerKey: 'workspace:/repo:flow:flow-a'
+      })
+    ).not.toBe(
+      createAutomationExecutorSnapshotId({
+        executorDefinitionFingerprint: 'fingerprint-b',
+        executorId: 'implementation',
+        ownerKey: 'workspace:/repo:flow:flow-a'
       })
     )
   })

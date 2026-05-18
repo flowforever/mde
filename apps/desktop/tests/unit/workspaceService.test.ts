@@ -14,6 +14,7 @@ describe('workspaceService', () => {
     await mkdir(join(rootPath, 'z-folder'))
     await mkdir(join(rootPath, 'a-folder'))
     await mkdir(join(rootPath, '.mde'))
+    await writeFile(join(rootPath, '.mde', 'automation.md'), '# Automation')
     await mkdir(join(rootPath, 'node_modules'))
     await writeFile(join(rootPath, 'README.md'), '# Readme')
     await writeFile(join(rootPath, 'alpha.md'), '# Alpha')
@@ -23,12 +24,50 @@ describe('workspaceService', () => {
     const workspace = await createWorkspaceService().openWorkspace(rootPath)
 
     expect(workspace.tree.map((node) => [node.type, node.name])).toEqual([
+      ['directory', '.mde'],
       ['directory', 'a-folder'],
       ['directory', 'z-folder'],
       ['file', 'alpha.md'],
       ['file', 'README.md']
     ])
+    expect(workspace.tree[0]).toEqual({
+      children: [
+        {
+          name: 'automation.md',
+          path: '.mde/automation.md',
+          type: 'file'
+        }
+      ],
+      name: '.mde',
+      path: '.mde',
+      type: 'directory'
+    })
     expect(Object.isFrozen(workspace.tree)).toBe(true)
+  })
+
+  it('keeps nested .mde directories out of regular content folders', async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), 'mde-nested-mde-workspace-'))
+
+    await mkdir(join(rootPath, 'docs', '.mde'), { recursive: true })
+    await writeFile(join(rootPath, 'docs', '.mde', 'asset.md'), '# Asset')
+    await writeFile(join(rootPath, 'docs', 'guide.md'), '# Guide')
+
+    const workspace = await createWorkspaceService().openWorkspace(rootPath)
+
+    expect(workspace.tree).toEqual([
+      {
+        children: [
+          {
+            name: 'guide.md',
+            path: 'docs/guide.md',
+            type: 'file'
+          }
+        ],
+        name: 'docs',
+        path: 'docs',
+        type: 'directory'
+      }
+    ])
   })
 
   it('opens a Markdown file from the deepest matching known workspace root', async () => {

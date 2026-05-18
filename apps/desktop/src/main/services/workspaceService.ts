@@ -8,12 +8,15 @@ import { assertPathInsideWorkspace, resolveWorkspacePath } from './pathSafety'
 const ignoredEntryNames = new Set([
   '.DS_Store',
   '.git',
-  '.mde',
   'dist',
   'node_modules',
   'out',
   'release'
 ])
+
+const shouldIgnoreEntry = (entryName: string, directoryPath: string): boolean =>
+  ignoredEntryNames.has(entryName) ||
+  (entryName === '.mde' && directoryPath.length > 0)
 
 export interface WorkspaceService {
   readonly inspectPath: (resourcePath: string) => Promise<WorkspacePathInfo>
@@ -131,7 +134,7 @@ export const createWorkspaceService = (): WorkspaceService => {
     const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
     const nodes = await Promise.all(
       entries.map(async (entry): Promise<TreeNode | null> => {
-        if (ignoredEntryNames.has(entry.name)) {
+        if (shouldIgnoreEntry(entry.name, directoryPath)) {
           return null
         }
 

@@ -127,19 +127,35 @@ const createFlowlinePhases = (
     })
   ])
 
+const getVisibleTasks = (
+  projection: AutomationProjection
+): readonly AutomationTaskCard[] => {
+  switch (projection.filters.bucket ?? 'ready') {
+    case 'done':
+      return projection.buckets.done
+    case 'needsMe':
+      return projection.buckets.needsMe
+    case 'running':
+      return projection.buckets.running
+    case 'ready':
+      return projection.buckets.ready
+  }
+}
+
 export const createAutomationCenterViewModel = (
   projection: AutomationProjection,
   selectedTaskId?: string | null
 ): AutomationCenterViewModel => {
   const projectionSelectedTaskId = selectedTaskId ?? projection.selectedTaskId
+  const visibleTasks = getVisibleTasks(projection)
   const selectedTask =
     selectedTaskId === null
       ? undefined
       : projectionSelectedTaskId === undefined
-      ? projection.tasks[0]
-      : projection.tasks.find(
+      ? visibleTasks[0]
+      : visibleTasks.find(
           (task) => task.taskId === projectionSelectedTaskId
-        ) ?? projection.tasks[0]
+        ) ?? visibleTasks[0]
 
   const phases =
     selectedTask === undefined
@@ -174,6 +190,6 @@ export const createAutomationCenterViewModel = (
     ...(selectedDecision !== undefined ? { selectedDecision } : {}),
     ...(selectedTask !== undefined ? { selectedTask } : {}),
     tasks: projection.tasks,
-    visibleTasks: projection.tasks
+    visibleTasks
   })
 }

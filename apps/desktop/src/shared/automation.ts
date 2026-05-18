@@ -5,6 +5,8 @@ import type {
   AutomationFlowSourceType,
   AutomationFlowStatus,
   AutomationFlowTemplateId,
+  AutomationFlowDiagnostic,
+  AutomationFlowExecutorType,
   AutomationRunKind,
   AutomationRunState,
   AutomationTaskBucket
@@ -16,9 +18,13 @@ export interface AutomationTaskCard {
   readonly activeRunId?: string
   readonly automationFlowId: string
   readonly automationFlowOwnerKey?: string
+  readonly blockingDiagnostics?: readonly AutomationFlowDiagnostic[]
   readonly bucket: AutomationTaskBucket
+  readonly eligibleExecutors?: readonly AutomationTaskExecutorSummary[]
   readonly engine?: AgentEngineId
+  readonly executorSnapshotId?: string
   readonly latestReportId?: string
+  readonly primaryExecutor?: AutomationTaskExecutorSummary
   readonly priority?: number
   readonly relativePath?: string
   readonly sourceItemId: string
@@ -26,12 +32,15 @@ export interface AutomationTaskCard {
   readonly sourceType?: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
   readonly title: string
   readonly workspaceId?: string
 }
 
 export interface AutomationFlowRow {
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly definitionPath?: string
   readonly diagnosticCount?: number
   readonly lifecycle: AutomationFlowLifecycle
@@ -49,7 +58,9 @@ export interface AutomationDiagnostic {
   readonly diagnosticId: string
   readonly message: string
   readonly messageKey?: string
+  readonly missingField?: string
   readonly severity: 'error' | 'warning'
+  readonly sectionName?: string
   readonly sourceFile?: string
   readonly taskId?: string
   readonly technicalMessage?: string
@@ -78,12 +89,55 @@ export interface AutomationReportSummary {
   readonly title: string
 }
 
+export type AutomationRunAction =
+  | 'abandon'
+  | 'open-native-session'
+  | 'resume'
+  | 'retry'
+  | 'view-evidence'
+
+export interface AutomationRunDiscoverySourceSummary {
+  readonly relativePath?: string
+  readonly sourceItemId: string
+  readonly sourcePath?: string
+  readonly sourceType: AutomationFlowSourceType
+  readonly sourceUri?: string
+  readonly title: string
+}
+
+export interface AutomationRunDiscoveryResultSummary {
+  readonly sourceCount: number
+  readonly sources: readonly AutomationRunDiscoverySourceSummary[]
+}
+
+export type AutomationRunProcessStep =
+  | {
+      readonly createdAt: string
+      readonly type: 'started'
+    }
+  | {
+      readonly createdAt: string
+      readonly sourceCount: number
+      readonly type: 'discovered-task-sources'
+    }
+  | {
+      readonly createdAt: string
+      readonly state: AutomationRunState
+      readonly type: 'state-updated'
+    }
+
 export interface AutomationRunSummary {
   readonly adapterSessionId?: string
   readonly adapterSessionLineage?: readonly string[]
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly automationFlowSnapshotId?: string
+  readonly availableActions?: readonly AutomationRunAction[]
+  readonly discoveryResult?: AutomationRunDiscoveryResultSummary
   readonly engine: AgentEngineId
+  readonly executorId?: string
+  readonly executorSnapshotId?: string
+  readonly processSteps?: readonly AutomationRunProcessStep[]
   readonly runId: string
   readonly runKind: AutomationRunKind
   readonly sourceItemId?: string
@@ -92,8 +146,11 @@ export interface AutomationRunSummary {
   readonly startedAt: string
   readonly state: AutomationRunState
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
   readonly title?: string
   readonly updatedAt: string
+  readonly workspaceId?: string
 }
 
 export interface AgentCliCapabilities {
@@ -153,11 +210,28 @@ export type AutomationProjectionBucketFilter =
   | 'ready'
   | 'done'
 
+export type AutomationCenterScopeId = 'global' | `workspace:${string}`
+
+export interface AutomationTaskExecutorSummary {
+  readonly displayName: string
+  readonly executorId: string
+  readonly executorSnapshotId?: string
+  readonly sourceClass?: string
+  readonly sourcePath?: string
+  readonly type: AutomationFlowExecutorType
+}
+
 export interface AutomationProjectionFilters {
   readonly archivedVisible?: boolean
   readonly bucket?: AutomationProjectionBucketFilter
   readonly flowIds?: readonly string[]
+  readonly flowOwnerKeys?: readonly string[]
+  readonly scopeIds?: readonly string[]
   readonly workspaceIds?: readonly string[]
+}
+
+export interface AutomationCenterFilters extends AutomationProjectionFilters {
+  readonly scopeIds?: readonly AutomationCenterScopeId[]
 }
 
 export interface AutomationProjection {
@@ -169,7 +243,7 @@ export interface AutomationProjection {
   }
   readonly decisions: readonly AutomationDecision[]
   readonly diagnostics: readonly AutomationDiagnostic[]
-  readonly filters: AutomationProjectionFilters
+  readonly filters: AutomationCenterFilters
   readonly flows: readonly AutomationFlowRow[]
   readonly generatedAt: string
   readonly reports: readonly AutomationReportSummary[]
@@ -180,8 +254,9 @@ export interface AutomationProjection {
 }
 
 export interface AutomationGetProjectionRequest {
-  readonly filters?: AutomationProjectionFilters
+  readonly filters?: AutomationCenterFilters
   readonly workspaceRoot?: string
+  readonly workspaceRoots?: readonly string[]
 }
 
 export interface AutomationGetProjectionResponse {
@@ -189,6 +264,10 @@ export interface AutomationGetProjectionResponse {
 }
 
 export interface AutomationStartRunCommand {
+  readonly executorId: string
+  readonly executorSnapshotId?: string
+  readonly taskDataId: string
+  readonly taskDataSnapshotId: string
   readonly taskId: string
   readonly type: 'start-run'
 }
@@ -210,7 +289,7 @@ export interface AutomationSubmitDecisionCommand {
 }
 
 export interface AutomationUpdateFiltersCommand {
-  readonly filters: AutomationProjectionFilters
+  readonly filters: AutomationCenterFilters
   readonly type: 'update-filters'
 }
 
@@ -255,10 +334,20 @@ export interface AutomationValidateTemplateInputResponse {
 export interface AutomationSetFlowLifecycleCommand {
   readonly filePath: string
   readonly lifecycle: AutomationFlowLifecycle
+  readonly workspaceRoot?: string
 }
 
 export interface AutomationArchiveFlowCommand {
   readonly filePath: string
+}
+
+export interface AutomationDeleteFlowCommand {
+  readonly filePath: string
+}
+
+export interface AutomationRenameFlowCommand {
+  readonly filePath: string
+  readonly name: string
 }
 
 export interface AutomationLoadFlowDefinitionCommand {
@@ -274,6 +363,70 @@ export interface AutomationOpenNativeSessionCommand {
   readonly runId: string
 }
 
+export interface AutomationGetExplorerProjectionRequest {
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationExecutorSummary {
+  readonly diagnostics?: readonly AutomationDiagnostic[]
+  readonly displayName: string
+  readonly executorId: string
+  readonly sourceClass?: string
+  readonly sourcePath?: string
+  readonly type: AutomationFlowExecutorType
+}
+
+export interface AutomationExplorerFlowSummary {
+  readonly appliedToWorkspace?: boolean
+  readonly executors: readonly AutomationExecutorSummary[]
+  readonly flowOwnerKey?: string
+  readonly id: string
+  readonly name: string
+  readonly scope: AutomationFlowScope
+  readonly sourceFile?: string
+}
+
+export interface AutomationExplorerProjection {
+  readonly diagnostics: readonly AutomationDiagnostic[]
+  readonly flows: readonly AutomationExplorerFlowSummary[]
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationGetExplorerProjectionResponse {
+  readonly projection: AutomationExplorerProjection
+}
+
+export interface AutomationCreateFlowDraftRequest {
+  readonly displayName: string
+  readonly flowId: string
+  readonly scope?: AutomationFlowScope
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationCreateExecutorDraftRequest {
+  readonly displayName: string
+  readonly executorId: string
+  readonly flowId: string
+  readonly scope?: AutomationFlowScope
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationApplyGlobalFlowRequest {
+  readonly flowId: string
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationOpenManagementTargetRequest {
+  readonly flowId?: string
+  readonly target: 'global' | 'workspace'
+  readonly workspaceRoot?: string
+}
+
+export interface AutomationOpenManagementTargetResponse {
+  readonly flowPath?: string
+  readonly rootPath: string
+}
+
 export interface AutomationApi {
   readonly archiveFlow: (
     command: AutomationArchiveFlowCommand
@@ -284,6 +437,21 @@ export interface AutomationApi {
   readonly createFlowFromTemplate: (
     request: AutomationCreateFlowFromTemplateRequest
   ) => Promise<AutomationFlowDefinitionDocument>
+  readonly deleteFlow: (
+    command: AutomationDeleteFlowCommand
+  ) => Promise<AutomationCommandResponse>
+  readonly applyGlobalFlowToWorkspace: (
+    request: AutomationApplyGlobalFlowRequest
+  ) => Promise<AutomationCommandResponse>
+  readonly createExecutorDraft: (
+    request: AutomationCreateExecutorDraftRequest
+  ) => Promise<AutomationFlowDefinitionDocument>
+  readonly createFlowDraft: (
+    request: AutomationCreateFlowDraftRequest
+  ) => Promise<AutomationFlowDefinitionDocument>
+  readonly getExplorerAutomationProjection: (
+    request?: AutomationGetExplorerProjectionRequest
+  ) => Promise<AutomationGetExplorerProjectionResponse>
   readonly getProjection: (
     request?: AutomationGetProjectionRequest
   ) => Promise<AutomationGetProjectionResponse>
@@ -302,6 +470,16 @@ export interface AutomationApi {
   readonly openNativeSession: (
     command: AutomationOpenNativeSessionCommand
   ) => Promise<AutomationCommandResponse>
+  readonly openAutomationManagementTarget: (
+    request: AutomationOpenManagementTargetRequest
+  ) => Promise<AutomationOpenManagementTargetResponse>
+  readonly refreshSkillCatalog: () => Promise<AutomationCommandResponse>
+  readonly removeAppliedGlobalFlowFromWorkspace: (
+    request: AutomationApplyGlobalFlowRequest
+  ) => Promise<AutomationCommandResponse>
+  readonly renameFlow: (
+    command: AutomationRenameFlowCommand
+  ) => Promise<AutomationFlowDefinitionDocument>
   readonly restoreFlow: (
     command: AutomationArchiveFlowCommand
   ) => Promise<AutomationFlowDefinitionDocument>

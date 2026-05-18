@@ -29,6 +29,13 @@ import {
 
 import type { AiApi, AiGenerationResult, AiTool } from "../../../shared/ai";
 import type {
+  AutomationApi,
+  AutomationExplorerFlowSummary,
+  AutomationExplorerProjection,
+  AutomationExecutorSummary,
+  AutomationOpenManagementTargetResponse,
+} from "../../../shared/automation";
+import type {
   AgentChatApi,
   AgentChatAvailabilityResponse,
   AgentChatContextManifest,
@@ -46,6 +53,7 @@ import {
 import type {
   EditorApi,
   Workspace,
+  WorkspaceAutomationFlowsLaunchResource,
   WorkspaceLaunchResource,
   WorkspaceSearchResult,
 } from "../../../shared/workspace";
@@ -173,6 +181,7 @@ declare global {
     readonly agentChatApi?: AgentChatApi;
     readonly aiApi?: AiApi;
     readonly editorApi?: EditorApi;
+    readonly mdeAutomation?: AutomationApi;
     readonly mdeWindow?: MdeWindowApi;
     readonly updateApi?: UpdateApi;
   }
@@ -347,6 +356,12 @@ const AUTO_SAVE_IDLE_DELAY_MS = 5000;
 export const EXTERNAL_FILE_SYNC_INTERVAL_MS = 5000;
 const APP_VERSION = packageJson.version;
 
+const isWorkspaceAutomationFlowsLaunchResource = (
+  resourcePath: WorkspaceLaunchResource,
+): resourcePath is WorkspaceAutomationFlowsLaunchResource =>
+  typeof resourcePath === "object" &&
+  resourcePath.type === "workspace-automation-flows";
+
 interface SaveCurrentFileOptions {
   readonly source?: "autosave" | "manual";
 }
@@ -512,6 +527,12 @@ export const App = (): React.JSX.Element => {
   );
   const [agentChatAvailability, setAgentChatAvailability] =
     useState<ScopedAgentChatAvailability | null>(null);
+  const [automationFlowsProjection, setAutomationFlowsProjection] =
+    useState<AutomationExplorerProjection | null>(null);
+  const [
+    automationFlowsPanelOpenRequest,
+    setAutomationFlowsPanelOpenRequest,
+  ] = useState<number | null>(null);
   const [agentChatContextManifest, setAgentChatContextManifest] =
     useState<AgentChatContextManifest | null>(null);
   const [isAgentChatPanelOpen, setIsAgentChatPanelOpen] = useState(false);
@@ -1324,6 +1345,10 @@ export const App = (): React.JSX.Element => {
         completeWorkspaceOpen(workspace);
         if (typeof resourcePath === "string") {
           await loadWorkspaceDefaultFile(workspace);
+        } else if (isWorkspaceAutomationFlowsLaunchResource(resourcePath)) {
+          setAutomationFlowsPanelOpenRequest((request) =>
+            request === null ? 1 : request + 1,
+          );
         } else {
           await loadFile(resourcePath.filePath, workspace.rootPath, workspace);
         }
@@ -1397,15 +1422,22 @@ export const App = (): React.JSX.Element => {
       setHasResolvedInitialLaunchPath(true);
     });
 
-    const unsubscribe = editorApi.onLaunchPath((resourcePath) => {
-      void openPath(resourcePath);
-    });
-
     return () => {
       isCancelled = true;
-      unsubscribe();
     };
   }, [openPath, switchWorkspace]);
+
+  useEffect(() => {
+    const editorApi = window.editorApi;
+
+    if (!editorApi) {
+      return;
+    }
+
+    return editorApi.onLaunchPath((resourcePath) => {
+      void openPath(resourcePath);
+    });
+  }, [openPath]);
 
   const forgetWorkspace = (workspace: RecentWorkspace): void => {
     setRecentWorkspaces((currentWorkspaces) => {
@@ -1468,6 +1500,377 @@ export const App = (): React.JSX.Element => {
     },
     [state.workspace?.rootPath, text],
   );
+  const refreshAutomationFlowsProjection = useCallback(async (): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!workspaceRoot || !window.mdeAutomation) {
+      setAutomationFlowsProjection(null);
+      return;
+    }
+
+    const response = await window.mdeAutomation.getExplorerAutomationProjection({
+      workspaceRoot,
+    });
+
+    setAutomationFlowsProjection(response.projection);
+  }, [state.workspace?.rootPath]);
+
+  useEffect(() => {
+    const workspaceRoot = state.workspace?.rootPath;
+    const automationApi = window.mdeAutomation;
+    let isCancelled = false;
+
+    if (!workspaceRoot || !automationApi) {
+      return;
+    }
+
+    void automationApi
+      .getExplorerAutomationProjection({ workspaceRoot })
+      .then((response) => {
+        if (!isCancelled) {
+          setAutomationFlowsProjection(response.projection);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setAutomationFlowsProjection(null);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [state.workspace?.rootPath, state.workspace?.tree]);
+
+  const getWorkspaceRelativeOrSafeAbsolutePath = useCallback(
+    (workspaceRoot: string, filePath: string): string => {
+      const normalizedRoot = workspaceRoot.replace(/\/+$/u, "");
+      const normalizedPath = filePath.replace(/\\/gu, "/");
+
+      return normalizedPath.startsWith(`${normalizedRoot}/`)
+        ? normalizedPath.slice(normalizedRoot.length + 1)
+        : filePath;
+    },
+    [],
+  );
+
+  const getGlobalAutomationWorkspaceRoot = useCallback((sourcePath: string) => {
+    const automationFlowsMarker = "/automation-flows/";
+    const markerIndex = sourcePath.indexOf(automationFlowsMarker);
+
+    return markerIndex === -1 ? sourcePath : sourcePath.slice(0, markerIndex);
+  }, []);
+
+  const openAutomationManagementTarget = useCallback(
+    async (
+      response: AutomationOpenManagementTargetResponse,
+    ): Promise<void> => {
+      if (!window.editorApi) {
+        throw new Error(text("errors.editorApiUnavailable"));
+      }
+
+      const targetWorkspace =
+        state.workspace?.rootPath === response.rootPath
+          ? state.workspace
+          : await window.editorApi.openWorkspaceByPath(response.rootPath);
+
+      if (state.workspace?.rootPath !== response.rootPath) {
+        completeWorkspaceOpen(targetWorkspace);
+      }
+
+      if (response.flowPath) {
+        await loadFile(
+          getWorkspaceRelativeOrSafeAbsolutePath(
+            response.rootPath,
+            response.flowPath,
+          ),
+          response.rootPath,
+          targetWorkspace,
+        );
+      }
+    },
+    [
+      completeWorkspaceOpen,
+      getWorkspaceRelativeOrSafeAbsolutePath,
+      loadFile,
+      state.workspace,
+      text,
+    ],
+  );
+
+  const openGlobalAutomationSource = useCallback(
+    async (sourcePath: string): Promise<void> => {
+      if (!window.editorApi) {
+        throw new Error(text("errors.editorApiUnavailable"));
+      }
+
+      const rootPath = getGlobalAutomationWorkspaceRoot(sourcePath);
+      const relativePath = getWorkspaceRelativeOrSafeAbsolutePath(
+        rootPath,
+        sourcePath,
+      );
+      const targetWorkspace = await window.editorApi.openFileByPath(
+        sourcePath,
+        [rootPath],
+      );
+
+      completeWorkspaceOpen(targetWorkspace);
+      await loadWorkspaceDefaultFile(targetWorkspace, relativePath);
+    },
+    [
+      completeWorkspaceOpen,
+      getGlobalAutomationWorkspaceRoot,
+      getWorkspaceRelativeOrSafeAbsolutePath,
+      loadWorkspaceDefaultFile,
+      text,
+    ],
+  );
+
+  const createAutomationFlow = useCallback(async (): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath;
+
+    if (!workspaceRoot || !window.mdeAutomation) {
+      return;
+    }
+
+    const timestamp = Date.now();
+    const document = await window.mdeAutomation.createFlowDraft({
+      displayName: text("explorer.addAutomationFlow"),
+      flowId: `automation-flow-${timestamp}`,
+      workspaceRoot,
+    });
+
+    await refreshWorkspaceTree(workspaceRoot, [".mde", ".mde/automation-flows"]);
+    await refreshAutomationFlowsProjection();
+    await loadFile(
+      getWorkspaceRelativeOrSafeAbsolutePath(workspaceRoot, document.path),
+      workspaceRoot,
+    );
+  }, [
+    getWorkspaceRelativeOrSafeAbsolutePath,
+    loadFile,
+    refreshAutomationFlowsProjection,
+    refreshWorkspaceTree,
+    state.workspace?.rootPath,
+    text,
+  ]);
+
+  const addAutomationExecutor = useCallback(
+    async (flow: AutomationExplorerFlowSummary): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!window.mdeAutomation || (flow.scope !== "user" && !workspaceRoot)) {
+        return;
+      }
+
+      const timestamp = Date.now();
+      const document = await window.mdeAutomation.createExecutorDraft({
+        displayName: text("explorer.addAutomationExecutor"),
+        executorId: `executor-${timestamp}`,
+        flowId: flow.id,
+        scope: flow.scope,
+        ...(flow.scope === "workspace" && workspaceRoot !== undefined
+          ? { workspaceRoot }
+          : {}),
+      });
+
+      if (flow.scope === "workspace" && workspaceRoot !== undefined) {
+        await refreshWorkspaceTree(workspaceRoot, [
+          ".mde",
+          ".mde/automation-flows",
+          `.mde/automation-flows/${flow.id}`,
+        ]);
+      }
+      await refreshAutomationFlowsProjection();
+      if (flow.scope === "user") {
+        await openGlobalAutomationSource(document.path);
+      } else if (workspaceRoot !== undefined) {
+        await loadFile(
+          getWorkspaceRelativeOrSafeAbsolutePath(workspaceRoot, document.path),
+          workspaceRoot,
+        );
+      }
+    },
+    [
+      getWorkspaceRelativeOrSafeAbsolutePath,
+      loadFile,
+      openGlobalAutomationSource,
+      refreshAutomationFlowsProjection,
+      refreshWorkspaceTree,
+      state.workspace?.rootPath,
+      text,
+    ],
+  );
+
+  const openAutomationFlow = useCallback(
+    async (flow: AutomationExplorerFlowSummary): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!flow.sourceFile) {
+        return;
+      }
+
+      if (flow.scope === "user") {
+        await openGlobalAutomationSource(flow.sourceFile);
+        return;
+      }
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      await loadFile(
+        getWorkspaceRelativeOrSafeAbsolutePath(workspaceRoot, flow.sourceFile),
+        workspaceRoot,
+      );
+    },
+    [
+      getWorkspaceRelativeOrSafeAbsolutePath,
+      loadFile,
+      openGlobalAutomationSource,
+      state.workspace?.rootPath,
+    ],
+  );
+
+  const openAutomationExecutor = useCallback(
+    async (
+      executor: AutomationExecutorSummary,
+      flow: AutomationExplorerFlowSummary,
+    ): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!executor.sourcePath) {
+        return;
+      }
+
+      if (flow.scope === "user") {
+        await openGlobalAutomationSource(executor.sourcePath);
+        return;
+      }
+
+      if (!workspaceRoot) {
+        return;
+      }
+
+      await loadFile(
+        getWorkspaceRelativeOrSafeAbsolutePath(workspaceRoot, executor.sourcePath),
+        workspaceRoot,
+      );
+    },
+    [
+      getWorkspaceRelativeOrSafeAbsolutePath,
+      loadFile,
+      openGlobalAutomationSource,
+      state.workspace?.rootPath,
+    ],
+  );
+
+  const openAutomationSkillExecutor = useCallback(
+    async (executor: AutomationExecutorSummary): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot || !executor.sourcePath) {
+        return;
+      }
+
+      await loadFile(
+        getWorkspaceRelativeOrSafeAbsolutePath(workspaceRoot, executor.sourcePath),
+        workspaceRoot,
+      );
+    },
+    [getWorkspaceRelativeOrSafeAbsolutePath, loadFile, state.workspace?.rootPath],
+  );
+
+  const applyGlobalAutomationFlow = useCallback(async (): Promise<void> => {
+    const workspaceRoot = state.workspace?.rootPath;
+    const globalFlow = automationFlowsProjection?.flows.find(
+      (flow) => flow.scope === "user",
+    );
+
+    if (!workspaceRoot || !globalFlow || !window.mdeAutomation) {
+      return;
+    }
+
+    await window.mdeAutomation.applyGlobalFlowToWorkspace({
+      flowId: globalFlow.id,
+      workspaceRoot,
+    });
+    await refreshAutomationFlowsProjection();
+  }, [
+    automationFlowsProjection?.flows,
+    refreshAutomationFlowsProjection,
+    state.workspace?.rootPath,
+  ]);
+
+  const removeAppliedGlobalAutomationFlow = useCallback(
+    async (flow: AutomationExplorerFlowSummary): Promise<void> => {
+      const workspaceRoot = state.workspace?.rootPath;
+
+      if (!workspaceRoot || !window.mdeAutomation) {
+        return;
+      }
+
+      await window.mdeAutomation.removeAppliedGlobalFlowFromWorkspace({
+        flowId: flow.id,
+        workspaceRoot,
+      });
+      await refreshAutomationFlowsProjection();
+    },
+    [refreshAutomationFlowsProjection, state.workspace?.rootPath],
+  );
+
+  const renameAutomationFlow = useCallback(
+    async (
+      flow: AutomationExplorerFlowSummary,
+      name: string,
+    ): Promise<void> => {
+      if (!flow.sourceFile || !window.mdeAutomation) {
+        return;
+      }
+
+      await window.mdeAutomation.renameFlow({
+        filePath: flow.sourceFile,
+        name,
+      });
+      await refreshAutomationFlowsProjection();
+    },
+    [refreshAutomationFlowsProjection],
+  );
+
+  const deleteAutomationFlow = useCallback(
+    async (flow: AutomationExplorerFlowSummary): Promise<void> => {
+      if (!flow.sourceFile || !window.mdeAutomation) {
+        return;
+      }
+
+      await window.mdeAutomation.deleteFlow({
+        filePath: flow.sourceFile,
+      });
+      await refreshAutomationFlowsProjection();
+    },
+    [refreshAutomationFlowsProjection],
+  );
+
+  const jumpGlobalAutomationFlow = useCallback(
+    async (flow: AutomationExplorerFlowSummary): Promise<void> => {
+      if (!window.mdeAutomation) {
+        return;
+      }
+
+      await openAutomationManagementTarget(
+        await window.mdeAutomation.openAutomationManagementTarget({
+          flowId: flow.id,
+          target: "global",
+        }),
+      );
+    },
+    [openAutomationManagementTarget],
+  );
+
+  const refreshAutomationSkills = useCallback(async (): Promise<void> => {
+    await window.mdeAutomation?.refreshSkillCatalog();
+    await refreshAutomationFlowsProjection();
+  }, [refreshAutomationFlowsProjection]);
 
   const openDroppedPath = useCallback(
     async (resourcePath: string): Promise<void> => {
@@ -2937,6 +3340,119 @@ export const App = (): React.JSX.Element => {
       return snapshot;
     }, [state.loadedFile, state.workspace?.rootPath]);
 
+  const isAutomationAuthoringPath = useCallback(
+    (filePath: string, workspaceRoot: string): boolean => {
+      const normalizedPath = getWorkspaceRelativeOrSafeAbsolutePath(
+        workspaceRoot,
+        filePath,
+      ).replace(/\\/gu, "/");
+
+      return (
+        normalizedPath.startsWith(".mde/automation-flows/") ||
+        normalizedPath.startsWith("automation-flows/")
+      );
+    },
+    [getWorkspaceRelativeOrSafeAbsolutePath],
+  );
+
+  const createAutomationAuthoringContext = useCallback(
+    (
+      filePath: string,
+      workspaceRoot: string,
+    ): AgentChatContextManifest["automationAuthoringContext"] => {
+      if (
+        !automationFlowsProjection ||
+        !isAutomationAuthoringPath(filePath, workspaceRoot)
+      ) {
+        return undefined;
+      }
+
+      const normalizedFilePath = getWorkspaceRelativeOrSafeAbsolutePath(
+        workspaceRoot,
+        filePath,
+      );
+      const relatedFlow =
+        automationFlowsProjection.flows.find((flow) => {
+          if (flow.sourceFile) {
+            const sourcePath = getWorkspaceRelativeOrSafeAbsolutePath(
+              workspaceRoot,
+              flow.sourceFile,
+            );
+
+            if (
+              sourcePath === normalizedFilePath ||
+              flow.sourceFile === filePath
+            ) {
+              return true;
+            }
+          }
+
+          return flow.executors.some((executor) => {
+            if (!executor.sourcePath) {
+              return false;
+            }
+
+            const sourcePath = getWorkspaceRelativeOrSafeAbsolutePath(
+              workspaceRoot,
+              executor.sourcePath,
+            );
+
+            return (
+              sourcePath === normalizedFilePath ||
+              executor.sourcePath === filePath
+            );
+          });
+        }) ?? null;
+      const flowDiagnostics = automationFlowsProjection.diagnostics.filter(
+        (diagnostic) => {
+          if (!relatedFlow) {
+            return true;
+          }
+
+          return (
+            diagnostic.automationFlowId === relatedFlow.id ||
+            (diagnostic.sourceFile !== undefined &&
+              relatedFlow.sourceFile !== undefined &&
+              diagnostic.sourceFile === relatedFlow.sourceFile)
+          );
+        },
+      );
+      const executorRefs =
+        relatedFlow?.executors.map((executor) =>
+          [
+            executor.type,
+            executor.executorId,
+            executor.sourceClass,
+            executor.sourcePath,
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join(" · "),
+        ) ?? [];
+
+      return {
+        diagnostics: flowDiagnostics.map(
+          (diagnostic) =>
+            diagnostic.technicalMessage ??
+            diagnostic.message ??
+            diagnostic.code,
+        ),
+        executorRefs,
+        flowPath: relatedFlow?.sourceFile ?? filePath,
+        runtimeConstraints: [
+          ...(relatedFlow?.executors.length === 0
+            ? ["No enabled executor is currently resolved for this flow."]
+            : []),
+          "Automation flow authoring must edit Markdown specs only; task execution stays user-initiated.",
+        ],
+      };
+    },
+    [
+      automationFlowsProjection,
+      getWorkspaceRelativeOrSafeAbsolutePath,
+      isAutomationAuthoringPath,
+    ],
+  );
+
   const createAgentChatContextManifest =
     useCallback(async (): Promise<AgentChatContextManifest | null> => {
       const workspaceRoot = state.workspace?.rootPath;
@@ -2965,7 +3481,13 @@ export const App = (): React.JSX.Element => {
             }
           : currentSelectionContext;
 
+      const automationAuthoringContext = createAutomationAuthoringContext(
+        loadedFile.path,
+        workspaceRoot,
+      );
+
       return {
+        ...(automationAuthoringContext ? { automationAuthoringContext } : {}),
         currentDocumentPath: loadedFile.path,
         currentDocumentSnapshot:
           state.draftMarkdown ?? editorMarkdown ?? loadedFile.contents,
@@ -2980,6 +3502,7 @@ export const App = (): React.JSX.Element => {
       };
     }, [
       captureAgentChatSelectionSnapshot,
+      createAutomationAuthoringContext,
       editorMarkdown,
       normalizedAgentChatModelName,
       state.draftMarkdown,
@@ -3758,17 +4281,23 @@ export const App = (): React.JSX.Element => {
         aiSettings={aiSettings}
         aiTools={aiTools}
         appVersion={APP_VERSION}
+        automationFlowsProjection={automationFlowsProjection}
+        automationFlowsPanelOpenRequest={automationFlowsPanelOpenRequest}
         availableLanguagePacks={selectableAppLanguagePacks}
         isCollapsed={isExplorerCollapsed}
+        onAddAutomationExecutor={addAutomationExecutor}
         onAiSettingsChange={updateAiSettings}
         onAppLanguageChange={selectAppLanguage}
+        onApplyGlobalAutomationFlow={applyGlobalAutomationFlow}
         onCheckForUpdates={checkForUpdatesFromSettings}
+        onCreateAutomationFlow={createAutomationFlow}
         onCreateFile={(filePath) => {
           void createMarkdownFile(filePath);
         }}
         onCreateFolder={(folderPath) => {
           void createFolder(folderPath);
         }}
+        onDeleteAutomationFlow={deleteAutomationFlow}
         onCopyEntry={(entryPath) => {
           void copyExplorerEntry(entryPath);
         }}
@@ -3792,6 +4321,9 @@ export const App = (): React.JSX.Element => {
         onOpenAutomationCenter={() => {
           void window.mdeWindow?.openAutomationCenter();
         }}
+        onOpenAutomationExecutor={openAutomationExecutor}
+        onOpenAutomationFlow={openAutomationFlow}
+        onOpenAutomationSkillExecutor={openAutomationSkillExecutor}
         onOpenWorkspaceInNewWindow={(workspace) => {
           void openWorkspaceInNewWindow(workspace);
         }}
@@ -3803,6 +4335,11 @@ export const App = (): React.JSX.Element => {
         onRefreshTree={(directoryPaths) =>
           refreshWorkspaceTree(state.workspace?.rootPath, directoryPaths)
         }
+        onRefreshAutomationFlows={refreshAutomationFlowsProjection}
+        onRefreshAutomationSkills={refreshAutomationSkills}
+        onRenameAutomationFlow={renameAutomationFlow}
+        onJumpGlobalAutomationFlow={jumpGlobalAutomationFlow}
+        onRemoveAppliedGlobalAutomationFlow={removeAppliedGlobalAutomationFlow}
         onRenameEntry={(entryName) => {
           void renameSelectedEntry(entryName);
         }}

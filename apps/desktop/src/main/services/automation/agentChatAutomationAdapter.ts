@@ -298,7 +298,14 @@ const collectEventsFromEnvelope = (
         sources: normalizeAutomationDiscoveredTaskSources({
           automationFlow: input.automationFlow,
           discoveredAt: new Date(0).toISOString(),
-          sources: envelope.discoveredTaskSources
+          sources: envelope.discoveredTaskSources.map((source) =>
+            Object.freeze({
+              ...source,
+              ...(input.automationFlowOwnerKey !== undefined
+                ? { automationFlowOwnerKey: input.automationFlowOwnerKey }
+                : {})
+            })
+          )
         }),
         type: 'discovered-task-sources'
       })

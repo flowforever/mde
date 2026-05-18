@@ -185,6 +185,23 @@ describe("Automation Center window lifecycle", () => {
     expect(tracker.getMainWindow()).toBe(firstEditorWindow);
   });
 
+  it("finds editor windows by webContents id for workspace launch intents", () => {
+    const tracker = createEditorWindowTracker();
+    const firstEditorWindow = new FakeBrowserWindow({});
+    const secondEditorWindow = new FakeBrowserWindow({});
+
+    tracker.setMainWindow(firstEditorWindow as never);
+    tracker.setMainWindow(secondEditorWindow as never);
+
+    expect(
+      tracker.getWindowByWebContentsId(firstEditorWindow.webContents.id),
+    ).toBe(firstEditorWindow);
+    secondEditorWindow.emitOnce("closed");
+    expect(
+      tracker.getWindowByWebContentsId(secondEditorWindow.webContents.id),
+    ).toBeNull();
+  });
+
   it("does not close or reload the editor window when Automation Center closes", async () => {
     const BrowserWindow = createBrowserWindowConstructor();
     const editorWindow = asFakeWindow(await createMainWindow(BrowserWindow as never));

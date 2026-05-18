@@ -20,7 +20,15 @@ export interface WorkspaceFileLaunchResource {
   readonly workspaceRoot: string
 }
 
-export type WorkspaceLaunchResource = string | WorkspaceFileLaunchResource
+export interface WorkspaceAutomationFlowsLaunchResource {
+  readonly type: 'workspace-automation-flows'
+  readonly workspaceRoot: string
+}
+
+export type WorkspaceLaunchResource =
+  | string
+  | WorkspaceAutomationFlowsLaunchResource
+  | WorkspaceFileLaunchResource
 
 export interface WorkspacePathInfo {
   readonly kind: 'directory' | 'markdown-file' | 'other' | 'unsupported-file'
@@ -90,7 +98,9 @@ export interface EditorApi {
     resourcePath: string,
     candidateWorkspaceRoots?: readonly string[]
   ) => Promise<Workspace>
-  readonly openPathInNewWindow?: (resourcePath: string) => Promise<void>
+  readonly openPathInNewWindow?: (
+    resourcePath: WorkspaceLaunchResource
+  ) => Promise<void>
   readonly inspectPath?: (resourcePath: string) => Promise<WorkspacePathInfo>
   readonly getDroppedFilePath?: (file: File) => string
   readonly openWorkspaceFileInNewWindow?: (

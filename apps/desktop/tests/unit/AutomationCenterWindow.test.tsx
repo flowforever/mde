@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AutomationCenterWindow } from '../../src/renderer/src/automation/AutomationCenterWindow'
@@ -44,9 +51,27 @@ const projection: AutomationProjection = {
     ready: [
       {
         automationFlowId: 'flow-a',
+        automationFlowOwnerKey: 'workspace:/workspace:flow:flow-a',
         bucket: 'ready',
+        eligibleExecutors: [
+          {
+            displayName: 'Implementation',
+            executorId: 'implementation',
+            executorSnapshotId: 'executor-snapshot-a',
+            type: 'markdown'
+          }
+        ],
+        executorSnapshotId: 'executor-snapshot-a',
+        primaryExecutor: {
+          displayName: 'Implementation',
+          executorId: 'implementation',
+          executorSnapshotId: 'executor-snapshot-a',
+          type: 'markdown'
+        },
         sourceItemId: 'source-a',
         taskId: 'task-a',
+        taskDataId: 'task-data-a',
+        taskDataSnapshotId: 'task-data-snapshot-a',
         title: 'READY Implement UI'
       }
     ],
@@ -56,12 +81,13 @@ const projection: AutomationProjection = {
   diagnostics: [],
   filters: {
     bucket: 'ready',
-    flowIds: [],
-    workspaceIds: ['/workspace', 'mde:no-workspace']
+    flowOwnerKeys: [],
+    scopeIds: ['workspace:/workspace']
   },
   flows: [
     {
       automationFlowId: 'flow-a',
+      automationFlowOwnerKey: 'workspace:/workspace:flow:flow-a',
       definitionPath: '/workspace/.mde/automation-flows/flow-a.md',
       lifecycle: 'enabled',
       name: 'Workspace Flow',
@@ -79,9 +105,27 @@ const projection: AutomationProjection = {
   tasks: [
     {
       automationFlowId: 'flow-a',
+      automationFlowOwnerKey: 'workspace:/workspace:flow:flow-a',
       bucket: 'ready',
+      eligibleExecutors: [
+        {
+          displayName: 'Implementation',
+          executorId: 'implementation',
+          executorSnapshotId: 'executor-snapshot-a',
+          type: 'markdown'
+        }
+      ],
+      executorSnapshotId: 'executor-snapshot-a',
+      primaryExecutor: {
+        displayName: 'Implementation',
+        executorId: 'implementation',
+        executorSnapshotId: 'executor-snapshot-a',
+        type: 'markdown'
+      },
       sourceItemId: 'source-a',
       taskId: 'task-a',
+      taskDataId: 'task-data-a',
+      taskDataSnapshotId: 'task-data-snapshot-a',
       title: 'READY Implement UI'
     }
   ]
@@ -115,6 +159,10 @@ const needsMeProjection: AutomationProjection = {
       type: 'approval'
     }
   ],
+  filters: {
+    ...projection.filters,
+    bucket: 'needsMe'
+  },
   runs: [
     {
       automationFlowId: 'flow-a',
@@ -142,6 +190,7 @@ const needsMeProjection: AutomationProjection = {
 describe('AutomationCenterWindow', () => {
   afterEach(() => {
     cleanup()
+    Reflect.deleteProperty(window, 'editorApi')
     Reflect.deleteProperty(window, 'mdeWindow')
     localStorage.clear()
   })
@@ -199,20 +248,281 @@ describe('AutomationCenterWindow', () => {
 
     render(<AutomationCenterWindow automationApi={automationApi} />)
 
-    fireEvent.click(
-      await screen.findByRole('checkbox', { name: 'Workspace Flow' })
-    )
+    const flowFilterSelector = `[data-component-id="${COMPONENT_IDS.automation.flowFilterToggle}"]`
+
+    await waitFor(() => {
+      expect(document.querySelector(flowFilterSelector)).toBeInstanceOf(
+        HTMLElement
+      )
+    })
+    const flowFilterButton = document.querySelector(flowFilterSelector)
+
+    if (!(flowFilterButton instanceof HTMLElement)) {
+      throw new Error('Expected automation flow filter toggle')
+    }
+
+    fireEvent.click(flowFilterButton)
 
     await waitFor(() => {
       expect(automationApi.updateFilters).toHaveBeenCalledWith({
         filters: {
           bucket: 'ready',
-          flowIds: ['flow-a'],
-          workspaceIds: ['/workspace', 'mde:no-workspace']
+          flowOwnerKeys: [],
+          scopeIds: []
         }
       })
     })
     expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
+  })
+
+  it('updates automation-flow lifecycle from the workspace filter row', async () => {
+    const automationApi = {
+      getProjection: vi.fn(() => Promise.resolve({ projection })),
+      setFlowLifecycle: vi.fn(() =>
+        Promise.resolve({
+          diagnostics: [],
+          markdown: '',
+          path: '/workspace/.mde/automation-flows/flow-a.md',
+          valid: true
+        })
+      )
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    const lifecycleButtonSelector = `[data-component-id="${COMPONENT_IDS.automation.flowLifecycleButton}"]`
+
+    await waitFor(() => {
+      expect(document.querySelector(lifecycleButtonSelector)).toBeInstanceOf(
+        HTMLButtonElement
+      )
+    })
+    const lifecycleButton = document.querySelector(lifecycleButtonSelector)
+
+    if (!(lifecycleButton instanceof HTMLButtonElement)) {
+      throw new Error('Expected automation flow lifecycle button')
+    }
+
+    expect(lifecycleButton).toHaveAccessibleName(
+      'Disable automation-flow Workspace Flow'
+    )
+    fireEvent.click(lifecycleButton)
+
+    await waitFor(() => {
+      expect(automationApi.setFlowLifecycle).toHaveBeenCalledWith({
+        filePath: '/workspace/.mde/automation-flows/flow-a.md',
+        lifecycle: 'disabled',
+        workspaceRoot: '/workspace'
+      })
+    })
+    expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders automation run history and opens a native session from a run record', async () => {
+    const runHistoryProjection: AutomationProjection = {
+      ...projection,
+      runs: [
+        {
+          adapterSessionId: 'session-a',
+          automationFlowId: 'flow-a',
+          availableActions: ['open-native-session'],
+          engine: 'codex',
+          runId: 'run-a',
+          runKind: 'task',
+          sourceItemId: 'source-a',
+          startedAt: '2026-05-10T08:00:00.000Z',
+          state: 'done',
+          taskId: 'task-a',
+          title: 'READY Implement UI',
+          updatedAt: '2026-05-10T08:03:00.000Z'
+        }
+      ]
+    }
+    const automationApi = {
+      getProjection: vi.fn(() => Promise.resolve({ projection: runHistoryProjection })),
+      openNativeSession: vi.fn(() =>
+        Promise.resolve({
+          accepted: true,
+          runId: 'run-a'
+        })
+      )
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    const runHistory = await screen.findByRole('region', { name: 'Run history' })
+    const workspaceFilterPanel = document.querySelector(
+      `[data-component-id="${COMPONENT_IDS.automation.workspaceFilterPanel}"]`
+    )
+
+    if (!(workspaceFilterPanel instanceof HTMLElement)) {
+      throw new Error('Expected workspace filter panel')
+    }
+
+    expect(runHistory).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.runHistoryPanel
+    )
+    expect(runHistory.parentElement).toHaveClass('automation-left-panel')
+    expect(
+      workspaceFilterPanel.compareDocumentPosition(runHistory) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(within(runHistory).getByText('READY Implement UI')).toBeInTheDocument()
+    expect(
+      within(runHistory)
+        .getByText('run-a')
+        .closest(
+          `[data-component-id="${COMPONENT_IDS.automation.runHistoryRow}"]`
+        )
+    ).toHaveAttribute('data-component-id', COMPONENT_IDS.automation.runHistoryRow)
+    expect(within(runHistory).getByText('Done')).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open native session for run run-a' })
+    )
+
+    await waitFor(() => {
+      expect(automationApi.openNativeSession).toHaveBeenCalledWith({
+        runId: 'run-a'
+      })
+    })
+  })
+
+  it('does not expose native session action when a run record cannot open it', async () => {
+    const runHistoryProjection: AutomationProjection = {
+      ...projection,
+      runs: [
+        {
+          adapterSessionId: 'session-a',
+          automationFlowId: 'flow-a',
+          availableActions: [],
+          engine: 'codex',
+          runId: 'run-a',
+          runKind: 'task',
+          sourceItemId: 'source-a',
+          startedAt: '2026-05-10T08:00:00.000Z',
+          state: 'done',
+          taskId: 'task-a',
+          title: 'READY Implement UI',
+          updatedAt: '2026-05-10T08:03:00.000Z'
+        }
+      ]
+    }
+    const automationApi = {
+      getProjection: vi.fn(() => Promise.resolve({ projection: runHistoryProjection })),
+      openNativeSession: vi.fn()
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    const runHistory = await screen.findByRole('region', { name: 'Run history' })
+
+    expect(within(runHistory).getByText('READY Implement UI')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Open native session for run run-a'
+      })
+    ).not.toBeInTheDocument()
+    expect(automationApi.openNativeSession).not.toHaveBeenCalled()
+  })
+
+  it('opens run detail popup with automation-flow parse result and process', async () => {
+    const runHistoryProjection: AutomationProjection = {
+      ...projection,
+      runs: [
+        {
+          adapterSessionId: 'session-a',
+          automationFlowId: 'flow-a',
+          availableActions: [],
+          discoveryResult: {
+            sourceCount: 1,
+            sources: [
+              {
+                relativePath: '.mde/docs/tasks/ready.md',
+                sourceItemId: 'workspace:.mde/docs/tasks/ready.md',
+                sourceType: 'workspace-markdown',
+                title: 'READY Parsed task'
+              }
+            ]
+          },
+          engine: 'codex',
+          processSteps: [
+            {
+              createdAt: '2026-05-10T08:00:00.000Z',
+              type: 'started'
+            },
+            {
+              createdAt: '2026-05-10T08:03:00.000Z',
+              sourceCount: 1,
+              type: 'discovered-task-sources'
+            },
+            {
+              createdAt: '2026-05-10T08:03:00.000Z',
+              state: 'done',
+              type: 'state-updated'
+            }
+          ],
+          runId: 'run-parse',
+          runKind: 'discovery',
+          startedAt: '2026-05-10T08:00:00.000Z',
+          state: 'done',
+          taskId: 'discovery:flow-a',
+          title: 'Workspace Flow discovery',
+          updatedAt: '2026-05-10T08:03:00.000Z'
+        }
+      ]
+    }
+    const automationApi = {
+      getProjection: vi.fn(() => Promise.resolve({ projection: runHistoryProjection })),
+      openNativeSession: vi.fn()
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'View run details for run run-parse'
+      })
+    )
+
+    const dialog = await screen.findByRole('dialog', { name: 'Run details' })
+
+    expect(dialog).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.runHistoryDetailDialog
+    )
+    expect(within(dialog).getByText('Parse result')).toBeInTheDocument()
+    expect(within(dialog).getByText('READY Parsed task')).toBeInTheDocument()
+    expect(within(dialog).getByText('.mde/docs/tasks/ready.md')).toBeInTheDocument()
+    expect(within(dialog).getByText('Parse process')).toBeInTheDocument()
+    expect(within(dialog).getByText('Started')).toBeInTheDocument()
+    expect(within(dialog).getByText('Parsed 1 task list item')).toBeInTheDocument()
+    expect(within(dialog).queryByText('MDE Automation Runtime Contract'))
+      .not.toBeInTheDocument()
+    expect(automationApi.openNativeSession).not.toHaveBeenCalled()
+  })
+
+  it('requests recent workspace roots for cross-workspace flow sections', async () => {
+    localStorage.setItem(
+      'mde.recentWorkspaces',
+      JSON.stringify([
+        {
+          name: 'mdv',
+          rootPath: '/Users/example/mdv',
+          type: 'workspace'
+        }
+      ])
+    )
+    const automationApi = {
+      getProjection: vi.fn(() => Promise.resolve({ projection }))
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    await screen.findByRole('main', { name: 'Automation Center' })
+    expect(automationApi.getProjection).toHaveBeenCalledWith({
+      workspaceRoots: ['/Users/example/mdv']
+    })
   })
 
   it('switches Task Stack buckets before the refreshed projection returns', async () => {
@@ -252,8 +562,8 @@ describe('AutomationCenterWindow', () => {
     expect(automationApi.updateFilters).toHaveBeenCalledWith({
       filters: {
         bucket: 'done',
-        flowIds: [],
-        workspaceIds: ['/workspace', 'mde:no-workspace']
+        flowOwnerKeys: [],
+        scopeIds: ['workspace:/workspace']
       }
     })
 
@@ -263,254 +573,91 @@ describe('AutomationCenterWindow', () => {
     })
   })
 
-  it('opens New automation-flow setup in the right editor mode', async () => {
+  it('opens scope management instead of the old template editor', async () => {
+    const focusWorkspaceWindow = vi.fn(() => Promise.resolve())
+    const openPathInNewWindow = vi.fn(() => Promise.resolve())
     const automationApi = {
-      createFlowFromTemplate: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Generated automation-flow',
-          path: '/workspace/.mde/automation-flows/new-flow.md',
-          valid: true
-        })
-      ),
       getProjection: vi.fn(() => Promise.resolve({ projection })),
-      listTemplates: vi.fn(() =>
-        Promise.resolve({
-          templates: [
-            {
-              allowedScopes: ['workspace'],
-              name: 'Local dev task',
-              requiredInputs: [],
-              templateId: 'local-dev-task'
-            }
-          ]
-        })
-      ),
-      validateTemplateInput: vi.fn(() =>
-        Promise.resolve({ diagnostics: [], ok: true })
+      openAutomationManagementTarget: vi.fn(() =>
+        Promise.resolve({ rootPath: '/workspace' })
       )
     } as unknown as AutomationApi
+
+    Object.defineProperty(window, 'mdeWindow', {
+      configurable: true,
+      value: { focusWorkspaceWindow }
+    })
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: { openPathInNewWindow }
+    })
 
     render(<AutomationCenterWindow automationApi={automationApi} />)
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'New automation-flow' })
+      await screen.findByRole('button', {
+        name: 'Manage flows for workspace'
+      })
     )
 
-    expect(screen.getByRole('region', { name: 'Workspace flows' }))
-      .toBeInTheDocument()
-    expect(await screen.findByLabelText('Template')).toHaveAttribute(
-      'data-component-id',
-      COMPONENT_IDS.automation.templatePicker
-    )
-    expect(screen.queryByRole('region', { name: 'Signal Stack' }))
-      .not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Flowline' }))
-      .not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Create automation-flow' }))
-
     await waitFor(() => {
-      expect(automationApi.createFlowFromTemplate).toHaveBeenCalledWith({
-        defaultEngine: 'codex',
-        flowId: 'automation-flow-2',
-        scope: 'workspace',
-        templateId: 'local-dev-task'
+      expect(automationApi.openAutomationManagementTarget).toHaveBeenCalledWith({
+        target: 'workspace',
+        workspaceRoot: '/workspace'
       })
     })
-    expect(
-      await screen.findByText('/workspace/.mde/automation-flows/new-flow.md')
-    ).toBeInTheDocument()
+    expect(openPathInNewWindow).toHaveBeenCalledWith({
+      type: 'workspace-automation-flows',
+      workspaceRoot: '/workspace'
+    })
+    expect(focusWorkspaceWindow).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Template')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Signal Stack' })).toBeInTheDocument()
   })
 
-  it('opens No workspace group add-flow setup with user scope', async () => {
-    const automationApi = {
-      createFlowFromTemplate: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Generated automation-flow',
-          path: '/user/.mde/automation-flows/personal-flow.md',
-          valid: true
-        })
-      ),
-      getProjection: vi.fn(() =>
-        Promise.resolve({
-          projection: {
-            ...projection,
-            flows: [
-              ...projection.flows,
-              {
-                automationFlowId: 'user-flow',
-                lifecycle: 'enabled',
-                name: 'Personal Flow',
-                scope: 'user',
-                sourceTypes: ['user-prompt'],
-                status: 'formal',
-                taskCount: 1
-              }
-            ]
-          }
-        })
-      ),
-      listTemplates: vi.fn(() =>
-        Promise.resolve({
-          templates: [
-            {
-              allowedScopes: ['workspace'],
-              name: 'Local dev task',
-              requiredInputs: [],
-              templateId: 'local-dev-task'
-            },
-            {
-              allowedScopes: ['user'],
-              name: 'Personal prompt',
-              requiredInputs: [],
-              templateId: 'personal-prompt'
-            }
-          ]
-        })
-      ),
-      validateTemplateInput: vi.fn(() =>
-        Promise.resolve({ diagnostics: [], ok: true })
-      )
-    } as unknown as AutomationApi
-
-    render(<AutomationCenterWindow automationApi={automationApi} />)
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Add flow for No workspace' })
-    )
-    fireEvent.click(await screen.findByRole('button', { name: 'Create automation-flow' }))
-
-    await waitFor(() => {
-      expect(automationApi.createFlowFromTemplate).toHaveBeenCalledWith({
-        defaultEngine: 'codex',
-        flowId: 'automation-flow-3',
-        scope: 'user',
-        templateId: 'personal-prompt'
-      })
-    })
-  })
-
-  it('loads an existing automation-flow into editor mode and saves updates', async () => {
-    const automationApi = {
-      getProjection: vi.fn(() => Promise.resolve({ projection })),
-      loadFlowDefinition: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Existing automation-flow',
-          path: '/workspace/.mde/automation-flows/flow-a.md',
-          valid: true
-        })
-      ),
-      saveFlowDefinition: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Updated automation-flow',
-          path: '/workspace/.mde/automation-flows/flow-a.md',
-          valid: true
-        })
-      )
-    } as unknown as AutomationApi
-
-    render(<AutomationCenterWindow automationApi={automationApi} />)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Flow actions' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit automation-flow' }))
-    expect(
-      await screen.findByText('/workspace/.mde/automation-flows/flow-a.md')
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Change automation markdown' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save automation-flow' }))
-
-    await waitFor(() => {
-      expect(automationApi.saveFlowDefinition).toHaveBeenCalledWith({
-        filePath: '/workspace/.mde/automation-flows/flow-a.md',
-        markdown: '# Updated automation-flow'
-      })
-    })
-  })
-
-  it('runs flow lifecycle actions through automation IPC and refreshes projection', async () => {
-    const automationApi = {
-      archiveFlow: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Archived automation-flow',
-          path: '/workspace/.mde/automation-flows/flow-a.md',
-          valid: true
-        })
-      ),
-      getProjection: vi.fn(() => Promise.resolve({ projection })),
-      setFlowLifecycle: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Disabled automation-flow',
-          path: '/workspace/.mde/automation-flows/flow-a.md',
-          valid: true
-        })
-      )
-    } as unknown as AutomationApi
-
-    render(<AutomationCenterWindow automationApi={automationApi} />)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Flow actions' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Disable automation-flow' }))
-
-    await waitFor(() => {
-      expect(automationApi.setFlowLifecycle).toHaveBeenCalledWith({
-        filePath: '/workspace/.mde/automation-flows/flow-a.md',
-        lifecycle: 'disabled'
-      })
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Archive automation-flow' }))
-
-    await waitFor(() => {
-      expect(automationApi.archiveFlow).toHaveBeenCalledWith({
-        filePath: '/workspace/.mde/automation-flows/flow-a.md'
-      })
-    })
-    expect(automationApi.getProjection).toHaveBeenCalledTimes(3)
-  })
-
-  it('runs restore through automation IPC for archived flows', async () => {
-    const archivedProjection: AutomationProjection = {
+  it('opens workspace automation management from setup diagnostics CTA', async () => {
+    const openPathInNewWindow = vi.fn(() => Promise.resolve())
+    const diagnosticProjection: AutomationProjection = {
       ...projection,
-      filters: {
-        ...projection.filters,
-        archivedVisible: true
-      },
-      flows: [
+      diagnostics: [
         {
-          ...projection.flows[0],
-          lifecycle: 'archived'
+          automationFlowId: 'flow-a',
+          code: 'automationFlow.missingExecutor',
+          diagnosticId: 'diagnostic-1',
+          message: 'automationFlow.missingExecutor',
+          severity: 'error',
+          sourceFile: '/workspace/.mde/automation-flows/flow-a.md'
         }
       ]
     }
     const automationApi = {
-      getProjection: vi.fn(() => Promise.resolve({ projection: archivedProjection })),
-      restoreFlow: vi.fn(() =>
-        Promise.resolve({
-          diagnostics: [],
-          markdown: '# Restored automation-flow',
-          path: '/workspace/.mde/automation-flows/flow-a.md',
-          valid: true
-        })
+      getProjection: vi.fn(() => Promise.resolve({ projection: diagnosticProjection })),
+      openAutomationManagementTarget: vi.fn(() =>
+        Promise.resolve({ rootPath: '/workspace' })
       )
     } as unknown as AutomationApi
 
+    Object.defineProperty(window, 'editorApi', {
+      configurable: true,
+      value: { openPathInNewWindow }
+    })
+
     render(<AutomationCenterWindow automationApi={automationApi} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Flow actions' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Restore automation-flow' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Open Automation Flows' })
+    )
 
     await waitFor(() => {
-      expect(automationApi.restoreFlow).toHaveBeenCalledWith({
-        filePath: '/workspace/.mde/automation-flows/flow-a.md'
+      expect(automationApi.openAutomationManagementTarget).toHaveBeenCalledWith({
+        target: 'workspace',
+        workspaceRoot: '/workspace'
       })
     })
-    expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
+    expect(openPathInNewWindow).toHaveBeenCalledWith({
+      type: 'workspace-automation-flows',
+      workspaceRoot: '/workspace'
+    })
   })
 
   it('surfaces decision submit failures through localized UI text only', async () => {
@@ -571,7 +718,7 @@ describe('AutomationCenterWindow', () => {
     render(<AutomationCenterWindow automationApi={automationApi} />)
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Start automation task' })
+      await screen.findByRole('button', { name: 'Start with selected executor' })
     )
 
     const alert = await screen.findByRole('alert')
@@ -597,7 +744,7 @@ describe('AutomationCenterWindow', () => {
     render(<AutomationCenterWindow automationApi={automationApi} />)
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Start automation task' })
+      await screen.findByRole('button', { name: 'Start with selected executor' })
     )
 
     const alert = await screen.findByRole('alert')
@@ -612,13 +759,13 @@ describe('AutomationCenterWindow', () => {
     })
   })
 
-  it('keeps Automation Agent Chat available when filters select only no-workspace', async () => {
+  it('does not render Automation Agent Chat entry in Automation Center', async () => {
     const filteredProjection: AutomationProjection = {
       ...projection,
       filters: {
         bucket: 'ready',
-        flowIds: ['user-flow'],
-        workspaceIds: ['mde:no-workspace']
+        flowOwnerKeys: ['global:flow:user-flow'],
+        scopeIds: ['global']
       }
     }
     const automationApi = {
@@ -640,25 +787,11 @@ describe('AutomationCenterWindow', () => {
       />
     )
 
-    expect(
-      await screen.findByRole('button', { name: 'Open Automation Agent Chat' })
-    ).toHaveAttribute(
-      'data-component-id',
-      COMPONENT_IDS.automation.agentChatButton
-    )
-    expect(agentChatApi.getAvailability).toHaveBeenCalledWith({
-      selectedEngineId: 'codex',
-      workspaceRoot: '/workspace'
-    })
+    await screen.findByRole('main', { name: 'Automation Center' })
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Open Automation Agent Chat' })
-    )
     expect(
-      await screen.findByRole('button', { name: 'Close Automation Agent Chat' })
-    ).toHaveAttribute(
-      'data-component-id',
-      COMPONENT_IDS.automation.agentChatCloseButton
-    )
+      screen.queryByRole('button', { name: 'Open Automation Agent Chat' })
+    ).not.toBeInTheDocument()
+    expect(agentChatApi.getAvailability).not.toHaveBeenCalled()
   })
 })

@@ -2007,6 +2007,130 @@ body.is-resizing-explorer-panel .explorer-panel-resize-handle::after {
   flex-direction: column;
 }
 
+.explorer-automation-flows-section {
+  display: flex;
+  min-height: 120px;
+  max-height: 260px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-top: 1px solid var(--panel-border);
+}
+
+.explorer-automation-flows-section.is-collapsed {
+  min-height: 32px;
+  max-height: 32px;
+}
+
+.explorer-automation-flows-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.explorer-automation-flows-toolbar,
+.explorer-automation-flow-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.explorer-automation-flow-list,
+.explorer-automation-executor-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.explorer-automation-flow-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0 2px 4px 0;
+  scrollbar-gutter: stable;
+}
+
+.explorer-automation-flow-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.explorer-automation-flow-button,
+.explorer-automation-executor-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  color: var(--panel-text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+
+.explorer-automation-flow-button {
+  min-height: 30px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 4px;
+  padding: 0 7px 0 4px;
+  cursor: pointer;
+}
+
+.explorer-automation-flow-rename-form {
+  display: flex;
+  min-width: 0;
+  padding: 2px 4px;
+}
+
+.explorer-automation-flow-rename-form input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  color: var(--panel-text-strong);
+  background: var(--panel-surface);
+  border: 1px solid var(--focus-ring);
+  border-radius: 4px;
+  outline: none;
+}
+
+.explorer-automation-executor-row {
+  min-height: 26px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 4px;
+  padding: 0 7px 0 22px;
+  cursor: pointer;
+}
+
+.explorer-automation-flow-button:disabled,
+.explorer-automation-executor-row:disabled {
+  cursor: default;
+}
+
+.explorer-automation-flow-button:hover:not(:disabled),
+.explorer-automation-flow-button:focus-visible:not(:disabled),
+.explorer-automation-executor-row:hover:not(:disabled),
+.explorer-automation-executor-row:focus-visible:not(:disabled) {
+  color: var(--panel-text-strong);
+  background: var(--panel-surface);
+}
+
+.explorer-automation-flow-button span,
+.explorer-automation-executor-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-automation-flow-button span:last-child,
+.explorer-automation-executor-row span:last-child {
+  grid-column: 2;
+  color: var(--panel-muted-subtle);
+  font-size: 11px;
+}
+
 .explorer-recent-files-section.is-collapsed {
   flex-basis: 32px;
   border-top: 1px solid var(--panel-border);

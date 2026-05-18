@@ -24,27 +24,17 @@ export interface AutomationFlowLibrary {
 
 const normalizePath = (path: string): string => path.replace(/\\/gu, '/')
 
-const listMarkdownFiles = async (
+const listFlowDefinitionFiles = async (
   rootPath: string
 ): Promise<readonly string[]> => {
   try {
     const entries = await readdir(rootPath, { withFileTypes: true })
-    const files: string[] = []
-
-    for (const entry of entries) {
-      const entryPath = join(rootPath, entry.name)
-
-      if (entry.isDirectory()) {
-        if (entry.name !== 'archived') {
-          files.push(...(await listMarkdownFiles(entryPath)))
-        }
-        continue
-      }
-
-      if (entry.isFile() && extname(entry.name).toLowerCase() === '.md') {
-        files.push(entryPath)
-      }
-    }
+    const files = entries
+      .filter(
+        (entry) =>
+          entry.isFile() && extname(entry.name).toLowerCase() === '.md'
+      )
+      .map((entry) => join(rootPath, entry.name))
 
     return Object.freeze(files.sort())
   } catch {
@@ -55,7 +45,7 @@ const listMarkdownFiles = async (
 const loadAutomationFlowsFromRoot = async (
   rootPath: string
 ): Promise<AutomationFlowLibrary> => {
-  const files = await listMarkdownFiles(rootPath)
+  const files = await listFlowDefinitionFiles(rootPath)
   const parsed = await Promise.all(
     files.map(async (filePath) => {
       const markdown = await readFile(filePath, 'utf8')

@@ -20,6 +20,7 @@ import {
   registerWorkspaceHandlers,
   type WorkspaceHandlerSession
 } from './ipc/registerWorkspaceHandlers'
+import { WORKSPACE_CHANNELS } from './ipc/channels'
 import { getLaunchPathFromArgv } from './launchArgs'
 import { registerAiHandlers } from './ipc/registerAiHandlers'
 import { registerAgentChatHandlers } from './ipc/registerAgentChatHandlers'
@@ -35,6 +36,7 @@ import { createAgentChatAutomationAdapter } from './services/automation/agentCha
 import { createAutomationRuntime } from './services/automation/automationRuntime'
 import { createAutomationRuntimeCoordinator } from './services/automation/automationRuntimeCoordinator'
 import { createAutomationRuntimeOwner } from './services/automation/automationRuntimeOwner'
+import { linkBuiltInAutomationToolSkills } from './services/automation/automationToolSkillLinker'
 import { createAutomationStore } from './services/automation/automationStore'
 import { createMdeRuntimeBridge } from './services/automation/mdeRuntimeBridge'
 import { registerMdeCliInBackground } from './services/cliRegistrationService'
@@ -44,10 +46,14 @@ import {
   APP_PRODUCT_NAME,
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_HOME_PATH_ENV,
   E2E_USER_DATA_PATH_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
-import type { WorkspaceLaunchResource } from '../shared/workspace'
+import type {
+  WorkspaceAutomationFlowsLaunchResource,
+  WorkspaceLaunchResource
+} from '../shared/workspace'
 import {
   AUTOMATION_CENTER_WINDOW_MODE,
   EDITOR_WINDOW_MODE,
@@ -72,6 +78,7 @@ import { createNodeAgentChatProcessRunner } from './services/agentChatProcessRun
 export {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_HOME_PATH_ENV,
   E2E_USER_DATA_PATH_ENV,
   E2E_WINDOW_MODE_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
@@ -301,11 +308,32 @@ const focusWindow = (window: BrowserWindow): void => {
   window.focus()
 }
 
+const isWorkspaceAutomationFlowsLaunchResource = (
+  value: WorkspaceLaunchResource | null
+): value is WorkspaceAutomationFlowsLaunchResource =>
+  typeof value === 'object' &&
+  value !== null &&
+  value.type === 'workspace-automation-flows'
+
+const normalizeWorkspaceAutomationFlowsLaunchResource = async (
+  launchPath: WorkspaceAutomationFlowsLaunchResource
+): Promise<WorkspaceAutomationFlowsLaunchResource> => {
+  try {
+    return {
+      ...launchPath,
+      workspaceRoot: await realpath(launchPath.workspaceRoot)
+    }
+  } catch {
+    return launchPath
+  }
+}
+
 export const createEditorWindowTracker = (): {
   readonly focusOrCreateMainWindow: (
     openEditorWindow: (() => Promise<BrowserWindow>) | null
   ) => void
   readonly getMainWindow: () => BrowserWindow | null
+  readonly getWindowByWebContentsId: (webContentsId: number) => BrowserWindow | null
   readonly setMainWindow: (
     window: BrowserWindow,
     onClosed?: () => void
@@ -332,6 +360,10 @@ export const createEditorWindowTracker = (): {
       }
     },
     getMainWindow: () => mainWindow,
+    getWindowByWebContentsId: (webContentsId) =>
+      editorWindows.find(
+        (editorWindow) => editorWindow.webContents.id === webContentsId
+      ) ?? null,
     setMainWindow: (window, onClosed = () => undefined) => {
       removeEditorWindow(window)
       editorWindows = [...editorWindows, window]
@@ -486,6 +518,19 @@ const bootstrap = async (): Promise<void> => {
   })
 
   await app.whenReady()
+  const homePath = process.env[E2E_HOME_PATH_ENV] ?? app.getPath('home')
+
+  try {
+    await linkBuiltInAutomationToolSkills({
+      homePath,
+      repoRoot: app.getAppPath(),
+      resourcesPath: process.resourcesPath
+    })
+  } catch (error) {
+    recordStartupError(
+      `Failed to link built-in automation tool skills: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
   registerMdeCliInBackground({ app })
   configureAutoUpdates({
     app,
@@ -606,8 +651,9 @@ const bootstrap = async (): Promise<void> => {
   registerAutomationHandlers({
     adapterRegistry: automationAdapterRegistry,
     getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
-    homePath: app.getPath('home'),
+    homePath,
     ipcMain,
+    repoRoot: app.getAppPath(),
     runtime: automationRuntimeCoordinator,
     store: automationStore
   })
@@ -626,11 +672,35 @@ const bootstrap = async (): Promise<void> => {
   ipcMain.handle(WINDOW_CHANNELS.focusWorkspaceWindow, () => {
     focusMainWindow()
   })
-  openAppWindow = (launchPath = null) =>
-    createMainWindow(BrowserWindow, (window) => {
+  openAppWindow = async (launchPath = null) => {
+    if (isWorkspaceAutomationFlowsLaunchResource(launchPath)) {
+      const normalizedLaunchPath =
+        await normalizeWorkspaceAutomationFlowsLaunchResource(launchPath)
+      const existingWindowId = workspaceSession?.getWindowIdForWorkspaceRoot(
+        normalizedLaunchPath.workspaceRoot
+      )
+      const existingWindow =
+        existingWindowId === undefined || existingWindowId === null
+          ? null
+          : editorWindowTracker.getWindowByWebContentsId(existingWindowId)
+
+      if (existingWindow !== null) {
+        focusWindow(existingWindow)
+        existingWindow.webContents.send(
+          WORKSPACE_CHANNELS.launchPath,
+          normalizedLaunchPath
+        )
+        return existingWindow
+      }
+
+      launchPath = normalizedLaunchPath
+    }
+
+    return createMainWindow(BrowserWindow, (window) => {
       workspaceSession?.setPendingLaunchPath(window.webContents, launchPath)
       setMainWindow(window)
     })
+  }
 
   await openAppWindow(initialLaunchPath)
 

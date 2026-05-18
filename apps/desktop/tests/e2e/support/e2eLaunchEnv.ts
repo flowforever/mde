@@ -1,6 +1,7 @@
 import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_HOME_PATH_ENV,
   E2E_USER_DATA_PATH_ENV,
   E2E_WINDOW_MODE_ENV,
 } from '../../../src/shared/appIdentity'
@@ -30,6 +31,10 @@ export const createElectronLaunchEnv = ({
   ...toDefinedStringEnv(overrideEnv),
   [CAPTURE_STARTUP_DIAGNOSTICS_ENV]: '1',
   [DISABLE_SINGLE_INSTANCE_ENV]: '1',
+  [E2E_HOME_PATH_ENV]:
+    overrideEnv[E2E_HOME_PATH_ENV] ??
+    baseEnv[E2E_HOME_PATH_ENV] ??
+    e2eUserDataPath,
   [E2E_USER_DATA_PATH_ENV]: e2eUserDataPath,
   [E2E_WINDOW_MODE_ENV]:
     overrideEnv[E2E_WINDOW_MODE_ENV] ??

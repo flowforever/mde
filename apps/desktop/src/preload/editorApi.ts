@@ -6,6 +6,7 @@ import type {
   EditorApi,
   FileContents,
   ImageAsset,
+  WorkspaceAutomationFlowsLaunchResource,
   WorkspaceFileLaunchResource,
   WorkspaceLaunchResource,
   WorkspaceSearchResult
@@ -38,6 +39,7 @@ export const createEditorApi = (
     ): void => {
       if (
         typeof resourcePath === 'string' ||
+        isWorkspaceAutomationFlowsLaunchResource(resourcePath) ||
         isWorkspaceFileLaunchResource(resourcePath)
       ) {
         callback(resourcePath)
@@ -232,3 +234,13 @@ const isWorkspaceFileLaunchResource = (
   (value as WorkspaceFileLaunchResource).type === 'workspace-file' &&
   typeof (value as WorkspaceFileLaunchResource).workspaceRoot === 'string' &&
   typeof (value as WorkspaceFileLaunchResource).filePath === 'string'
+
+const isWorkspaceAutomationFlowsLaunchResource = (
+  value: unknown
+): value is WorkspaceAutomationFlowsLaunchResource =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as WorkspaceAutomationFlowsLaunchResource).type ===
+    'workspace-automation-flows' &&
+  typeof (value as WorkspaceAutomationFlowsLaunchResource).workspaceRoot ===
+    'string'

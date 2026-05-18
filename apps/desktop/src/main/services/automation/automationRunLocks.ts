@@ -14,6 +14,12 @@ const identityFields = Object.freeze([
   'taskId'
 ] as const satisfies readonly (keyof AutomationRunLockIdentity)[])
 
+const optionalIdentityFields = Object.freeze([
+  'automationFlowOwnerKey',
+  'executorSnapshotId',
+  'taskDataSnapshotId'
+] as const satisfies readonly (keyof AutomationRunLockIdentity)[])
+
 const unsafeIdentityPattern = /::|\r|\n|\0/u
 
 export const validateAutomationRunLockIdentity = (
@@ -21,6 +27,28 @@ export const validateAutomationRunLockIdentity = (
 ): AutomationRunLockValidation => {
   for (const field of identityFields) {
     const value = identity[field].trim()
+
+    if (value.length === 0) {
+      return Object.freeze({
+        ok: false,
+        reason: `${field} is required`
+      })
+    }
+
+    if (unsafeIdentityPattern.test(value)) {
+      return Object.freeze({
+        ok: false,
+        reason: `${field} contains unsafe characters`
+      })
+    }
+  }
+
+  for (const field of optionalIdentityFields) {
+    const value = identity[field]?.trim()
+
+    if (value === undefined) {
+      continue
+    }
 
     if (value.length === 0) {
       return Object.freeze({
@@ -49,7 +77,12 @@ export const createAutomationRunLockKey = (
     throw new Error(validation.reason ?? 'Invalid automation run lock identity')
   }
 
-  return identityFields.map((field) => identity[field].trim()).join('::')
+  return [
+    ...identityFields.map((field) => identity[field].trim()),
+    identity.automationFlowOwnerKey?.trim() ?? 'no-owner',
+    identity.executorSnapshotId?.trim() ?? 'no-executor-snapshot',
+    identity.taskDataSnapshotId?.trim() ?? 'no-task-data-snapshot'
+  ].join('::')
 }
 
 export const isAutomationRunLockActive = (run: AutomationStoredRun): boolean =>

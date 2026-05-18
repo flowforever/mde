@@ -22,6 +22,10 @@
     {
       "from": "../../bin/mde.js",
       "to": "cli/mde"
+    },
+    {
+      "from": "../../skills/automation-flow-helper",
+      "to": "skills/automation-flow-helper"
     }
   ],
   "mac": {

@@ -78,6 +78,26 @@ Review, manual testing, and release SubAgents must be fresh SubAgents. Do not re
 
 6. If a required credential, signing material, customer data sample, legal/security approval, destructive action, force-push, or ambiguous product decision is missing, record a blocker instead of guessing.
 
+## User Feedback During Execution
+
+Treat the latest user chat message as authoritative task context whenever it arrives during execution. Check for new user feedback before dispatching a new SubAgent phase, before declaring Architecture ALL PASS, Review ALL PASS, or manual divergent testing ALL PASS, before release/tag/push, and before writing terminal status.
+
+Classify user feedback before changing files:
+
+* Clarification or answer to a blocker: record the answer on the selected task source or GitHub issue, clear or supersede the old "Needs human input" / "Blocked" note, then resume from the earliest phase affected by the answer.
+
+* Current-task bug report, acceptance change, UX/copy/safety constraint, verification request, or release constraint: record "User feedback applied" on the selected source with the exact instruction and affected behavior. Dispatch a fresh Task Work or Task Work Fix SubAgent, then rerun every invalidated gate before completion or release.
+
+* Feedback after Architecture ALL PASS, Review ALL PASS, manual divergent testing ALL PASS, or release decision: treat task-scope feedback as invalidating any later gate that depended on the old code, docs, tests, manual, or release constraints. Re-run architecture review, general review, manual divergent testing, release decision, and release execution as needed for the changed state.
+
+* Feedback during release: use the Release Fix Loop. Release-only metadata feedback may stay with the Release SubAgent; production code, tests, user manual content, runtime configuration, packaging, or task acceptance feedback must return to the full `execute-picked-task` lifecycle.
+
+* Stop, pause, do-not-commit, do-not-push, or do-not-release instruction: stop the affected action immediately, record the instruction and current verification state on the selected source, and leave the source active unless the user explicitly marks it complete or cancelled.
+
+* New independent bug or requirement: do not mix it into the selected task unless the user explicitly says it changes this task. If the user wants it queued, create or update a separate task source when a safe target is clear; otherwise record a handoff note or ask a concise clarification. The execution agent must still finish, block, or hand off the selected task before auto-pick can choose another one.
+
+When user feedback causes a fix, require the same evidence as other findings: changed files, affected automated checks, review or fix-review evidence, manual retest when runtime/user-visible behavior is involved, and updated task-source notes. Do not treat chat acknowledgement alone as proof that the feedback was handled.
+
 ## Development
 
 The Task Work SubAgent performs the first development pass. The `execute-picked-task` agent dispatches the SubAgent, passes the selected task source and constraints, then waits for changed files, verification evidence, and blocker status.
@@ -256,6 +276,8 @@ For local task documents:
 
 * Add a status note with implementation summary, verification commands, release/deploy version when applicable, and any residual risk.
 
+* Include any user chat feedback that changed scope, blockers, release constraints, or verification expectations, plus how it was handled.
+
 * Include architecture review status, general review/fix-review status, manual divergent testing round count, missions, required dimension coverage, findings, fixes, retest evidence, and any remaining risk.
 
 * Move the document into the matching `done` directory only after required release/deploy succeeds.
@@ -265,6 +287,8 @@ For GitHub issues:
 * Add a PR/MR link comment as soon as the PR/MR exists.
 
 * Add completion, release/deploy, and verification comments without deleting issue history.
+
+* Include any user chat feedback that changed scope, blockers, release constraints, or verification expectations, plus how it was handled.
 
 * Include architecture review status, general review/fix-review status, manual divergent testing round count, missions, required dimension coverage, findings, fixes, retest evidence, and any remaining risk in the completion or handoff comment.
 
@@ -290,6 +314,9 @@ After recording a terminal completion, release, archive, blocker, or handoff sta
 | Manual testing finds valid issues | Dispatch a Task Work Fix SubAgent, require affected checks and manual retest evidence before completion |
 | Manual divergent testing ALL PASS | Arrange Release Decision SubAgent, then Release SubAgent with `skills/release-new-version/SKILL.md` when release-worthy |
 | Release discovers task-scope fix | Stop release if possible, dispatch Task Work Fix SubAgent, then rerun the full execute-picked-task lifecycle |
+| User feedback changes current task | Record it on the selected source, dispatch a fresh Task Work or Fix SubAgent, and rerun invalidated gates |
+| User feedback is independent work | Keep it separate from the selected task; create or hand off a separate source only when safe and explicit |
+| User answers a blocker | Record the answer, clear or supersede the blocker, and resume from the earliest affected phase |
 | Completion, release, archive, blocked, or handoff recorded | Return control to the auto-pick main agent; do not pick the next task here |
 | Verification fails | Arrange a Task Work Fix SubAgent if caused by this task; otherwise record exact unrelated failure evidence |
 | Release/deploy fails | Keep source outside `done`, record blocker, and do not close GitHub issue |

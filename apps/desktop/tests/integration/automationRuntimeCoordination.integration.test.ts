@@ -2,7 +2,11 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import type { AutomationFlow, AutomationFlowTaskCandidate } from '@mde/automation-flow'
+import type {
+  AutomationFlow,
+  AutomationFlowExecutorRef,
+  AutomationFlowTaskCandidate
+} from '@mde/automation-flow'
 import { describe, expect, it } from 'vitest'
 
 import { createAutomationAdapterRegistry } from '../../src/main/services/automation/automationAdapterRegistry'
@@ -65,6 +69,24 @@ const createCandidate = (
   ...overrides
 })
 
+const createExecutor = (
+  overrides: Partial<AutomationFlowExecutorRef> = {}
+): AutomationFlowExecutorRef => ({
+  autoDiscovered: false,
+  diagnostics: [],
+  displayName: 'Executor A',
+  enabled: true,
+  executorId: 'executor-a',
+  executorSnapshotId: 'executor-snapshot-a',
+  handles: {
+    sourceTypes: ['workspace-markdown']
+  },
+  order: 0,
+  tags: [],
+  type: 'skill',
+  ...overrides
+})
+
 describe('automation runtime coordination integration', () => {
   it('returns one active run for duplicate starts and releases after terminal completion', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
@@ -90,11 +112,13 @@ describe('automation runtime coordination integration', () => {
       runtime.startRun({
         automationFlow: createFlow(),
         candidate: createCandidate(workspaceRoot),
+        executorSnapshot: createExecutor(),
         workspaceRoot
       }),
       runtime.startRun({
         automationFlow: createFlow(),
         candidate: createCandidate(workspaceRoot),
+        executorSnapshot: createExecutor(),
         workspaceRoot
       })
     ])
@@ -111,6 +135,7 @@ describe('automation runtime coordination integration', () => {
     const nextRun = await runtime.startRun({
       automationFlow: createFlow(),
       candidate: createCandidate(workspaceRoot),
+      executorSnapshot: createExecutor(),
       workspaceRoot
     })
 
@@ -149,11 +174,13 @@ describe('automation runtime coordination integration', () => {
     const needsMe = await firstRuntime.startRun({
       automationFlow: createFlow(),
       candidate: createCandidate(workspaceRoot),
+      executorSnapshot: createExecutor(),
       workspaceRoot
     })
     const duplicateNeedsMe = await secondRuntime.startRun({
       automationFlow: createFlow(),
       candidate: createCandidate(workspaceRoot),
+      executorSnapshot: createExecutor(),
       workspaceRoot
     })
 
@@ -166,10 +193,73 @@ describe('automation runtime coordination integration', () => {
     const recoverableDuplicate = await secondRuntime.startRun({
       automationFlow: createFlow(),
       candidate: createCandidate(workspaceRoot),
+      executorSnapshot: createExecutor(),
       workspaceRoot
     })
 
     expect(recoverableDuplicate.runId).toBe(needsMe.runId)
     await expect(store.listRuns()).resolves.toHaveLength(1)
+  })
+
+  it('does not reuse active runs for different executor or task-data snapshots', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const store = createAutomationStore({ appDataPath })
+    let idCounter = 0
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([
+        createFakeAgentCliAdapter({
+          commandPath: '/fake/bin/codex',
+          engine: 'codex'
+        })
+      ]),
+      createId: (prefix) => `${prefix}-${(idCounter += 1)}`,
+      profileId: appDataPath,
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    const firstRun = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot, {
+        taskDataId: 'task-data-a',
+        taskDataSnapshotId: 'task-data-snapshot-a'
+      }),
+      executorSnapshot: createExecutor({
+        executorId: 'executor-a',
+        executorSnapshotId: 'executor-snapshot-a'
+      }),
+      workspaceRoot
+    })
+    const differentExecutorRun = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot, {
+        taskDataId: 'task-data-a',
+        taskDataSnapshotId: 'task-data-snapshot-a'
+      }),
+      executorSnapshot: createExecutor({
+        executorId: 'executor-b',
+        executorSnapshotId: 'executor-snapshot-b'
+      }),
+      workspaceRoot
+    })
+    const newerTaskDataRun = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot, {
+        taskDataId: 'task-data-a',
+        taskDataSnapshotId: 'task-data-snapshot-b'
+      }),
+      executorSnapshot: createExecutor({
+        executorId: 'executor-a',
+        executorSnapshotId: 'executor-snapshot-a'
+      }),
+      workspaceRoot
+    })
+
+    expect(differentExecutorRun.runId).not.toBe(firstRun.runId)
+    expect(newerTaskDataRun.runId).not.toBe(firstRun.runId)
+    await expect(store.listRuns()).resolves.toHaveLength(3)
   })
 })

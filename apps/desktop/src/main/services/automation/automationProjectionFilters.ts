@@ -1,7 +1,8 @@
 import type {
+  AutomationCenterFilters,
+  AutomationCenterScopeId,
   AutomationFlowRow,
   AutomationProjectionBucketFilter,
-  AutomationProjectionFilters
 } from '../../../shared/automation'
 
 export const AUTOMATION_NO_WORKSPACE_ID = 'mde:no-workspace'
@@ -38,6 +39,17 @@ const getFlowWorkspaceId = (flow: AutomationFlowRow): string =>
   flow.workspaceId ??
   (flow.scope === 'user' ? AUTOMATION_NO_WORKSPACE_ID : AUTOMATION_NO_WORKSPACE_ID)
 
+const getFlowOwnerKey = (flow: AutomationFlowRow): string =>
+  flow.automationFlowOwnerKey ?? flow.automationFlowId
+
+const isAppliedGlobalFlow = (flow: AutomationFlowRow): boolean =>
+  getFlowOwnerKey(flow).includes(':applied-global:')
+
+const getFlowScopeId = (flow: AutomationFlowRow): AutomationCenterScopeId =>
+  flow.scope === 'user' && !isAppliedGlobalFlow(flow)
+    ? 'global'
+    : `workspace:${getFlowWorkspaceId(flow)}`
+
 const getKnownWorkspaceIds = (
   flows: readonly AutomationFlowRow[],
   currentWorkspaceId: string | undefined
@@ -48,54 +60,67 @@ const getKnownWorkspaceIds = (
     ...flows.map(getFlowWorkspaceId)
   ])
 
-const getDefaultWorkspaceIds = (
-  currentWorkspaceId: string | undefined,
-  knownWorkspaceIds: readonly string[]
-): readonly string[] =>
-  uniqueStrings([
-    ...(currentWorkspaceId === undefined ? [] : [currentWorkspaceId]),
-    ...(knownWorkspaceIds.includes(AUTOMATION_NO_WORKSPACE_ID)
-      ? [AUTOMATION_NO_WORKSPACE_ID]
-      : [])
-  ])
-
 export const normalizeAutomationProjectionFilters = ({
   currentWorkspaceId,
   filters,
   flows
 }: {
   readonly currentWorkspaceId?: string
-  readonly filters?: AutomationProjectionFilters
+  readonly filters?: AutomationCenterFilters
   readonly flows: readonly AutomationFlowRow[]
-}): AutomationProjectionFilters => {
+}): AutomationCenterFilters => {
   const knownWorkspaceIds = getKnownWorkspaceIds(flows, currentWorkspaceId)
   const knownWorkspaceIdSet = new Set(knownWorkspaceIds)
   const requestedWorkspaceIds = uniqueStrings(filters?.workspaceIds)
-  const workspaceIds = Object.freeze(
-    requestedWorkspaceIds.length === 0
-      ? getDefaultWorkspaceIds(currentWorkspaceId, knownWorkspaceIds)
-      : requestedWorkspaceIds.filter((workspaceId) =>
-          knownWorkspaceIdSet.has(workspaceId)
+  const legacyWorkspaceIds = requestedWorkspaceIds.filter((workspaceId) =>
+    knownWorkspaceIdSet.has(workspaceId)
+  )
+  const knownScopeIds = new Set(
+    flows.map(getFlowScopeId).filter((scopeId) =>
+      scopeId === 'global' ||
+      knownWorkspaceIdSet.has(scopeId.replace(/^workspace:/u, ''))
+    )
+  )
+  const requestedScopeIds = uniqueStrings(filters?.scopeIds)
+  const hasExplicitScopeIds =
+    filters !== undefined && Object.prototype.hasOwnProperty.call(filters, 'scopeIds')
+  const scopeIds = Object.freeze(
+    hasExplicitScopeIds && requestedScopeIds.length === 0
+      ? []
+      : requestedScopeIds.filter(
+          (scopeId): scopeId is AutomationCenterScopeId =>
+            scopeId === 'global' || knownScopeIds.has(scopeId as AutomationCenterScopeId)
         )
   )
-  const normalizedWorkspaceIds =
-    workspaceIds.length === 0
-      ? getDefaultWorkspaceIds(currentWorkspaceId, knownWorkspaceIds)
-      : workspaceIds
-  const selectedWorkspaceIds = new Set(normalizedWorkspaceIds)
-  const flowById = new Map(flows.map((flow) => [flow.automationFlowId, flow]))
-  const flowIds = uniqueStrings(filters?.flowIds).filter((flowId) => {
-    const flow = flowById.get(flowId)
+  const defaultScopeIds =
+    currentWorkspaceId === undefined
+      ? []
+      : ([`workspace:${currentWorkspaceId}`] as const)
+  const effectiveScopeIds =
+    scopeIds.length > 0 || hasExplicitScopeIds
+      ? scopeIds
+      : legacyWorkspaceIds.length > 0
+        ? legacyWorkspaceIds.map((workspaceId): AutomationCenterScopeId =>
+            workspaceId === AUTOMATION_NO_WORKSPACE_ID
+              ? 'global'
+              : `workspace:${workspaceId}`
+          )
+        : defaultScopeIds
+  const selectedScopeIds = new Set(effectiveScopeIds)
+  const flowByOwnerKey = new Map(flows.map((flow) => [getFlowOwnerKey(flow), flow]))
+  const flowOwnerKeys =
+    selectedScopeIds.size === 0
+      ? []
+      : uniqueStrings(filters?.flowOwnerKeys).filter((ownerKey) => {
+          const flow = flowByOwnerKey.get(ownerKey)
 
-    return (
-      flow !== undefined && selectedWorkspaceIds.has(getFlowWorkspaceId(flow))
-    )
-  })
+          return flow !== undefined && selectedScopeIds.has(getFlowScopeId(flow))
+        })
 
   return Object.freeze({
     archivedVisible: filters?.archivedVisible ?? false,
     bucket: isProjectionBucket(filters?.bucket) ? filters.bucket : 'ready',
-    flowIds: Object.freeze(flowIds),
-    workspaceIds: normalizedWorkspaceIds
+    flowOwnerKeys: Object.freeze(flowOwnerKeys),
+    scopeIds: effectiveScopeIds
   })
 }

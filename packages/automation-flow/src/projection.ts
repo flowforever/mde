@@ -1,5 +1,8 @@
+import { selectAutomationFlowExecutor } from './executors'
 import type {
+  AutomationFlowExecutorRef,
   AutomationFlowTaskCandidate,
+  AutomationFlowDiagnostic,
   AutomationProjectedTask,
   AutomationReportOverlay,
   AutomationRunOverlay,
@@ -9,6 +12,7 @@ import type {
 
 interface TaskOverlay {
   readonly candidate?: AutomationFlowTaskCandidate
+  readonly eligibleExecutors: readonly AutomationFlowExecutorRef[]
   readonly latestReport?: AutomationReportOverlay
   readonly runs: readonly AutomationRunOverlay[]
   readonly taskId: string
@@ -21,8 +25,11 @@ const bucketOrder: Record<AutomationTaskBucket, number> = {
   done: 3
 }
 
+const isRunningLikeRun = (run: AutomationRunOverlay): boolean =>
+  run.state === 'running' || run.state === 'starting'
+
 const isActiveRun = (run: AutomationRunOverlay): boolean =>
-  run.state === 'needs-me' || run.state === 'running'
+  run.state === 'needs-me' || isRunningLikeRun(run)
 
 const compareReportsDescending = (
   left: AutomationReportOverlay,
@@ -52,11 +59,62 @@ const pickActiveRun = (
     return needsMeRun
   }
 
-  return runs.find((run) => run.state === 'running')
+  return runs.find(isRunningLikeRun)
 }
 
 const getProjectedTaskTitle = (overlay: TaskOverlay): string =>
   overlay.candidate?.title ?? overlay.latestReport?.title ?? overlay.taskId
+
+const hasBlockingExecutorDiagnostic = (
+  executor: AutomationFlowExecutorRef
+): boolean =>
+  executor.diagnostics.some((diagnostic) => diagnostic.severity === 'error')
+
+const getEligibleExecutors = (
+  executors: readonly AutomationFlowExecutorRef[]
+): readonly AutomationFlowExecutorRef[] =>
+  Object.freeze(
+    executors.filter(
+      (executor) => executor.enabled && !hasBlockingExecutorDiagnostic(executor)
+    )
+  )
+
+const getExecutorProjection = (
+  candidate: AutomationFlowTaskCandidate | undefined,
+  executors: readonly AutomationFlowExecutorRef[]
+): {
+  readonly blockingDiagnostics: readonly AutomationFlowDiagnostic[]
+  readonly eligibleExecutors: readonly AutomationFlowExecutorRef[]
+  readonly primaryExecutor?: AutomationFlowExecutorRef
+} => {
+  if (candidate === undefined) {
+    return Object.freeze({
+      blockingDiagnostics: Object.freeze([]),
+      eligibleExecutors: Object.freeze([])
+    })
+  }
+
+  const eligibleExecutors = getEligibleExecutors(executors)
+  const selection = selectAutomationFlowExecutor({
+    executors,
+    requiredExecutorId: candidate.requiredExecutorId,
+    requiredExecutorRef: candidate.requiredExecutorRef,
+    sourceType: candidate.sourceType,
+    tags: [],
+    taskType: candidate.taskType
+  })
+
+  return Object.freeze({
+    blockingDiagnostics: selection.diagnostics,
+    eligibleExecutors,
+    ...(selection.executor !== undefined &&
+    eligibleExecutors.some(
+      (executor) => executor.executorId === selection.executor?.executorId
+    )
+      ? { primaryExecutor: selection.executor }
+      : {})
+  })
+}
 
 const getDoneTaskMetadata = (
   overlay: TaskOverlay
@@ -112,6 +170,38 @@ const createProjectedTask = (
   overlay: TaskOverlay
 ): AutomationProjectedTask | null => {
   const activeRun = pickActiveRun(overlay.runs.filter(isActiveRun))
+  const executorProjection = getExecutorProjection(
+    overlay.candidate,
+    overlay.eligibleExecutors
+  )
+  const executorFields = Object.freeze({
+    ...(executorProjection.blockingDiagnostics.length > 0
+      ? { blockingDiagnostics: executorProjection.blockingDiagnostics }
+      : {}),
+    ...(executorProjection.eligibleExecutors.length > 0
+      ? { eligibleExecutors: executorProjection.eligibleExecutors }
+      : {}),
+    ...(activeRun?.executorSnapshotId !== undefined
+      ? { executorSnapshotId: activeRun.executorSnapshotId }
+      : executorProjection.primaryExecutor?.executorSnapshotId !== undefined
+        ? { executorSnapshotId: executorProjection.primaryExecutor.executorSnapshotId }
+        : {}),
+    ...(executorProjection.primaryExecutor !== undefined
+      ? { primaryExecutor: executorProjection.primaryExecutor }
+      : {})
+  })
+  const taskDataFields = Object.freeze({
+    ...(activeRun?.taskDataId !== undefined
+      ? { taskDataId: activeRun.taskDataId }
+      : overlay.candidate?.taskDataId !== undefined
+        ? { taskDataId: overlay.candidate.taskDataId }
+        : {}),
+    ...(activeRun?.taskDataSnapshotId !== undefined
+      ? { taskDataSnapshotId: activeRun.taskDataSnapshotId }
+      : overlay.candidate?.taskDataSnapshotId !== undefined
+        ? { taskDataSnapshotId: overlay.candidate.taskDataSnapshotId }
+        : {})
+  })
 
   if (activeRun?.state === 'needs-me') {
     return Object.freeze({
@@ -123,6 +213,7 @@ const createProjectedTask = (
       bucket: 'needs-me',
       engine: overlay.candidate?.engine,
       latestReportId: overlay.latestReport?.reportId,
+      ...executorFields,
       ...(overlay.candidate?.priority !== undefined
         ? { priority: overlay.candidate.priority }
         : {}),
@@ -138,6 +229,7 @@ const createProjectedTask = (
         ? { sourceUri: overlay.candidate.sourceUri }
         : {}),
       taskId: overlay.taskId,
+      ...taskDataFields,
       title: getProjectedTaskTitle(overlay),
       ...(overlay.candidate?.workspaceId !== undefined
         ? { workspaceId: overlay.candidate.workspaceId }
@@ -145,7 +237,7 @@ const createProjectedTask = (
     })
   }
 
-  if (activeRun?.state === 'running') {
+  if (activeRun !== undefined && isRunningLikeRun(activeRun)) {
     return Object.freeze({
       activeRunId: activeRun.runId,
       automationFlowId: activeRun.automationFlowId,
@@ -155,6 +247,7 @@ const createProjectedTask = (
       bucket: 'running',
       engine: overlay.candidate?.engine,
       latestReportId: overlay.latestReport?.reportId,
+      ...executorFields,
       ...(overlay.candidate?.priority !== undefined
         ? { priority: overlay.candidate.priority }
         : {}),
@@ -170,6 +263,7 @@ const createProjectedTask = (
         ? { sourceUri: overlay.candidate.sourceUri }
         : {}),
       taskId: overlay.taskId,
+      ...taskDataFields,
       title: getProjectedTaskTitle(overlay),
       ...(overlay.candidate?.workspaceId !== undefined
         ? { workspaceId: overlay.candidate.workspaceId }
@@ -185,9 +279,11 @@ const createProjectedTask = (
         : {}),
       bucket: 'done',
       ...getDoneTaskMetadata(overlay),
+      ...executorFields,
       latestReportId: overlay.latestReport.reportId,
       sourceItemId: overlay.latestReport.sourceItemId,
       taskId: overlay.taskId,
+      ...taskDataFields,
       title: getProjectedTaskTitle(overlay)
     })
   }
@@ -200,6 +296,7 @@ const createProjectedTask = (
         : {}),
       bucket: 'ready',
       engine: overlay.candidate.engine,
+      ...executorFields,
       ...(overlay.candidate.priority !== undefined
         ? { priority: overlay.candidate.priority }
         : {}),
@@ -215,6 +312,7 @@ const createProjectedTask = (
         ? { sourceUri: overlay.candidate.sourceUri }
         : {}),
       taskId: overlay.taskId,
+      ...taskDataFields,
       title: overlay.candidate.title,
       ...(overlay.candidate.workspaceId !== undefined
         ? { workspaceId: overlay.candidate.workspaceId }
@@ -274,10 +372,12 @@ const compareProjectedTasks = (
 
 export const projectAutomationFlowSignalStack = ({
   candidates,
+  executorsByOwnerKey = new Map(),
   reports,
   runs
 }: {
   readonly candidates: readonly AutomationFlowTaskCandidate[]
+  readonly executorsByOwnerKey?: ReadonlyMap<string, readonly AutomationFlowExecutorRef[]>
   readonly reports: readonly AutomationReportOverlay[]
   readonly runs: readonly AutomationRunOverlay[]
 }): AutomationSignalStackProjection => {
@@ -325,6 +425,12 @@ export const projectAutomationFlowSignalStack = ({
     .map((taskId) =>
       createProjectedTask({
         candidate: candidateByTaskId.get(taskId),
+        eligibleExecutors:
+          executorsByOwnerKey.get(
+            candidateByTaskId.get(taskId)?.automationFlowOwnerKey ??
+              candidateByTaskId.get(taskId)?.automationFlowId ??
+              ''
+          ) ?? [],
         latestReport: latestReportByTaskId.get(taskId),
         runs: runsByTaskId.get(taskId) ?? [],
         taskId

@@ -59,6 +59,11 @@ import type { AppState } from "../app/appTypes";
 import type { AiTool, AiToolId } from "../../../shared/ai";
 import type { UpdateCheckResult } from "../../../shared/update";
 import type { WorkspaceSearchResult } from "../../../shared/workspace";
+import type {
+  AutomationExplorerFlowSummary,
+  AutomationExplorerProjection,
+  AutomationExecutorSummary,
+} from "../../../shared/automation";
 import { getEffectiveAiToolId, type AiCliSettings } from "../ai/aiSettings";
 import {
   APP_THEMES,
@@ -96,22 +101,43 @@ interface ExplorerPaneProps {
   readonly aiSettings?: AiCliSettings;
   readonly aiTools?: readonly AiTool[];
   readonly appVersion?: string;
+  readonly automationFlowsProjection?: AutomationExplorerProjection | null;
+  readonly automationFlowsPanelOpenRequest?: number | null;
   readonly availableLanguagePacks?: readonly AppLanguagePack[];
   readonly isCollapsed?: boolean;
   readonly onAiSettingsChange?: (settings: AiCliSettings) => void;
   readonly onAppLanguageChange?: (languageId: string) => void;
   readonly onCheckForUpdates?: () => Promise<UpdateCheckResult>;
+  readonly onAddAutomationExecutor?: (
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
+  readonly onApplyGlobalAutomationFlow?: () => Promise<void> | void;
   readonly onCreateFile: (filePath: string) => void;
   readonly onCreateFolder: (folderPath: string) => void;
+  readonly onCreateAutomationFlow?: () => Promise<void> | void;
   readonly onCopyEntry?: (entryPath: string) => Promise<void> | void;
   readonly onCopyEntryPath?: (
     entryPath: string,
     pathKind: "absolute" | "relative",
   ) => Promise<void> | void;
   readonly onDeleteEntry: () => void;
+  readonly onDeleteAutomationFlow?: (
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
   readonly onForgetWorkspace?: (workspace: RecentWorkspace) => void;
   readonly onOpenFile?: () => void;
   readonly onOpenAutomationCenter?: () => void;
+  readonly onOpenAutomationExecutor?: (
+    executor: AutomationExecutorSummary,
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
+  readonly onOpenAutomationFlow?: (
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
+  readonly onOpenAutomationSkillExecutor?: (
+    executor: AutomationExecutorSummary,
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
   readonly onOpenRecentFile?: (filePath: string) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenWorkspaceInNewWindow?: (workspace: RecentWorkspace) => void;
@@ -125,6 +151,18 @@ interface ExplorerPaneProps {
   ) => Promise<void> | void;
   readonly onRefreshTree?: (
     directoryPaths: readonly string[],
+  ) => Promise<void> | void;
+  readonly onRefreshAutomationFlows?: () => Promise<void> | void;
+  readonly onRefreshAutomationSkills?: () => Promise<void> | void;
+  readonly onJumpGlobalAutomationFlow?: (
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
+  readonly onRemoveAppliedGlobalAutomationFlow?: (
+    flow: AutomationExplorerFlowSummary,
+  ) => Promise<void> | void;
+  readonly onRenameAutomationFlow?: (
+    flow: AutomationExplorerFlowSummary,
+    name: string,
   ) => Promise<void> | void;
   readonly onRenameEntry: (entryName: string) => void;
   readonly onSearchWorkspace?: (
@@ -180,6 +218,8 @@ const DEFAULT_AI_SETTINGS: AiCliSettings = {
   selectedToolId: null,
 };
 const EXPLORER_RECENT_FILES_PANEL_STORAGE_KEY = "mde.explorerRecentFilesPanel";
+const EXPLORER_AUTOMATION_FLOWS_PANEL_STORAGE_KEY =
+  "mde.explorerAutomationFlowsPanel";
 const RECENT_FILES_PANEL_HEIGHT_DEFAULT = 164;
 const RECENT_FILES_PANEL_HEIGHT_MIN = 96;
 const RECENT_FILES_PANEL_HEIGHT_MAX = 320;
@@ -189,6 +229,10 @@ const DELETE_CONFIRMATION_MARGIN = 12;
 
 interface RecentFilesPanelState {
   readonly height: number;
+  readonly isCollapsed: boolean;
+}
+
+interface AutomationFlowsPanelState {
   readonly isCollapsed: boolean;
 }
 
@@ -204,6 +248,11 @@ interface ExpandedDirectoryState {
 }
 
 const EMPTY_EXPANDED_DIRECTORY_PATHS = new Set<string>();
+const SAFE_AUTOMATION_SKILL_SOURCE_CLASSES = new Set([
+  "repo-local",
+  "user-global",
+  "workspace-local",
+]);
 
 const getEntryName = (entryPath: string): string => {
   const separatorIndex = entryPath.lastIndexOf("/");
@@ -211,6 +260,35 @@ const getEntryName = (entryPath: string): string => {
   return separatorIndex === -1
     ? entryPath
     : entryPath.slice(separatorIndex + 1);
+};
+
+const isMarkdownPath = (filePath: string): boolean =>
+  filePath.toLocaleLowerCase().endsWith(".md");
+
+const readAutomationFlowsPanelState = (): AutomationFlowsPanelState => {
+  try {
+    return {
+      isCollapsed:
+        globalThis.localStorage.getItem(
+          EXPLORER_AUTOMATION_FLOWS_PANEL_STORAGE_KEY,
+        ) === "collapsed",
+    };
+  } catch {
+    return { isCollapsed: false };
+  }
+};
+
+const writeAutomationFlowsPanelState = (
+  state: AutomationFlowsPanelState,
+): void => {
+  try {
+    globalThis.localStorage.setItem(
+      EXPLORER_AUTOMATION_FLOWS_PANEL_STORAGE_KEY,
+      state.isCollapsed ? "collapsed" : "expanded",
+    );
+  } catch {
+    // Storage is best-effort for panel chrome.
+  }
 };
 
 const renderHighlightedSearchText = (
@@ -538,18 +616,27 @@ export const ExplorerPane = ({
   aiSettings = DEFAULT_AI_SETTINGS,
   aiTools = [],
   appVersion = "0.0.0",
+  automationFlowsProjection = null,
+  automationFlowsPanelOpenRequest = null,
   availableLanguagePacks = [],
   isCollapsed = false,
   onAiSettingsChange = () => undefined,
   onAppLanguageChange = () => undefined,
+  onAddAutomationExecutor = () => undefined,
+  onApplyGlobalAutomationFlow = () => undefined,
   onCheckForUpdates,
+  onCreateAutomationFlow = () => undefined,
   onCreateFile,
   onCreateFolder,
   onCopyEntry = () => undefined,
   onCopyEntryPath = () => undefined,
+  onDeleteAutomationFlow = () => undefined,
   onDeleteEntry,
   onForgetWorkspace = () => undefined,
   onOpenAutomationCenter = () => undefined,
+  onOpenAutomationExecutor = () => undefined,
+  onOpenAutomationFlow = () => undefined,
+  onOpenAutomationSkillExecutor = () => undefined,
   onOpenFile = () => undefined,
   onOpenRecentFile = () => undefined,
   onOpenWorkspace,
@@ -558,8 +645,13 @@ export const ExplorerPane = ({
   onValidateRecentFiles = () => undefined,
   onPasteEntry = () => undefined,
   onRefreshTree = () => undefined,
+  onRefreshAutomationFlows = () => undefined,
+  onRefreshAutomationSkills = () => undefined,
+  onRenameAutomationFlow = () => undefined,
   onRenameEntry,
   onSearchWorkspace,
+  onJumpGlobalAutomationFlow = () => undefined,
+  onRemoveAppliedGlobalAutomationFlow = () => undefined,
   onSelectTheme = () => undefined,
   onSelectEntry,
   onSelectDeletedDocumentHistoryEntry = () => undefined,
@@ -597,6 +689,9 @@ export const ExplorerPane = ({
   const [recentFilesPanelState, setRecentFilesPanelState] = useState(
     readRecentFilesPanelState,
   );
+  const [automationFlowsPanelState, setAutomationFlowsPanelState] = useState(
+    readAutomationFlowsPanelState,
+  );
   const [isDeletedDocumentsExpanded, setDeletedDocumentsExpanded] =
     useState(false);
   const [expandedDirectoryState, setExpandedDirectoryState] =
@@ -617,6 +712,10 @@ export const ExplorerPane = ({
     useState(false);
   const [deleteConfirmation, setDeleteConfirmation] =
     useState<PendingDeleteConfirmation | null>(null);
+  const [automationFlowRename, setAutomationFlowRename] = useState<{
+    readonly flowKey: string;
+    readonly name: string;
+  } | null>(null);
   const [
     showingHiddenEntriesWorkspaceRoot,
     setShowingHiddenEntriesWorkspaceRoot,
@@ -890,6 +989,47 @@ export const ExplorerPane = ({
   useEffect(() => {
     writeRecentFilesPanelState(recentFilesPanelState);
   }, [recentFilesPanelState]);
+
+  useEffect(() => {
+    writeAutomationFlowsPanelState(automationFlowsPanelState);
+  }, [automationFlowsPanelState]);
+
+  useEffect(() => {
+    if (automationFlowsPanelOpenRequest === null || !workspaceRoot) {
+      return;
+    }
+
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+
+      setAutomationFlowsPanelState({ isCollapsed: false });
+      void Promise.resolve(onRefreshAutomationFlows()).catch(() => undefined);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    automationFlowsPanelOpenRequest,
+    onRefreshAutomationFlows,
+    workspaceRoot,
+  ]);
+
+  useEffect(() => {
+    if (automationFlowsPanelState.isCollapsed || !workspaceRoot) {
+      return;
+    }
+
+    void Promise.resolve(onRefreshAutomationFlows()).catch(() => undefined);
+  }, [
+    automationFlowsPanelState.isCollapsed,
+    onRefreshAutomationFlows,
+    workspaceRoot,
+  ]);
 
   useEffect(() => {
     if (
@@ -1556,6 +1696,21 @@ export const ExplorerPane = ({
       void Promise.resolve(onValidateRecentFiles()).catch(() => undefined);
     }
   };
+  const toggleAutomationFlowsPanel = (): void => {
+    const shouldRefreshAutomationFlows = automationFlowsPanelState.isCollapsed;
+
+    setAutomationFlowsPanelState((currentState) => ({
+      isCollapsed: !currentState.isCollapsed,
+    }));
+
+    if (shouldRefreshAutomationFlows) {
+      void Promise.resolve(onRefreshAutomationFlows()).catch(() => undefined);
+    }
+  };
+  const refreshAutomationSkills = async (): Promise<void> => {
+    await Promise.resolve(onRefreshAutomationSkills());
+    await Promise.resolve(onRefreshAutomationFlows());
+  };
   const toggleDeletedDocumentsPanel = (): void => {
     const nextValue = !isDeletedDocumentsVisible;
 
@@ -1661,6 +1816,356 @@ export const ExplorerPane = ({
     } finally {
       setIsCheckingForUpdates(false);
     }
+  };
+  const canOpenSkillExecutorSource = (
+    executor: AutomationExecutorSummary,
+  ): boolean =>
+    executor.type === "skill" &&
+    typeof executor.sourcePath === "string" &&
+    isMarkdownPath(executor.sourcePath) &&
+    SAFE_AUTOMATION_SKILL_SOURCE_CLASSES.has(executor.sourceClass ?? "");
+  const renderAutomationExecutorRow = (
+    flow: AutomationExplorerFlowSummary,
+    executor: AutomationExecutorSummary,
+  ): React.JSX.Element => {
+    const diagnosticText =
+      executor.diagnostics
+        ?.map((diagnostic) => diagnostic.technicalMessage ?? diagnostic.message)
+        .join("; ") ?? "";
+    const canOpenMarkdownExecutor =
+      executor.type === "markdown" &&
+      typeof executor.sourcePath === "string" &&
+      isMarkdownPath(executor.sourcePath);
+    const canOpenSkillExecutor = canOpenSkillExecutorSource(executor);
+    const canOpenExecutor = canOpenMarkdownExecutor || canOpenSkillExecutor;
+    const label =
+      executor.type === "skill"
+        ? text("explorer.automationSkillExecutorLabel", {
+            name: executor.displayName,
+          })
+        : text("explorer.automationMarkdownExecutorLabel", {
+            name: executor.displayName,
+          });
+
+    return (
+      <button
+        aria-label={label}
+        className={[
+          "explorer-automation-executor-row",
+          canOpenExecutor ? "" : "is-read-only",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-component-id={COMPONENT_IDS.explorer.automationExecutorRow}
+        disabled={!canOpenExecutor}
+        key={`${flow.flowOwnerKey ?? flow.id}:${executor.executorId}`}
+        onClick={() => {
+          if (canOpenMarkdownExecutor) {
+            void Promise.resolve(onOpenAutomationExecutor(executor, flow));
+          } else if (canOpenSkillExecutor) {
+            void Promise.resolve(onOpenAutomationSkillExecutor(executor, flow));
+          }
+        }}
+        title={diagnosticText || label}
+        type="button"
+      >
+        {executor.type === "skill" ? (
+          <Bot aria-hidden="true" focusable="false" size={13} />
+        ) : (
+          <FileText aria-hidden="true" focusable="false" size={13} />
+        )}
+        <span>{executor.displayName}</span>
+        <span>
+          {executor.sourceClass ??
+            (executor.type === "skill"
+              ? text("explorer.automationSkillExecutor")
+              : text("explorer.automationMarkdownExecutor"))}
+        </span>
+      </button>
+    );
+  };
+  const getAutomationFlowKey = (flow: AutomationExplorerFlowSummary): string =>
+    flow.flowOwnerKey ?? flow.id;
+  const renderAutomationFlowRow = (
+    flow: AutomationExplorerFlowSummary,
+  ): React.JSX.Element => {
+    const isGlobalFlow = flow.scope === "user";
+    const isAppliedGlobalFlow = isGlobalFlow && flow.appliedToWorkspace === true;
+    const canOpenFlow =
+      typeof flow.sourceFile === "string" && isMarkdownPath(flow.sourceFile);
+    const flowKey = getAutomationFlowKey(flow);
+    const renameState =
+      automationFlowRename?.flowKey === flowKey ? automationFlowRename : null;
+
+    return (
+      <div
+        className="explorer-automation-flow-group"
+        data-component-id={COMPONENT_IDS.explorer.automationFlowRow}
+        key={flowKey}
+      >
+        <div className="explorer-automation-flow-main">
+          {renameState === null ? (
+            <button
+              aria-label={text("explorer.openAutomationFlow", {
+                name: flow.name,
+              })}
+              className="explorer-automation-flow-button"
+              disabled={!canOpenFlow}
+              onClick={() => {
+                void Promise.resolve(onOpenAutomationFlow(flow));
+              }}
+              type="button"
+            >
+              <FileText aria-hidden="true" focusable="false" size={14} />
+              <span>{flow.name}</span>
+              <span>
+                {isGlobalFlow
+                  ? text("explorer.globalAutomationFlow")
+                  : text("explorer.workspaceAutomationFlow")}
+              </span>
+            </button>
+          ) : (
+            <form
+              className="explorer-automation-flow-rename-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const nextName = renameState.name.trim();
+
+                setAutomationFlowRename(null);
+                if (nextName.length > 0 && nextName !== flow.name) {
+                  void Promise.resolve(onRenameAutomationFlow(flow, nextName));
+                }
+              }}
+            >
+              <input
+                aria-label={text("explorer.renameAutomationFlow", {
+                  name: flow.name,
+                })}
+                autoFocus
+                data-component-id={COMPONENT_IDS.explorer.inlineNameField}
+                onBlur={() => {
+                  setAutomationFlowRename(null);
+                }}
+                onChange={(event) => {
+                  setAutomationFlowRename({
+                    flowKey,
+                    name: event.currentTarget.value,
+                  });
+                }}
+                onFocus={(event) => {
+                  event.currentTarget.select();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setAutomationFlowRename(null);
+                  }
+                }}
+                type="text"
+                value={renameState.name}
+              />
+            </form>
+          )}
+          <div
+            aria-label={text("explorer.automationFlowActions", {
+              name: flow.name,
+            })}
+            className="explorer-automation-flow-actions"
+            data-component-id={COMPONENT_IDS.explorer.automationFlowMenu}
+          >
+            <button
+              aria-label={text("explorer.addAutomationExecutorForFlow", {
+                name: flow.name,
+              })}
+              className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.addAutomationExecutorButton}
+              onClick={() => {
+                void Promise.resolve(onAddAutomationExecutor(flow));
+              }}
+              title={text("explorer.addAutomationExecutor")}
+              type="button"
+            >
+              <FilePlus aria-hidden="true" focusable="false" size={13} />
+            </button>
+            <button
+              aria-label={text("explorer.renameAutomationFlow", {
+                name: flow.name,
+              })}
+              className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.renameAutomationFlowButton}
+              disabled={!canOpenFlow}
+              onClick={() => {
+                setAutomationFlowRename({ flowKey, name: flow.name });
+              }}
+              title={text("explorer.renameAutomationFlow", {
+                name: flow.name,
+              })}
+              type="button"
+            >
+              <Pencil aria-hidden="true" focusable="false" size={13} />
+            </button>
+            <button
+              aria-label={text("explorer.deleteAutomationFlow", {
+                name: flow.name,
+              })}
+              className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.deleteAutomationFlowButton}
+              disabled={!canOpenFlow}
+              onClick={() => {
+                void Promise.resolve(onDeleteAutomationFlow(flow));
+              }}
+              title={text("explorer.deleteAutomationFlow", {
+                name: flow.name,
+              })}
+              type="button"
+            >
+              <Trash2 aria-hidden="true" focusable="false" size={13} />
+            </button>
+            {isGlobalFlow ? (
+              <>
+                <button
+                  aria-label={text("explorer.jumpGlobalAutomationFlow", {
+                    name: flow.name,
+                  })}
+                  className="explorer-icon-button"
+                  data-component-id={
+                    COMPONENT_IDS.explorer.jumpGlobalAutomationFlowButton
+                  }
+                  onClick={() => {
+                    void Promise.resolve(onJumpGlobalAutomationFlow(flow));
+                  }}
+                  title={text("explorer.jumpGlobalAutomationFlow", {
+                    name: flow.name,
+                  })}
+                  type="button"
+                >
+                  <ExternalLink aria-hidden="true" focusable="false" size={13} />
+                </button>
+                {isAppliedGlobalFlow ? (
+                  <button
+                    aria-label={text("explorer.removeGlobalAutomationFlow", {
+                      name: flow.name,
+                    })}
+                    className="explorer-icon-button"
+                    data-component-id={
+                      COMPONENT_IDS.explorer.removeAppliedGlobalFlowButton
+                    }
+                    onClick={() => {
+                      void Promise.resolve(
+                        onRemoveAppliedGlobalAutomationFlow(flow),
+                      );
+                    }}
+                    title={text("explorer.removeGlobalAutomationFlow", {
+                      name: flow.name,
+                    })}
+                    type="button"
+                  >
+                    <X aria-hidden="true" focusable="false" size={13} />
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
+        {flow.executors.length > 0 ? (
+          <div className="explorer-automation-executor-list">
+            {flow.executors.map((executor) =>
+              renderAutomationExecutorRow(flow, executor),
+            )}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+  const renderAutomationFlowsSection = (): React.JSX.Element | null => {
+    if (!state.workspace) {
+      return null;
+    }
+
+    const flows = automationFlowsProjection?.flows ?? [];
+    const isAutomationFlowsCollapsed =
+      automationFlowsPanelState.isCollapsed;
+
+    return (
+      <section
+        aria-label={text("explorer.automationFlows")}
+        className={[
+          "explorer-automation-flows-section",
+          isAutomationFlowsCollapsed ? "is-collapsed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-component-id={COMPONENT_IDS.explorer.automationFlowsPanel}
+      >
+        <div className="explorer-automation-flows-header">
+          <button
+            aria-expanded={!isAutomationFlowsCollapsed}
+            className="explorer-section-header-button"
+            onClick={toggleAutomationFlowsPanel}
+            type="button"
+          >
+            {isAutomationFlowsCollapsed ? (
+              <ChevronRight aria-hidden="true" focusable="false" size={14} />
+            ) : (
+              <ChevronDown aria-hidden="true" focusable="false" size={14} />
+            )}
+            <span>{text("explorer.automationFlows")}</span>
+            <span>{flows.length}</span>
+          </button>
+          <div className="explorer-automation-flows-toolbar">
+            <button
+              aria-label={text("explorer.addAutomationFlow")}
+              className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.addAutomationFlowButton}
+              onClick={() => {
+                void Promise.resolve(onCreateAutomationFlow());
+              }}
+              title={text("explorer.addAutomationFlow")}
+              type="button"
+            >
+              <FilePlus aria-hidden="true" focusable="false" size={14} />
+            </button>
+            <button
+              aria-label={text("explorer.applyGlobalAutomationFlow")}
+              className="explorer-icon-button"
+              data-component-id={COMPONENT_IDS.explorer.applyGlobalFlowButton}
+              onClick={() => {
+                void Promise.resolve(onApplyGlobalAutomationFlow());
+              }}
+              title={text("explorer.applyGlobalAutomationFlow")}
+              type="button"
+            >
+              <AtSign aria-hidden="true" focusable="false" size={14} />
+            </button>
+            <button
+              aria-label={text("explorer.refreshAutomationSkills")}
+              className="explorer-icon-button"
+              data-component-id={
+                COMPONENT_IDS.explorer.refreshAutomationSkillsButton
+              }
+              onClick={() => {
+                void refreshAutomationSkills();
+              }}
+              title={text("explorer.refreshAutomationSkills")}
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" focusable="false" size={14} />
+            </button>
+          </div>
+        </div>
+        {!isAutomationFlowsCollapsed ? (
+          flows.length > 0 ? (
+            <div className="explorer-automation-flow-list">
+              {flows.map(renderAutomationFlowRow)}
+            </div>
+          ) : (
+            <p className="explorer-recent-empty">
+              {text("explorer.noAutomationFlows")}
+            </p>
+          )
+        ) : null}
+      </section>
+    );
   };
   const renderThemePanel = (): React.JSX.Element => (
     <div className="settings-panel-stack">
@@ -2773,6 +3278,7 @@ export const ExplorerPane = ({
                 </div>
               ) : null}
             </section>
+            {renderAutomationFlowsSection()}
             {!isRecentFilesCollapsed ? (
               <div
                 aria-label={text("explorer.resizeRecentFilesPanel")}

@@ -2,7 +2,11 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import type { AutomationFlow, AutomationFlowTaskCandidate } from '@mde/automation-flow'
+import type {
+  AutomationFlow,
+  AutomationFlowExecutorRef,
+  AutomationFlowTaskCandidate
+} from '@mde/automation-flow'
 import { describe, expect, it } from 'vitest'
 
 import { createAutomationAdapterRegistry } from '../../src/main/services/automation/automationAdapterRegistry'
@@ -64,8 +68,24 @@ const createCandidate = (
   sourcePath: join(workspaceRoot, '.mde', 'docs', 'tasks', 'ready.md'),
   sourceType: 'workspace-markdown',
   taskId: 'task-a',
+  taskDataId: 'task-data-a',
+  taskDataSnapshotId: 'task-data-snapshot-a',
   title: 'READY Ship task',
   ...overrides
+})
+
+const executorSnapshot: AutomationFlowExecutorRef = Object.freeze({
+  autoDiscovered: false,
+  diagnostics: [],
+  displayName: 'Implementation',
+  enabled: true,
+  executorId: 'implementation',
+  executorSnapshotId: 'executor-snapshot-implementation',
+  handles: {},
+  order: 0,
+  resolvedSource: 'Run the selected task data.',
+  tags: [],
+  type: 'markdown'
 })
 
 describe('automationRuntime', () => {
@@ -96,6 +116,7 @@ describe('automationRuntime', () => {
 
     const result = await runtime.startRun({
       automationFlow: createFlow(),
+      executorSnapshot,
       candidate: createCandidate(workspaceRoot),
       workspaceRoot
     })
@@ -110,8 +131,12 @@ describe('automationRuntime', () => {
         adapterSessionId: 'adapter-session-1',
         adapterSessionLineage: ['adapter-session-1'],
         automationFlowSnapshotId: 'snapshot-1',
+        executorId: 'implementation',
+        executorSnapshotId: 'executor-snapshot-implementation',
         runId: 'run-1',
-        state: 'running'
+        state: 'running',
+        taskDataId: 'task-data-a',
+        taskDataSnapshotId: 'task-data-snapshot-a'
       }
     ])
     await expect(
@@ -150,6 +175,7 @@ describe('automationRuntime', () => {
 
     const blocked = await runtime.startRun({
       automationFlow: createFlow(),
+      executorSnapshot,
       candidate: createCandidate(workspaceRoot),
       workspaceRoot
     })
@@ -206,6 +232,7 @@ describe('automationRuntime', () => {
 
     const blocked = await runtime.startRun({
       automationFlow: createFlow(),
+      executorSnapshot,
       candidate: createCandidate(workspaceRoot),
       workspaceRoot
     })
@@ -262,6 +289,7 @@ describe('automationRuntime', () => {
     await store.initialize()
     const started = await runtime.startRun({
       automationFlow: createFlow(),
+      executorSnapshot,
       candidate: createCandidate(workspaceRoot),
       workspaceRoot
     })

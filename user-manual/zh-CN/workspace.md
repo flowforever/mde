@@ -32,6 +32,14 @@ Explorer 顶部工具栏提供：
 
 ## Recent Files
 
+## Automation Flows
+
+打开工作区后，Explorer 会在 Recent Files 上方显示 Automation Flows 区域。这里管理当前工作区的 `.mde/automation-flows/`：可以新增工作区 Automation Flow、给某个流程新增 Markdown 执行器、打开流程或执行器 Markdown、刷新 Skill catalog，并把已有全局流程应用到当前工作区。
+
+新增 Automation Flow 会创建工作区级 Markdown 定义并在普通编辑器中打开。新增执行器会在该流程目录下创建 Markdown 执行器文件，也会在普通编辑器中打开。Skill 执行器如果能解析到安全的本机 Skill Markdown，可以从列表中打开；无法解析的 Skill 会保持只读。
+
+应用全局流程后，Explorer 会把它显示为全局流程行。全局流程不能在当前工作区内直接编辑；可以跳转到全局管理位置，或从当前工作区移除这个应用关系。移除只取消当前工作区引用，不删除全局流程文件。
+
 Recent Files 记录当前工作区最近打开的 Markdown 文件，便于快速回到刚看过的文档。它不会保存文档内容，也不会替代版本历史。
 
 展开 Recent Files 时，MDE 会校验列表里的 Markdown 文件是否仍在磁盘上；已经被 Finder 或其它工具删除的文件会从列表中移除。

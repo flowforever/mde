@@ -40,6 +40,8 @@ export type AutomationSourceStatus = 'disabled' | 'draft' | 'ready'
 
 export type AutomationTaskBucket = 'done' | 'needs-me' | 'ready' | 'running'
 
+export type AutomationFlowExecutorType = 'markdown' | 'skill'
+
 export type AutomationRunState =
   | 'cancelled'
   | 'done'
@@ -64,6 +66,40 @@ export interface AutomationFlowDiagnostic {
   readonly sectionName?: string
   readonly sourceFile?: string
   readonly technicalMessage?: string
+}
+
+export interface AutomationFlowExecutorHandles {
+  readonly sourceTypes?: readonly AutomationFlowSourceType[]
+  readonly tags?: readonly string[]
+  readonly taskTypes?: readonly string[]
+}
+
+export interface AutomationFlowExecutorDeclaration {
+  readonly displayName?: string
+  readonly enabled?: boolean
+  readonly handles?: AutomationFlowExecutorHandles
+  readonly id: string
+  readonly path?: string
+  readonly ref?: string
+  readonly tags?: readonly string[]
+  readonly type: AutomationFlowExecutorType
+}
+
+export interface AutomationFlowExecutorRef {
+  readonly autoDiscovered: boolean
+  readonly diagnostics: readonly AutomationFlowDiagnostic[]
+  readonly displayName: string
+  readonly enabled: boolean
+  readonly executorId: string
+  readonly executorSnapshotId?: string
+  readonly handles: AutomationFlowExecutorHandles
+  readonly order: number
+  readonly resolvedSource?: string
+  readonly sourceClass?: string
+  readonly skillRef?: string
+  readonly sourcePath?: string
+  readonly tags: readonly string[]
+  readonly type: AutomationFlowExecutorType
 }
 
 export interface AutomationFlowTemplateInputDefinition {
@@ -144,12 +180,17 @@ export interface AutomationDiscoveredTaskSource {
   readonly priority?: number
   readonly provider?: string
   readonly relativePath?: string
+  readonly requiredExecutorId?: string
+  readonly requiredExecutorRef?: string
   readonly sourceItemId: string
   readonly sourcePath?: string
   readonly sourceSnapshotHash: string
   readonly sourceType: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly tags?: readonly string[]
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
+  readonly taskType?: string
   readonly title: string
   readonly workspaceId?: string
 }
@@ -163,12 +204,17 @@ export interface AutomationFlowTaskCandidate {
   readonly priority?: number
   readonly provider?: string
   readonly relativePath?: string
+  readonly requiredExecutorId?: string
+  readonly requiredExecutorRef?: string
   readonly sourceItemId: string
   readonly sourcePath?: string
   readonly sourceSnapshotHash?: string
   readonly sourceType: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
+  readonly taskType?: string
   readonly title: string
   readonly workspaceId?: string
 }
@@ -185,11 +231,15 @@ export interface AutomationFlowOwnershipResult {
 
 export interface AutomationRunOverlay {
   readonly automationFlowId: string
+  readonly executorId?: string
+  readonly executorSnapshotId?: string
   readonly runKind?: AutomationRunKind
   readonly runId: string
   readonly sourceItemId: string
   readonly state: AutomationRunState
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
 }
 
 export interface AutomationReportOverlay {
@@ -212,9 +262,13 @@ export interface AutomationProjectedTask {
   readonly activeRunId?: string
   readonly automationFlowId: string
   readonly automationFlowOwnerKey?: string
+  readonly blockingDiagnostics?: readonly AutomationFlowDiagnostic[]
   readonly bucket: AutomationTaskBucket
+  readonly eligibleExecutors?: readonly AutomationFlowExecutorRef[]
   readonly engine?: AgentEngineId
+  readonly executorSnapshotId?: string
   readonly latestReportId?: string
+  readonly primaryExecutor?: AutomationFlowExecutorRef
   readonly priority?: number
   readonly relativePath?: string
   readonly sourceItemId: string
@@ -222,6 +276,8 @@ export interface AutomationProjectedTask {
   readonly sourceType?: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
   readonly title: string
   readonly workspaceId?: string
 }
@@ -278,6 +334,7 @@ export interface AutomationFlow {
   readonly allowedEngines: readonly AgentEngineId[]
   readonly confirmationPolicy: AutomationFlowConfirmationPolicy
   readonly defaultEngine: AgentEngineId
+  readonly executors?: readonly AutomationFlowExecutorDeclaration[]
   readonly id: string
   readonly lifecycle: AutomationFlowLifecycle
   readonly loopPolicy: AutomationFlowLoopPolicy
@@ -293,6 +350,7 @@ export interface AutomationFlow {
 }
 
 export interface ParsedAutomationFlow extends AutomationFlow {
+  readonly executors: readonly AutomationFlowExecutorDeclaration[]
   readonly sourceFile?: string
 }
 

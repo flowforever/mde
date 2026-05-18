@@ -29,37 +29,32 @@ import {
 import { COMPONENT_IDS } from "../componentIds";
 import type {
   AutomationApi,
-  AutomationCreateFlowFromTemplateRequest,
   AutomationDiagnostic,
-  AutomationFlowDefinitionDocument,
-  AutomationFlowRow,
-  AutomationFlowTemplateSummary,
   AutomationProjection,
-  AutomationProjectionFilters
+  AutomationCenterFilters,
+  AutomationCenterScopeId,
+  AutomationFlowRow,
+  AutomationGetProjectionRequest,
 } from "../../../shared/automation";
+import type { EditorApi } from "../../../shared/workspace";
 import type { MdeWindowApi } from "../../../shared/windowApi";
-import type { AgentChatApi } from "../../../shared/agentChat";
 import { createAutomationCenterViewModel } from "./automationViewModel";
-import { AutomationAgentChatEntry } from "./AutomationAgentChatEntry";
-import { AutomationFlowEditorHost } from "./AutomationFlowEditorHost";
+import { readRecentWorkspaces } from "../workspaces/recentWorkspaces";
 import { SignalStack } from "./SignalStack";
-import {
-  WorkspaceFlowFilters,
-  type AutomationFlowCreateTarget,
-} from "./WorkspaceFlowFilters";
+import { WorkspaceFlowFilters } from "./WorkspaceFlowFilters";
 import { QuietFlowline } from "./QuietFlowline";
 import "./styles.css";
 
 declare global {
   interface Window {
     readonly mdeAutomation?: AutomationApi;
-    readonly agentChatApi?: AgentChatApi;
+    readonly editorApi?: EditorApi;
     readonly mdeWindow?: MdeWindowApi;
   }
 }
 
 interface AutomationCenterWindowProps {
-  readonly agentChatApi?: AgentChatApi;
+  readonly agentChatApi?: unknown;
   readonly automationApi?: AutomationApi;
   readonly text?: AppText;
 }
@@ -76,19 +71,6 @@ const AUTOMATION_DECISION_DIAGNOSTIC_KEYS = {
   "automationRun.resumeFailed":
     "automation.diagnostics.automationRun.resumeFailed",
 } as const satisfies Record<string, AppTextKey>;
-
-type AutomationEditorState =
-  | {
-      readonly diagnostics: readonly AutomationDiagnostic[]
-      readonly document?: AutomationFlowDefinitionDocument
-      readonly mode: 'create'
-      readonly setup: AutomationCreateFlowFromTemplateRequest
-      readonly templates: readonly AutomationFlowTemplateSummary[]
-    }
-  | {
-      readonly document: AutomationFlowDefinitionDocument
-      readonly mode: 'edit'
-    }
 
 const createDefaultText = (): AppText => {
   if (typeof window === "undefined") {
@@ -129,6 +111,19 @@ const readAutomationSidebarWidth = (): number => {
     : AUTOMATION_SIDEBAR_WIDTH_DEFAULT;
 };
 
+const uniqueWorkspaceRoots = (
+  entries: readonly { readonly rootPath: string }[],
+): readonly string[] =>
+  Object.freeze(
+    Array.from(
+      new Set(
+        entries
+          .map((entry) => entry.rootPath.trim())
+          .filter((rootPath) => rootPath.length > 0),
+      ),
+    ),
+  );
+
 const getDecisionSubmitFailureMessage = (
   diagnostic: AutomationDiagnostic | undefined,
   text: AppText,
@@ -154,21 +149,24 @@ const getAutomationCommandFailureMessage = (
     : text(fallbackKey);
 
 export const AutomationCenterWindow = ({
-  agentChatApi,
   automationApi,
   text = createDefaultText(),
 }: AutomationCenterWindowProps = {}): JSX.Element => {
   const resolvedAutomationApi = automationApi ?? window.mdeAutomation;
-  const resolvedAgentChatApi = agentChatApi ?? window.agentChatApi;
   const [projection, setProjection] = useState<AutomationProjection | null>(null);
+  const [workspaceEntries] = useState(() =>
+    readRecentWorkspaces()
+      .filter((workspace) => workspace.type === "workspace")
+      .map((workspace) => ({
+        name: workspace.name,
+        rootPath: workspace.rootPath,
+      })),
+  );
   const [selectedTaskId, setSelectedTaskId] = useState<
     string | null | undefined
   >(undefined);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">(
     "loading",
-  );
-  const [editorState, setEditorState] = useState<AutomationEditorState | null>(
-    null,
   );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
@@ -177,6 +175,17 @@ export const AutomationCenterWindow = ({
   const [systemThemeFamily, setSystemThemeFamily] =
     useState<AppThemeFamily>(readSystemThemeFamily);
   const automationCenterRef = useRef<HTMLElement | null>(null);
+  const createProjectionRequest = useCallback(():
+    | AutomationGetProjectionRequest
+    | undefined => {
+    const workspaceRoots = uniqueWorkspaceRoots(workspaceEntries);
+
+    return workspaceRoots.length === 0
+      ? undefined
+      : {
+          workspaceRoots,
+        };
+  }, [workspaceEntries]);
 
   const updateSidebarWidth = useCallback((width: number): void => {
     const nextWidth = clampAutomationSidebarWidth(width);
@@ -231,13 +240,13 @@ export const AutomationCenterWindow = ({
     }
 
     const { projection: nextProjection } =
-      await resolvedAutomationApi.getProjection();
+      await resolvedAutomationApi.getProjection(createProjectionRequest());
 
     setProjection(nextProjection);
     setLoadState("ready");
-  }, [resolvedAutomationApi]);
+  }, [createProjectionRequest, resolvedAutomationApi]);
   const applyLocalFilters = useCallback(
-    (nextFilters: AutomationProjectionFilters): void => {
+    (nextFilters: AutomationCenterFilters): void => {
       setProjection((currentProjection) =>
         currentProjection === null
           ? currentProjection
@@ -260,7 +269,7 @@ export const AutomationCenterWindow = ({
     }
 
     void resolvedAutomationApi
-      .getProjection()
+      .getProjection(createProjectionRequest())
       .then(({ projection: nextProjection }) => {
         if (!cancelled) {
           setProjection(nextProjection);
@@ -276,7 +285,7 @@ export const AutomationCenterWindow = ({
     return () => {
       cancelled = true;
     };
-  }, [resolvedAutomationApi]);
+  }, [createProjectionRequest, resolvedAutomationApi]);
 
   useEffect(() => {
     let mediaQueryList: MediaQueryList;
@@ -344,183 +353,28 @@ export const AutomationCenterWindow = ({
     projection === null
       ? null
       : createAutomationCenterViewModel(projection, selectedTaskId);
-  const agentChatWorkspaceRoot = projection?.workspaceRoot;
+  const currentWorkspaceRoot = projection?.workspaceRoot;
   const effectiveLoadState =
     resolvedAutomationApi === undefined ? "error" : loadState;
   const resolvedTheme = resolveThemePreference(
     themePreference,
     systemThemeFamily,
   );
-  const createDefaultSetup = useCallback(
-    (
-      templates: readonly AutomationFlowTemplateSummary[],
-      target: AutomationFlowCreateTarget = { scope: "workspace" },
-    ): AutomationCreateFlowFromTemplateRequest => ({
-      defaultEngine: "codex",
-      flowId: `automation-flow-${(projection?.flows.length ?? 0) + 1}`,
-      scope: target.scope,
-      templateId:
-        templates.find(
-          (template) =>
-            template.templateId === "local-dev-task" &&
-            template.allowedScopes.includes(target.scope),
-        )?.templateId ??
-        templates.find((template) => template.allowedScopes.includes(target.scope))
-          ?.templateId ??
-        templates[0]?.templateId ??
-        "local-dev-task",
-    }),
-    [projection?.flows.length],
-  );
-  const openCreateEditor = useCallback(async (target?: AutomationFlowCreateTarget) => {
-    if (resolvedAutomationApi === undefined) {
-      return;
-    }
-
-    const { templates } = await resolvedAutomationApi.listTemplates();
-    const setup = createDefaultSetup(templates, target);
-
-    setEditorState({
-      diagnostics: [],
-      mode: "create",
-      setup,
-      templates,
-    });
-  }, [createDefaultSetup, resolvedAutomationApi]);
-  const createFlowFromTemplate = useCallback(
-    async (setup: AutomationCreateFlowFromTemplateRequest) => {
-      if (resolvedAutomationApi === undefined) {
-        return;
-      }
-
-      const validation = await resolvedAutomationApi.validateTemplateInput(setup);
-
-      if (!validation.ok) {
-        setEditorState((current) =>
-          current?.mode === "create"
-            ? { ...current, diagnostics: validation.diagnostics, setup }
-            : current,
-        );
-        return;
-      }
-
-      const document = await resolvedAutomationApi.createFlowFromTemplate(setup);
-      await refreshProjection();
-
-      setEditorState((current) =>
-        current?.mode === "create"
-          ? {
-              ...current,
-              diagnostics: document.diagnostics,
-              document,
-              setup,
-            }
-          : current,
-      );
-    },
-    [refreshProjection, resolvedAutomationApi],
-  );
-  const openEditEditor = useCallback(
-    async (flow: AutomationFlowRow) => {
-      if (
-        resolvedAutomationApi === undefined ||
-        flow.definitionPath === undefined
-      ) {
-        return;
-      }
-
-      const document = await resolvedAutomationApi.loadFlowDefinition({
-        filePath: flow.definitionPath,
-      });
-
-      setEditorState({
-        document,
-        mode: "edit",
-      });
-    },
-    [resolvedAutomationApi],
-  );
-  const saveEditorDocument = useCallback(
-    async (
-      document: AutomationFlowDefinitionDocument,
-      markdown: string,
-    ): Promise<AutomationFlowDefinitionDocument> => {
-      if (resolvedAutomationApi === undefined) {
-        return document;
-      }
-
-      const savedDocument = await resolvedAutomationApi.saveFlowDefinition({
-        filePath: document.path,
-        markdown,
-      });
-
-      await refreshProjection();
-
-      return savedDocument;
-    },
-    [refreshProjection, resolvedAutomationApi],
-  );
-  const setFlowLifecycle = useCallback(
-    async (
-      flow: AutomationFlowRow,
-      lifecycle: "disabled" | "enabled",
-    ): Promise<void> => {
-      if (
-        resolvedAutomationApi === undefined ||
-        flow.definitionPath === undefined
-      ) {
-        return;
-      }
-
-      await resolvedAutomationApi.setFlowLifecycle({
-        filePath: flow.definitionPath,
-        lifecycle,
-      });
-      await refreshProjection();
-    },
-    [refreshProjection, resolvedAutomationApi],
-  );
-  const archiveFlow = useCallback(
-    async (flow: AutomationFlowRow): Promise<void> => {
-      if (
-        resolvedAutomationApi === undefined ||
-        flow.definitionPath === undefined
-      ) {
-        return;
-      }
-
-      await resolvedAutomationApi.archiveFlow({
-        filePath: flow.definitionPath,
-      });
-      await refreshProjection();
-    },
-    [refreshProjection, resolvedAutomationApi],
-  );
-  const restoreFlow = useCallback(
-    async (flow: AutomationFlowRow): Promise<void> => {
-      if (
-        resolvedAutomationApi === undefined ||
-        flow.definitionPath === undefined
-      ) {
-        return;
-      }
-
-      await resolvedAutomationApi.restoreFlow({
-        filePath: flow.definitionPath,
-      });
-      await refreshProjection();
-    },
-    [refreshProjection, resolvedAutomationApi],
-  );
   const startTask = useCallback(
-    async (taskId: string) => {
+    async (input: {
+      readonly executorId: string
+      readonly executorSnapshotId?: string
+      readonly taskDataId: string
+      readonly taskDataSnapshotId: string
+      readonly taskId: string
+    }) => {
       if (resolvedAutomationApi === undefined) {
         return;
       }
 
       setStatusMessage(null);
       try {
-        const result = await resolvedAutomationApi.startRun({ taskId });
+        const result = await resolvedAutomationApi.startRun(input);
 
         if (!result.accepted) {
           setStatusMessage(
@@ -568,8 +422,28 @@ export const AutomationCenterWindow = ({
     },
     [refreshProjection, resolvedAutomationApi, text],
   );
+  const openNativeSession = useCallback(
+    async (runId: string): Promise<void> => {
+      if (resolvedAutomationApi === undefined) {
+        return;
+      }
+
+      setStatusMessage(null);
+
+      try {
+        const result = await resolvedAutomationApi.openNativeSession({ runId });
+
+        if (!result.accepted) {
+          setStatusMessage(text("automation.openNativeSessionFailed"));
+        }
+      } catch {
+        setStatusMessage(text("automation.openNativeSessionFailed"));
+      }
+    },
+    [resolvedAutomationApi, text],
+  );
   const updateFilters = useCallback(
-    async (nextFilters: AutomationProjectionFilters) => {
+    async (nextFilters: AutomationCenterFilters) => {
       if (resolvedAutomationApi === undefined) {
         return;
       }
@@ -584,6 +458,77 @@ export const AutomationCenterWindow = ({
   const returnToWorkspace = useCallback((): void => {
     void window.mdeWindow?.focusWorkspaceWindow();
   }, []);
+  const manageScope = useCallback(
+    async (target: {
+      readonly scopeId: AutomationCenterScopeId
+      readonly workspaceId?: string
+    }): Promise<void> => {
+      if (resolvedAutomationApi === undefined) {
+        return;
+      }
+
+      const managementTarget =
+        await resolvedAutomationApi.openAutomationManagementTarget({
+          target: target.scopeId === "global" ? "global" : "workspace",
+          ...(target.workspaceId !== undefined
+            ? { workspaceRoot: target.workspaceId }
+            : {}),
+        });
+      if (window.editorApi?.openPathInNewWindow !== undefined) {
+        await window.editorApi.openPathInNewWindow({
+          type: "workspace-automation-flows",
+          workspaceRoot: managementTarget.rootPath,
+        });
+      } else {
+        await window.mdeWindow?.focusWorkspaceWindow();
+      }
+      await refreshProjection();
+    },
+    [refreshProjection, resolvedAutomationApi],
+  );
+  const openDiagnosticsTarget = useCallback((): void => {
+    const target =
+      currentWorkspaceRoot === undefined
+        ? ({ scopeId: "global" } as const)
+        : ({
+            scopeId: `workspace:${currentWorkspaceRoot}` as AutomationCenterScopeId,
+            workspaceId: currentWorkspaceRoot,
+          } as const);
+
+    void manageScope(target);
+  }, [currentWorkspaceRoot, manageScope]);
+  const setFlowLifecycle = useCallback(
+    async (
+      flow: AutomationFlowRow,
+      lifecycle: Extract<AutomationFlowRow["lifecycle"], "disabled" | "enabled">,
+    ): Promise<void> => {
+      if (
+        resolvedAutomationApi === undefined ||
+        flow.definitionPath === undefined
+      ) {
+        return;
+      }
+
+      setStatusMessage(null);
+
+      try {
+        await resolvedAutomationApi.setFlowLifecycle({
+          filePath: flow.definitionPath,
+          lifecycle,
+          ...(flow.workspaceId !== undefined
+            ? { workspaceRoot: flow.workspaceId }
+            : {}),
+        });
+      } catch {
+        setStatusMessage(text("automation.updateFlowLifecycleFailed"));
+      } finally {
+        await refreshProjection().catch(() => {
+          setLoadState("error");
+        });
+      }
+    },
+    [refreshProjection, resolvedAutomationApi, text],
+  );
 
   return (
     <main
@@ -608,18 +553,13 @@ export const AutomationCenterWindow = ({
       }
     >
       <WorkspaceFlowFilters
-        onArchiveFlow={(flow) => {
-          void archiveFlow(flow);
-        }}
-        onCreateFlow={(target) => {
-          void openCreateEditor(target);
-        }}
-        onEditFlow={(flow) => {
-          void openEditEditor(flow);
+        currentWorkspaceRoot={currentWorkspaceRoot}
+        onManageScope={(target) => {
+          void manageScope(target);
         }}
         onReturnToWorkspace={returnToWorkspace}
-        onRestoreFlow={(flow) => {
-          void restoreFlow(flow);
+        onOpenNativeSession={(runId) => {
+          void openNativeSession(runId);
         }}
         onSetFlowLifecycle={(flow, lifecycle) => {
           void setFlowLifecycle(flow, lifecycle);
@@ -629,6 +569,7 @@ export const AutomationCenterWindow = ({
         }}
         filters={projection?.filters ?? {}}
         flows={projection?.flows ?? []}
+        runs={projection?.runs ?? []}
         taskStackCounts={{
           done: viewModel?.doneTasks.length ?? 0,
           needsMe: viewModel?.needsMeTasks.length ?? 0,
@@ -636,7 +577,8 @@ export const AutomationCenterWindow = ({
           running: viewModel?.runningTasks.length ?? 0,
         }}
         text={text}
-        workspaceName={agentChatWorkspaceRoot}
+        workspaceName={currentWorkspaceRoot}
+        workspaces={workspaceEntries}
       />
       <div
         aria-label={text("automation.resizeSidebar")}
@@ -654,13 +596,11 @@ export const AutomationCenterWindow = ({
       <section
         aria-label={text("automation.centerTitle")}
         className={`editor-pane automation-console-pane${
-          editorState === null ? "" : " automation-console-pane--editor-open"
-        }${viewModel === null ? " automation-console-pane--loading" : ""}`}
+          viewModel === null ? " automation-console-pane--loading" : ""
+        }`}
       >
         <div
-          className={`automation-console${
-            editorState === null ? "" : " automation-console--editor-open"
-          }`}
+          className="automation-console"
         >
           {viewModel === null ? (
             <section
@@ -676,7 +616,7 @@ export const AutomationCenterWindow = ({
                 <p>{text("automation.projectionError")}</p>
               ) : null}
             </section>
-          ) : editorState === null ? (
+          ) : (
             <>
               {statusMessage !== null ? (
                 <p
@@ -688,6 +628,7 @@ export const AutomationCenterWindow = ({
                 </p>
               ) : null}
               <SignalStack
+                onOpenDiagnosticsTarget={openDiagnosticsTarget}
                 onSelectTask={(task) => {
                   setStatusMessage(null);
                   setSelectedTaskId(task.taskId);
@@ -701,8 +642,24 @@ export const AutomationCenterWindow = ({
                   setStatusMessage(null);
                   setSelectedTaskId(null);
                 }}
-                onStartTask={(taskId) => {
-                  void startTask(taskId);
+                onStartTask={(taskId, executor) => {
+                  const task = viewModel.selectedTask;
+
+                  if (
+                    task?.taskDataId !== undefined &&
+                    task.taskDataSnapshotId !== undefined &&
+                    executor !== undefined
+                  ) {
+                    void startTask({
+                      executorId: executor.executorId,
+                      ...(executor.executorSnapshotId !== undefined
+                        ? { executorSnapshotId: executor.executorSnapshotId }
+                        : {}),
+                      taskDataId: task.taskDataId,
+                      taskDataSnapshotId: task.taskDataSnapshotId,
+                      taskId,
+                    });
+                  }
                 }}
                 onSubmitDecision={(decisionId, response) => {
                   void submitDecision(decisionId, response);
@@ -710,43 +667,7 @@ export const AutomationCenterWindow = ({
                 text={text}
                 viewModel={viewModel}
               />
-              <AutomationAgentChatEntry
-                agentChatApi={resolvedAgentChatApi}
-                text={text}
-                workspaceRoot={agentChatWorkspaceRoot}
-              />
             </>
-          ) : (
-            <AutomationFlowEditorHost
-              document={editorState.document}
-              key={editorState.document?.path ?? editorState.mode}
-              mode={editorState.mode}
-              onClose={() => {
-                setEditorState(null);
-              }}
-              onCreateFromTemplate={createFlowFromTemplate}
-              onSaveDocument={(markdown) => {
-                if (editorState.document === undefined) {
-                  throw new Error(text("automation.saveFlowFailed"));
-                }
-
-                return saveEditorDocument(editorState.document, markdown);
-              }}
-              onSetupChange={(setup) => {
-                setEditorState((current) =>
-                  current?.mode === "create" ? { ...current, setup } : current,
-                );
-              }}
-              setup={editorState.mode === "create" ? editorState.setup : undefined}
-              setupDiagnostics={
-                editorState.mode === "create" ? editorState.diagnostics : undefined
-              }
-              templates={
-                editorState.mode === "create" ? editorState.templates : undefined
-              }
-              text={text}
-              workspaceRoot={agentChatWorkspaceRoot}
-            />
           )}
         </div>
       </section>

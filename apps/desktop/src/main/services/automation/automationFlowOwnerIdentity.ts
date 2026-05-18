@@ -12,23 +12,58 @@ interface StoredAutomationFlowOwnerIdentityInput {
 }
 
 const normalizeIdentityPart = (value: string): string =>
-  encodeURIComponent(value.trim()).replace(/%2F/giu, '/')
+  encodeURIComponent(value.trim())
+
+export const createWorkspaceFlowOwnerKey = ({
+  flowId,
+  workspaceId
+}: {
+  readonly flowId: string
+  readonly workspaceId: string
+}): string =>
+  `workspace:${normalizeIdentityPart(workspaceId)}:flow:${normalizeIdentityPart(flowId)}`
+
+export const createGlobalFlowOwnerKey = ({
+  flowId
+}: {
+  readonly flowId: string
+}): string => `global:flow:${normalizeIdentityPart(flowId)}`
+
+export const createAppliedGlobalFlowOwnerKey = ({
+  flowId,
+  workspaceId
+}: {
+  readonly flowId: string
+  readonly workspaceId: string
+}): string =>
+  `workspace:${normalizeIdentityPart(workspaceId)}:applied-global:${normalizeIdentityPart(flowId)}`
 
 export const createAutomationFlowOwnerKey = ({
   automationFlow,
   workspaceRoot
 }: AutomationFlowOwnerIdentityInput): string => {
-  const sourceFile =
-    'sourceFile' in automationFlow ? automationFlow.sourceFile : undefined
-  const ownerScope =
-    automationFlow.scope === 'user'
-      ? `user:${sourceFile ?? ''}`
-      : `workspace:${workspaceRoot ?? ''}:${sourceFile ?? ''}`
+  return automationFlow.scope === 'user'
+    ? createGlobalFlowOwnerKey({ flowId: automationFlow.id })
+    : createWorkspaceFlowOwnerKey({
+        flowId: automationFlow.id,
+        workspaceId: workspaceRoot ?? ''
+      })
+}
+
+const createLegacyStoredAutomationFlowOwnerKey = ({
+  automationFlowId,
+  workspaceRoot
+}: {
+  readonly automationFlowId: string
+  readonly workspaceRoot?: string
+}): string => {
+  const normalizeLegacyIdentityPart = (value: string): string =>
+    encodeURIComponent(value.trim()).replace(/%2F/giu, '/')
 
   return [
     'automation-flow',
-    normalizeIdentityPart(automationFlow.id),
-    normalizeIdentityPart(ownerScope)
+    normalizeLegacyIdentityPart(automationFlowId),
+    normalizeLegacyIdentityPart(`workspace:${workspaceRoot ?? ''}:`)
   ].join(':')
 }
 
@@ -38,8 +73,4 @@ export const getStoredAutomationFlowOwnerKey = ({
   workspaceRoot
 }: StoredAutomationFlowOwnerIdentityInput): string =>
   automationFlowOwnerKey ??
-  [
-    'automation-flow',
-    normalizeIdentityPart(automationFlowId),
-    normalizeIdentityPart(`workspace:${workspaceRoot ?? ''}:`)
-  ].join(':')
+  createLegacyStoredAutomationFlowOwnerKey({ automationFlowId, workspaceRoot })

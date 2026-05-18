@@ -1,0 +1,4 @@
+interface:
+  display_name: "Automation Flow Helper"
+  short_description: "Guide MDE flows, executors, tasks, and runtime fit"
+  default_prompt: "Use $automation-flow-helper to create or refine this automation-flow, route executors, and add matching task documents."

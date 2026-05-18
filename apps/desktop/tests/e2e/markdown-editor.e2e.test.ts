@@ -1182,6 +1182,7 @@ test('opens a workspace and expands the docs folder', async () => {
   const workspacePath = await createFixtureWorkspace()
 
   await mkdir(join(workspacePath, '.vscode'), { recursive: true })
+  await mkdir(join(workspacePath, '.mde'), { recursive: true })
   await writeFile(join(workspacePath, '.vscode', 'settings.md'), '# Settings')
   await writeFile(join(workspacePath, '.draft.md'), '# Draft')
 
@@ -1202,6 +1203,9 @@ test('opens a workspace and expands the docs folder', async () => {
     await expect(
       window.getByRole('button', { name: /\.vscode folder/i })
     ).toBeHidden()
+    await expect(
+      window.getByRole('button', { name: /\.mde folder/i })
+    ).toBeVisible()
     await expect(
       window.getByRole('button', { name: /\.draft\.md Markdown file/i })
     ).toBeHidden()
@@ -4125,7 +4129,7 @@ test('creates an editor link document from the visible current directory picker'
     ).toHaveCount(0)
     await expect(
       directoryTree.getByRole('treeitem', { name: /^\.mde$/ })
-    ).toHaveCount(0)
+    ).toBeVisible()
     await expect(
       directoryTree.getByRole('treeitem', { name: /^private$/ })
     ).toHaveCount(0)

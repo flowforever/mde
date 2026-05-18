@@ -4,10 +4,15 @@ export const AUTOMATION_FLOW_DIAGNOSTIC_CODES = Object.freeze({
   defaultEngineNotAllowed: 'automationFlow.defaultEngineNotAllowed',
   invalidField: 'automationFlow.invalidField',
   invalidFrontmatter: 'automationFlow.invalidFrontmatter',
+  duplicateExecutorId: 'automationFlow.duplicateExecutorId',
+  duplicateExecutorPath: 'automationFlow.duplicateExecutorPath',
   missingFrontmatter: 'automationFlow.missingFrontmatter',
+  missingExecutor: 'automationFlow.missingExecutor',
   missingRequiredField: 'automationFlow.missingRequiredField',
   missingRequiredSection: 'automationFlow.missingRequiredSection',
   ownershipTie: 'automationFlow.ownershipTie',
+  requiredExecutorDisabled: 'automationFlow.requiredExecutorDisabled',
+  requiredExecutorMissing: 'automationFlow.requiredExecutorMissing',
   templateMissingRequiredInput: 'automationFlow.templateMissingRequiredInput'
 })
 

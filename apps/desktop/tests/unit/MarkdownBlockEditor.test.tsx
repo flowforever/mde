@@ -1894,8 +1894,8 @@ describe("MarkdownBlockEditor accessibility", () => {
       within(directoryTree).queryByRole("treeitem", { name: /^child$/ }),
     ).not.toBeInTheDocument();
     expect(
-      within(directoryTree).queryByRole("treeitem", { name: /^\.mde$/ }),
-    ).not.toBeInTheDocument();
+      within(directoryTree).getByRole("treeitem", { name: /^\.mde$/ }),
+    ).toBeVisible();
     expect(
       within(directoryTree).queryByRole("treeitem", { name: /^private$/ }),
     ).not.toBeInTheDocument();

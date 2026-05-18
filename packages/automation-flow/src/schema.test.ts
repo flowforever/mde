@@ -40,6 +40,7 @@ describe('automationFlowSchema', () => {
         unclearScope: 'require-user'
       },
       lifecycle: 'enabled',
+      executors: [],
       loopPolicy: {
         intervalMinutes: 15,
         maxActiveRuns: 1,
@@ -50,6 +51,44 @@ describe('automationFlowSchema', () => {
       match: {},
       pickOrder: [],
       priority: 0
+    })
+  })
+
+  test('parses executor declarations with handles', () => {
+    const result = automationFlowSchema.parse({
+      ...validAutomationFlow,
+      executors: [
+        {
+          enabled: true,
+          handles: {
+            sourceTypes: ['workspace-markdown'],
+            tags: ['implementation'],
+            taskTypes: ['requirement']
+          },
+          id: 'implementation',
+          path: './flow-a/implementation.md',
+          type: 'markdown'
+        },
+        {
+          enabled: true,
+          id: 'execute-picked-task',
+          ref: 'skill:execute-picked-task',
+          type: 'skill'
+        }
+      ]
+    })
+
+    expect(result.executors).toHaveLength(2)
+    expect(result.executors[0]).toMatchObject({
+      enabled: true,
+      handles: {
+        sourceTypes: ['workspace-markdown'],
+        tags: ['implementation'],
+        taskTypes: ['requirement']
+      },
+      id: 'implementation',
+      path: './flow-a/implementation.md',
+      type: 'markdown'
     })
   })
 

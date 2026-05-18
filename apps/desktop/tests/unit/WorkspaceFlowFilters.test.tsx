@@ -20,12 +20,47 @@ const createFlow = (overrides: Partial<AutomationFlowRow> = {}): AutomationFlowR
   ...overrides
 })
 
+const openDetailsByText = (label: string): HTMLDetailsElement => {
+  const details = screen.getByText(label).closest('details')
+
+  if (!(details instanceof HTMLDetailsElement)) {
+    throw new Error(`Expected details element for ${label}`)
+  }
+
+  const summary = details.querySelector('summary')
+
+  if (summary === null) {
+    throw new Error(`Expected summary element for ${label}`)
+  }
+
+  fireEvent.click(summary)
+
+  return details
+}
+
+const getFlowFilterButtonByName = (label: string): HTMLElement => {
+  const row = Array.from(
+    document.querySelectorAll(
+      `[data-component-id="${COMPONENT_IDS.automation.flowRow}"]`
+    )
+  ).find((candidate) => candidate.textContent?.includes(label))
+  const button = row?.querySelector(
+    `[data-component-id="${COMPONENT_IDS.automation.flowFilterToggle}"]`
+  )
+
+  if (!(button instanceof HTMLElement)) {
+    throw new Error(`Expected flow filter button for ${label}`)
+  }
+
+  return button
+}
+
 describe('WorkspaceFlowFilters', () => {
   afterEach(() => {
     cleanup()
   })
 
-  it('renders workspace controls, archived toggle, and new automation-flow icon button', () => {
+  it('renders workspace controls, archived toggle button, and new automation-flow icon button', () => {
     const onReturnToWorkspace = vi.fn()
     const onCreateFlow = vi.fn()
 
@@ -44,7 +79,7 @@ describe('WorkspaceFlowFilters', () => {
       COMPONENT_IDS.automation.workspaceFilters
     )
     expect(screen.getByText('Fixture Workspace')).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Show archived flows' }))
+    expect(screen.getByRole('button', { name: 'Show archived flows' }))
       .toHaveAttribute('data-component-id', COMPONENT_IDS.automation.archivedToggle)
     expect(screen.getByLabelText('Automation-flow toolbar')).toHaveAttribute(
       'data-component-id',
@@ -58,23 +93,39 @@ describe('WorkspaceFlowFilters', () => {
     )
     fireEvent.click(returnButton)
     expect(onReturnToWorkspace).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: 'New automation-flow' }))
-      .toHaveAttribute('data-component-id', COMPONENT_IDS.automation.newFlowButton)
     expect(
       screen.getByRole('button', {
-        name: 'Add flow for Fixture Workspace'
+        name: 'Manage flows for Fixture Workspace'
       })
     ).toHaveAttribute(
       'data-component-id',
-      COMPONENT_IDS.automation.workspaceAddFlowButton
+      COMPONENT_IDS.automation.scopeFilterManagementButton
     )
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Add flow for Fixture Workspace'
+        name: 'Manage flows for Fixture Workspace'
       })
     )
-    expect(onCreateFlow).toHaveBeenCalledWith({
-      scope: 'workspace',
+    expect(onCreateFlow).not.toHaveBeenCalled()
+  })
+
+  it('calls management for workspace and global scope groups', () => {
+    const onManageScope = vi.fn()
+
+    render(
+      <WorkspaceFlowFilters
+        flows={[createFlow()]}
+        onManageScope={onManageScope}
+        text={text}
+        workspaceName="Fixture Workspace"
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Manage flows for Fixture Workspace'
+    }))
+    expect(onManageScope).toHaveBeenCalledWith({
+      scopeId: 'workspace:/workspace',
       workspaceId: '/workspace'
     })
   })
@@ -88,8 +139,8 @@ describe('WorkspaceFlowFilters', () => {
           })
         ]}
         filters={{
-          flowIds: [],
-          workspaceIds: ['/Users/example/private-project', 'mde:no-workspace']
+          flowOwnerKeys: [],
+          scopeIds: []
         }}
         onUpdateFilters={vi.fn()}
         taskStackCounts={{ done: 0, needsMe: 0, ready: 0, running: 0 }}
@@ -104,8 +155,8 @@ describe('WorkspaceFlowFilters', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('passes user scope when adding a flow from the No workspace group', () => {
-    const onCreateFlow = vi.fn()
+  it('renders global scope management for user flows', () => {
+    const onManageScope = vi.fn()
 
     render(
       <WorkspaceFlowFilters
@@ -120,74 +171,83 @@ describe('WorkspaceFlowFilters', () => {
             workspaceId: undefined
           })
         ]}
-        onCreateFlow={onCreateFlow}
+        onManageScope={onManageScope}
         text={text}
         workspaceName="Fixture Workspace"
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add flow for No workspace' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Manage flows for Global automation flows'
+    }))
 
-    expect(onCreateFlow).toHaveBeenCalledWith({
-      scope: 'user'
+    expect(onManageScope).toHaveBeenCalledWith({
+      scopeId: 'global'
     })
   })
 
-  it('allows creating the first user-scoped flow from an empty No workspace group', () => {
-    const onCreateFlow = vi.fn()
-
+  it('renders an empty global scope group without template management copy', () => {
     render(
       <WorkspaceFlowFilters
         flows={[createFlow()]}
-        onCreateFlow={onCreateFlow}
         text={text}
         workspaceName="Fixture Workspace"
       />
     )
 
-    const noWorkspaceGroup = screen.getByText('No workspace').closest('details')
+    const globalGroup = screen.getByText('Global automation flows').closest('details')
 
-    expect(noWorkspaceGroup).not.toBeNull()
-    expect(noWorkspaceGroup).toHaveTextContent('personal automation-flows')
-    expect(noWorkspaceGroup).toHaveTextContent(
-      'Choose a template to start automation for this workspace.'
-    )
-
-    const addFlowButtons = within(noWorkspaceGroup as HTMLElement).getAllByRole(
-      'button',
-      {
-        name: 'Add flow for No workspace'
-      }
-    )
-
-    expect(addFlowButtons).toHaveLength(2)
-    fireEvent.click(addFlowButtons[0])
-
-    expect(onCreateFlow).toHaveBeenCalledWith({
-      scope: 'user'
-    })
+    expect(globalGroup).not.toBeNull()
+    expect(globalGroup).toHaveTextContent('global automation-flows')
+    expect(globalGroup).toHaveTextContent('No active flows')
+    expect(screen.queryByText('Choose a template to start automation for this workspace.'))
+      .not.toBeInTheDocument()
   })
 
-  it('matches the prototype left panel content structure', () => {
+  it('groups global, enabled, and disabled workspace flow filters with collapsed workspace items', () => {
     render(
       <WorkspaceFlowFilters
         flows={[
           createFlow({
+            automationFlowId: 'global-flow',
+            automationFlowOwnerKey: 'global:flow:global-flow',
+            name: 'Global Flow',
+            scope: 'user',
+            sourceTypes: ['user-prompt'],
+            taskCount: 1,
+            workspaceId: 'mde:no-workspace'
+          }),
+          createFlow({
+            automationFlowId: 'other-flow',
+            automationFlowOwnerKey: 'workspace:%2Fother:flow:other-flow',
+            name: 'Other Workspace Flow',
+            taskCount: 2,
+            workspaceId: '/other'
+          }),
+          createFlow({
             automationFlowId: 'flow-a',
+            automationFlowOwnerKey: 'workspace:%2Fworkspace:flow:flow-a',
             name: 'Dev Task Flow',
             taskCount: 6
           }),
           createFlow({
             automationFlowId: 'flow-b',
+            automationFlowOwnerKey: 'workspace:%2Fworkspace:flow:flow-b',
             name: 'Bug Fix Flow',
             taskCount: 0
           }),
           createFlow({
             automationFlowId: 'flow-c',
+            automationFlowOwnerKey: 'workspace:%2Fworkspace:flow:flow-c',
             name: 'Requirement Flow',
             taskCount: 0
           })
         ]}
+        filters={{
+          bucket: 'ready',
+          flowOwnerKeys: [],
+          scopeIds: ['workspace:/workspace']
+        }}
         taskStackCounts={{
           done: 12,
           needsMe: 1,
@@ -195,6 +255,11 @@ describe('WorkspaceFlowFilters', () => {
           running: 2
         }}
         text={text}
+        workspaces={[
+          { name: 'Fixture Workspace', rootPath: '/workspace' },
+          { name: 'Other Workspace', rootPath: '/other' },
+          { name: 'Empty Workspace', rootPath: '/empty' }
+        ]}
         workspaceName="Fixture Workspace"
       />
     )
@@ -226,35 +291,134 @@ describe('WorkspaceFlowFilters', () => {
     )
     expect(within(workspaceFilter).getByText('Active flows')).toBeInTheDocument()
     expect(within(workspaceFilter).getByText('Archived')).toBeInTheDocument()
-    expect(within(workspaceFilter).getByText('Fixture Workspace')).toBeInTheDocument()
+    const globalSection = workspaceFilter.querySelector(
+      `[data-component-id="${COMPONENT_IDS.automation.globalFlowSection}"]`
+    )
+    const enabledSection = workspaceFilter.querySelector(
+      `[data-component-id="${COMPONENT_IDS.automation.flowEnabledSection}"]`
+    )
+    const notEnabledSection = workspaceFilter.querySelector(
+      `[data-component-id="${COMPONENT_IDS.automation.flowNotEnabledSection}"]`
+    )
+
+    if (
+      !(globalSection instanceof HTMLElement) ||
+      !(enabledSection instanceof HTMLElement) ||
+      !(notEnabledSection instanceof HTMLElement)
+    ) {
+      throw new Error('Expected global, enabled, and not enabled sections')
+    }
+
+    expect(globalSection.compareDocumentPosition(enabledSection))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(enabledSection.compareDocumentPosition(notEnabledSection))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(globalSection).toHaveTextContent('Global')
+    expect(globalSection).toHaveTextContent('Global Flow')
+    expect(enabledSection).toHaveTextContent('Automation-flow enabled')
+    expect(enabledSection).toHaveTextContent('Fixture Workspace')
+    expect(enabledSection).toHaveTextContent('Other Workspace')
+    expect(notEnabledSection).toHaveTextContent('Automation-flow not enabled')
+    expect(notEnabledSection).toHaveTextContent('Empty Workspace')
+
+    const workspaceCards = Array.from(
+      workspaceFilter.querySelectorAll(
+        `[data-component-id="${COMPONENT_IDS.automation.workspaceFilterCard}"]`
+      )
+    )
+    const currentWorkspaceCard = workspaceCards.find((card) =>
+      card.textContent?.includes('Fixture Workspace')
+    )
+    const otherWorkspaceCard = workspaceCards.find((card) =>
+      card.textContent?.includes('Other Workspace')
+    )
+    const emptyWorkspaceCard = workspaceCards.find((card) =>
+      card.textContent?.includes('Empty Workspace')
+    )
+
+    if (
+      !(currentWorkspaceCard instanceof HTMLDetailsElement) ||
+      !(otherWorkspaceCard instanceof HTMLDetailsElement) ||
+      !(emptyWorkspaceCard instanceof HTMLDetailsElement)
+    ) {
+      throw new Error('Expected workspace cards for enabled and not enabled workspaces')
+    }
+
+    expect(currentWorkspaceCard.open).toBe(false)
+    expect(otherWorkspaceCard.open).toBe(false)
+    expect(emptyWorkspaceCard.open).toBe(false)
+
+    openDetailsByText('Fixture Workspace')
+    openDetailsByText('Other Workspace')
+    openDetailsByText('Empty Workspace')
+
+    expect(currentWorkspaceCard.open).toBe(true)
     expect(within(workspaceFilter).getByText('3 automation-flows'))
       .toBeInTheDocument()
     expect(within(workspaceFilter).getByText('6 tasks')).toBeInTheDocument()
     expect(within(workspaceFilter).getByText('Dev Task Flow')).toBeInTheDocument()
-    expect(within(workspaceFilter).getByText('Task docs')).toBeInTheDocument()
+    expect(within(workspaceFilter).getAllByText('Task docs')).toHaveLength(2)
     expect(within(workspaceFilter).getByText('Requirement Flow')).toBeInTheDocument()
     expect(within(workspaceFilter).getByText('Requirements')).toBeInTheDocument()
     expect(within(workspaceFilter).getByText('Bug Fix Flow')).toBeInTheDocument()
     expect(within(workspaceFilter).getByText('Bug reports')).toBeInTheDocument()
+    expect(within(emptyWorkspaceCard).getByText('No active flows')).toBeInTheDocument()
+
+    const scopeButtons = Array.from(
+      workspaceFilter.querySelectorAll(
+        `[data-component-id="${COMPONENT_IDS.automation.scopeFilterToggle}"]`
+      )
+    )
+    const globalButton = scopeButtons.find((button) =>
+      button.textContent?.includes('Global automation flows')
+    )
+    const currentWorkspaceButton = scopeButtons.find((button) =>
+      button.textContent?.includes('Fixture Workspace')
+    )
+    const otherWorkspaceButton = scopeButtons.find((button) =>
+      button.textContent?.includes('Other Workspace')
+    )
+
+    if (!globalButton || !currentWorkspaceButton || !otherWorkspaceButton) {
+      throw new Error('Expected global, current, and other workspace scope buttons')
+    }
+    expect(globalButton.compareDocumentPosition(currentWorkspaceButton))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(currentWorkspaceButton.compareDocumentPosition(otherWorkspaceButton))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(globalButton).toHaveAttribute('aria-pressed', 'false')
+    expect(currentWorkspaceButton).toHaveAttribute('aria-pressed', 'true')
+    expect(otherWorkspaceButton).toHaveAttribute('aria-pressed', 'false')
+    expect(within(workspaceFilter).queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(
+      within(workspaceFilter).queryByRole('button', { name: 'Flow actions' })
+    ).not.toBeInTheDocument()
 
     const flowNames = Array.from(
       workspaceFilter.querySelectorAll(
-          `[data-component-id="${COMPONENT_IDS.automation.flowRow}"]`
+        `[data-component-id="${COMPONENT_IDS.automation.flowRow}"]`
       )
     ).map((row) =>
       row
         .querySelector(
           `[data-component-id="${COMPONENT_IDS.automation.flowFilterToggle}"]`
         )
-        ?.querySelector('input')
-        ?.getAttribute('aria-label')
+        ?.textContent
+        ?.replace(/\s+/gu, ' ')
+        .trim()
     )
 
     expect(flowNames).toEqual([
-      'Dev Task Flow',
-      'Requirement Flow',
-      'Bug Fix Flow'
+      'Global FlowPersonal prompts',
+      'Dev Task FlowTask docs',
+      'Requirement FlowRequirements',
+      'Bug Fix FlowBug reports',
+      'Other Workspace FlowTask docs'
     ])
+    expect(getFlowFilterButtonByName('Dev Task Flow'))
+      .toHaveAttribute('aria-pressed', 'true')
+    expect(getFlowFilterButtonByName('Global Flow'))
+      .toHaveAttribute('aria-pressed', 'false')
   })
 
   it('switches Task Stack buckets with prototype selected state', () => {
@@ -262,7 +426,7 @@ describe('WorkspaceFlowFilters', () => {
 
     render(
       <WorkspaceFlowFilters
-        filters={{ bucket: 'ready', workspaceIds: ['/workspace'] }}
+        filters={{ bucket: 'ready', scopeIds: ['workspace:/workspace'] }}
         flows={[createFlow()]}
         onUpdateFilters={onUpdateFilters}
         taskStackCounts={{
@@ -289,13 +453,13 @@ describe('WorkspaceFlowFilters', () => {
     expect(onUpdateFilters).toHaveBeenCalledWith(
       expect.objectContaining({
         bucket: 'done',
-        workspaceIds: ['/workspace']
+        scopeIds: ['workspace:/workspace']
       })
     )
   })
 
-  it('uses checkbox flow filters, status lights, and action menu instead of visible lifecycle tags', () => {
-    const onSelectFlow = vi.fn()
+  it('uses pressed flow filters and status lights without visible lifecycle tags or action menus', () => {
+    const onUpdateFilters = vi.fn()
 
     render(
       <WorkspaceFlowFilters
@@ -312,10 +476,11 @@ describe('WorkspaceFlowFilters', () => {
             status: 'draft'
           })
         ]}
-        filters={{ flowIds: ['flow-a'], workspaceIds: ['/workspace'] }}
-        onUpdateFilters={(filters) => {
-          onSelectFlow(filters.flowIds)
+        filters={{
+          flowOwnerKeys: ['flow-a'],
+          scopeIds: ['workspace:/workspace']
         }}
+        onUpdateFilters={onUpdateFilters}
         text={text}
         workspaceName="Fixture Workspace"
       />
@@ -333,29 +498,23 @@ describe('WorkspaceFlowFilters', () => {
     )
     expect(screen.queryByText('ENABLED')).not.toBeInTheDocument()
     expect(screen.queryByText('SETUP')).not.toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Workspace Flow' }))
-      .toBeChecked()
-    expect(screen.getByLabelText('Workspace Flow').closest('label'))
-      .toHaveAttribute('data-component-id', COMPONENT_IDS.automation.flowFilterToggle)
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Workspace Flow' }))
-    expect(onSelectFlow).toHaveBeenCalledWith([])
-    const flowActions = screen.getAllByRole('button', { name: 'Flow actions' })[0]
+    openDetailsByText('Fixture Workspace')
+    const workspaceFlowButton = getFlowFilterButtonByName('Workspace Flow')
 
-    expect(flowActions).toHaveAttribute(
-      'data-component-id',
-      COMPONENT_IDS.automation.flowContextMenu
+    expect(workspaceFlowButton).toHaveAttribute('aria-pressed', 'true')
+    expect(workspaceFlowButton)
+      .toHaveAttribute('data-component-id', COMPONENT_IDS.automation.flowFilterToggle)
+    fireEvent.click(workspaceFlowButton)
+    expect(onUpdateFilters).toHaveBeenCalledWith(
+      expect.objectContaining({
+        flowOwnerKeys: [],
+        scopeIds: []
+      })
     )
-    fireEvent.click(flowActions)
-    expect(screen.getAllByText('Stop automation-flow')[0]).toBeDisabled()
-    expect(screen.getAllByText('Enable automation-flow')[0]).toBeDisabled()
-    expect(screen.getAllByText('Disable automation-flow')[0]).toBeDisabled()
-    expect(screen.getAllByText('Archive automation-flow')[0]).toBeDisabled()
-    expect(screen.getAllByText('Restore automation-flow')[0]).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Flow actions' })).not.toBeInTheDocument()
   })
 
-  it('wires supported flow lifecycle actions and keeps deferred stop disabled', () => {
-    const onArchiveFlow = vi.fn()
-    const onRestoreFlow = vi.fn()
+  it('renders per-flow lifecycle actions without restoring the context menu', () => {
     const onSetFlowLifecycle = vi.fn()
 
     render(
@@ -378,78 +537,52 @@ describe('WorkspaceFlowFilters', () => {
             name: 'Archived Flow'
           })
         ]}
-        filters={{ archivedVisible: true, workspaceIds: ['/workspace'] }}
-        onArchiveFlow={onArchiveFlow}
-        onRestoreFlow={onRestoreFlow}
+        filters={{ archivedVisible: true, scopeIds: ['workspace:/workspace'] }}
         onSetFlowLifecycle={onSetFlowLifecycle}
         text={text}
         workspaceName="Fixture Workspace"
       />
     )
 
-    const getFlowRow = (name: string): HTMLElement => {
-      const row = screen.getByText(name).closest('article')
+    openDetailsByText('Fixture Workspace')
+    const disableButton = screen.getByRole('button', {
+      name: 'Disable automation-flow Enabled Flow'
+    })
+    const enableButton = screen.getByRole('button', {
+      name: 'Enable automation-flow Disabled Flow'
+    })
 
-      if (!(row instanceof HTMLElement)) {
-        throw new Error(`Expected ${name} row to render`)
-      }
-
-      return row
-    }
-    const enabledRow = getFlowRow('Enabled Flow')
-    const disabledRow = getFlowRow('Disabled Flow')
-    const archivedRow = getFlowRow('Archived Flow')
-
-    fireEvent.click(
-      within(enabledRow).getByRole('button', {
-        name: 'Flow actions'
-      })
+    expect(disableButton).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.flowLifecycleButton
+    )
+    expect(enableButton).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.flowLifecycleButton
     )
     expect(
-      within(enabledRow).getByText('Stop automation-flow')
-    ).toBeDisabled()
-    fireEvent.click(
-      within(enabledRow).getByText('Disable automation-flow')
-    )
-    fireEvent.click(
-      within(enabledRow).getByText('Archive automation-flow')
-    )
-
-    fireEvent.click(
-      within(disabledRow).getByRole('button', {
-        name: 'Flow actions'
+      screen.queryByRole('button', {
+        name: 'Enable automation-flow Archived Flow'
       })
-    )
-    fireEvent.click(
-      within(disabledRow).getByText('Enable automation-flow')
-    )
-
-    fireEvent.click(
-      within(archivedRow).getByRole('button', {
-        name: 'Flow actions'
-      })
-    )
-    fireEvent.click(
-      within(archivedRow).getByText('Restore automation-flow')
-    )
-
-    expect(onSetFlowLifecycle).toHaveBeenCalledWith(
-      expect.objectContaining({ automationFlowId: 'flow-a' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(disableButton)
+    fireEvent.click(enableButton)
+    expect(onSetFlowLifecycle).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ name: 'Enabled Flow' }),
       'disabled'
     )
-    expect(onArchiveFlow).toHaveBeenCalledWith(
-      expect.objectContaining({ automationFlowId: 'flow-a' })
-    )
-    expect(onSetFlowLifecycle).toHaveBeenCalledWith(
-      expect.objectContaining({ automationFlowId: 'flow-disabled' }),
+    expect(onSetFlowLifecycle).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ name: 'Disabled Flow' }),
       'enabled'
     )
-    expect(onRestoreFlow).toHaveBeenCalledWith(
-      expect.objectContaining({ automationFlowId: 'flow-archived' })
-    )
+    expect(screen.queryByText('Archive automation-flow')).not.toBeInTheDocument()
+    expect(screen.queryByText('Restore automation-flow')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Flow actions' })).not.toBeInTheDocument()
   })
 
-  it('toggles no-workspace scope and narrows from all visible flows without inverting the clicked flow', () => {
+  it('toggles scope and flow pressed states without checkboxes', () => {
     const onUpdateFilters = vi.fn()
 
     render(
@@ -467,8 +600,7 @@ describe('WorkspaceFlowFilters', () => {
         ]}
         filters={{
           bucket: 'ready',
-          flowIds: [],
-          workspaceIds: ['/workspace', 'mde:no-workspace']
+          flowOwnerKeys: []
         }}
         onUpdateFilters={onUpdateFilters}
         text={text}
@@ -476,19 +608,29 @@ describe('WorkspaceFlowFilters', () => {
       />
     )
 
-    expect(screen.getByRole('checkbox', { name: 'No workspace' })).toBeChecked()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'No workspace' }))
+    openDetailsByText('Fixture Workspace')
+    const globalScopeButton = document.querySelector(
+      `[data-component-id="${COMPONENT_IDS.automation.scopeFilterToggle}"]`
+    )
+    const workspaceFlowButton = getFlowFilterButtonByName('Workspace Flow')
+
+    if (globalScopeButton === null) {
+      throw new Error('Expected global scope button')
+    }
+    expect(globalScopeButton).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(globalScopeButton)
     expect(onUpdateFilters).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceIds: ['/workspace']
+        scopeIds: ['workspace:/workspace', 'global']
       })
     )
 
-    expect(screen.getByRole('checkbox', { name: 'Workspace Flow' })).toBeChecked()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Workspace Flow' }))
+    expect(workspaceFlowButton).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(workspaceFlowButton)
     expect(onUpdateFilters).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        flowIds: ['user-flow']
+        flowOwnerKeys: [],
+        scopeIds: []
       })
     )
   })
@@ -511,8 +653,9 @@ describe('WorkspaceFlowFilters', () => {
 
     expect(screen.queryByText('Archived Flow')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Show archived flows' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show archived flows' }))
 
+    openDetailsByText('Fixture Workspace')
     expect(screen.getByText('Archived Flow')).toBeInTheDocument()
     expect(screen.getByLabelText('Flow is archived')).toHaveClass(
       'automation-status-light--archived'
@@ -554,8 +697,9 @@ describe('WorkspaceFlowFilters', () => {
       />
     )
 
+    openDetailsByText('Fixture Workspace')
     expect(screen.getByText('Archived Flow')).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Show archived flows' }))
-      .toBeChecked()
+    expect(screen.getByRole('button', { name: 'Show archived flows' }))
+      .toHaveAttribute('aria-pressed', 'true')
   })
 })

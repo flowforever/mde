@@ -37,15 +37,21 @@ export const findDirectoryPath = (
   return null;
 };
 
+const shouldDefaultHideEntry = (node: TreeNode, depth: number): boolean =>
+  node.name.startsWith(".") && !(depth === 0 && node.path === ".mde");
+
 export const collectDefaultHiddenEntryPaths = (
   nodes: readonly TreeNode[],
+  depth = 0,
 ): readonly string[] =>
   nodes.reduce<readonly string[]>((entryPaths, node) => {
     const childEntryPaths =
       node.type === "directory"
-        ? collectDefaultHiddenEntryPaths(node.children)
+        ? collectDefaultHiddenEntryPaths(node.children, depth + 1)
         : [];
-    const nodeEntryPaths = node.name.startsWith(".") ? [node.path] : [];
+    const nodeEntryPaths = shouldDefaultHideEntry(node, depth)
+      ? [node.path]
+      : [];
 
     return [...entryPaths, ...nodeEntryPaths, ...childEntryPaths];
   }, []);

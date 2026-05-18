@@ -40,6 +40,62 @@ describe('workspaceService integration', () => {
     )
   })
 
+  it('exposes root .mde through workspace IPC while keeping nested .mde ignored', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-ipc-workspace-'))
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    await mkdir(join(workspacePath, '.mde'), { recursive: true })
+    await mkdir(join(workspacePath, 'docs', '.mde'), { recursive: true })
+    await writeFile(join(workspacePath, '.mde', 'automation.md'), '# Automation')
+    await writeFile(join(workspacePath, 'docs', '.mde', 'asset.md'), '# Asset')
+    await writeFile(join(workspacePath, 'docs', 'guide.md'), '# Guide')
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      workspaceService: createWorkspaceService()
+    })
+
+    const openWorkspaceByPath = handlers.get(WORKSPACE_CHANNELS.openWorkspaceByPath)
+    const listDirectory = handlers.get(WORKSPACE_CHANNELS.listDirectory)
+    const event = createIpcEvent(7)
+
+    await expect(openWorkspaceByPath?.(event, workspacePath)).resolves.toMatchObject({
+      rootPath: await realpath(workspacePath)
+    })
+    await expect(listDirectory?.(event, '')).resolves.toEqual([
+      {
+        children: [
+          {
+            name: 'automation.md',
+            path: '.mde/automation.md',
+            type: 'file'
+          }
+        ],
+        name: '.mde',
+        path: '.mde',
+        type: 'directory'
+      },
+      {
+        children: [
+          {
+            name: 'guide.md',
+            path: 'docs/guide.md',
+            type: 'file'
+          }
+        ],
+        name: 'docs',
+        path: 'docs',
+        type: 'directory'
+      }
+    ])
+  })
+
   it('opens a standalone Markdown file as a file workspace', async () => {
     const fileParentPath = await mkdtemp(join(tmpdir(), 'mde-file-parent-'))
     const filePath = join(fileParentPath, 'single.md')
@@ -451,6 +507,45 @@ describe('workspaceService integration', () => {
         name: 'new-window.md',
         path: 'new-window.md',
         type: 'file'
+      }
+    ])
+  })
+
+  it('opens automation-flow launch intents in an Explorer window', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+    const openedPaths: unknown[] = []
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    registerWorkspaceHandlers({
+      dialog: { showOpenDialog: vi.fn() },
+      ipcMain,
+      openPathInNewWindow: (resourcePath) => {
+        openedPaths.push(resourcePath)
+      },
+      workspaceService: createWorkspaceService()
+    })
+
+    const openPathInNewWindow = handlers.get(
+      WORKSPACE_CHANNELS.openPathInNewWindow
+    )
+
+    await openPathInNewWindow?.(
+      createIpcEvent(304),
+      {
+        type: 'workspace-automation-flows',
+        workspaceRoot: workspacePath
+      }
+    )
+
+    expect(openedPaths).toEqual([
+      {
+        type: 'workspace-automation-flows',
+        workspaceRoot: workspacePath
       }
     ])
   })

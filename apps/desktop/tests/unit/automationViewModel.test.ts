@@ -86,4 +86,16 @@ describe('createAutomationCenterViewModel', () => {
     expect(viewModel.readyPreview).toBeUndefined()
     expect(viewModel.phases).toEqual([])
   })
+
+  it('uses the active bucket as the visible Signal Stack task source', () => {
+    const projection = {
+      ...createProjection(),
+      filters: { bucket: 'ready' },
+      tasks: []
+    } satisfies AutomationProjection
+    const viewModel = createAutomationCenterViewModel(projection)
+
+    expect(viewModel.visibleTasks).toHaveLength(1)
+    expect(viewModel.selectedTask?.taskId).toBe('ready-task')
+  })
 })

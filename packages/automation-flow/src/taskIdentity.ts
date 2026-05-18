@@ -23,6 +23,36 @@ export const createAutomationTaskId = ({
 }: AutomationTaskIdentityInput): string =>
   stableJoin('automation-task', automationFlowId, sourceItemId)
 
+export const createAutomationTaskDataId = (input: {
+  readonly ownerKey: string
+  readonly sourceItemId: string
+}): string =>
+  stableJoin('automation-task-data', input.ownerKey, input.sourceItemId)
+
+export const createAutomationTaskDataSnapshotId = (input: {
+  readonly normalizedTaskPayloadHash: string
+  readonly sourceSnapshotHash: string
+  readonly taskDataId: string
+}): string =>
+  stableJoin(
+    'automation-task-data-snapshot',
+    input.taskDataId,
+    input.sourceSnapshotHash,
+    input.normalizedTaskPayloadHash
+  )
+
+export const createAutomationExecutorSnapshotId = (input: {
+  readonly executorDefinitionFingerprint: string
+  readonly executorId: string
+  readonly ownerKey: string
+}): string =>
+  stableJoin(
+    'automation-executor-snapshot',
+    input.ownerKey,
+    input.executorId,
+    input.executorDefinitionFingerprint
+  )
+
 export const createWorkspaceMarkdownSourceItemId = ({
   relativePath,
   workspaceId

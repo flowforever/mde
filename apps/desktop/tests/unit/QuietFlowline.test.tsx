@@ -58,6 +58,20 @@ describe('QuietFlowline', () => {
         automationFlowId: 'flow-a',
         bucket: 'ready',
         engine: 'codex',
+        eligibleExecutors: [
+          {
+            displayName: 'Implementation',
+            executorId: 'implementation',
+            executorSnapshotId: 'executor-snapshot-implementation',
+            type: 'markdown'
+          }
+        ],
+        primaryExecutor: {
+          displayName: 'Implementation',
+          executorId: 'implementation',
+          executorSnapshotId: 'executor-snapshot-implementation',
+          type: 'markdown'
+        },
         relativePath: '.mde/docs/tasks/ready.md',
         sourceItemId: 'source-a',
         sourceType: 'workspace-markdown',
@@ -85,9 +99,9 @@ describe('QuietFlowline', () => {
     )
     screen.getByLabelText('Close Flowline detail').click()
     expect(clearSelection).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('Start automation task')).toHaveAttribute(
+    expect(screen.getByText('Start with selected executor')).toHaveAttribute(
       'data-component-id',
-      COMPONENT_IDS.automation.flowlineStartButton
+      COMPONENT_IDS.automation.selectedExecutorStartButton
     )
     expect(screen.getByText('.mde/docs/tasks/ready.md')).toBeInTheDocument()
     expect(screen.getByText('Projection Flow')).toBeInTheDocument()
@@ -126,10 +140,9 @@ describe('QuietFlowline', () => {
       join(process.cwd(), 'apps/desktop/src/renderer/src/automation/styles.css'),
       'utf8'
     )
-    const startButtonRule =
-      /\.automation-flowline-start,\n\.automation-agent-chat-button\s*\{[^}]+\}/u.exec(
-        css
-      )?.[0]
+    const startButtonRule = /\.automation-flowline-start\s*\{[^}]+\}/u.exec(
+      css
+    )?.[0]
 
     expect(startButtonRule).toContain('color: var(--primary-action-text);')
     expect(startButtonRule).toContain('background: var(--primary-action);')

@@ -50,6 +50,34 @@ describe('automationFlowLibrary', () => {
     expect(library.diagnostics).toEqual([])
   })
 
+  it('loads only direct child Markdown files as flow specs', async () => {
+    const homePath = await createTempRoot('mde-home-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+
+    await mkdir(join(workspaceRoot, '.mde', 'automation-flows', 'flow-a'), {
+      recursive: true
+    })
+    await writeFile(
+      join(workspaceRoot, '.mde', 'automation-flows', 'flow-a.md'),
+      renderFlow('flow-a', 'workspace')
+    )
+    await writeFile(
+      join(
+        workspaceRoot,
+        '.mde',
+        'automation-flows',
+        'flow-a',
+        'implementation.md'
+      ),
+      '# Executor'
+    )
+
+    const library = await loadAutomationFlowLibrary({ homePath, workspaceRoot })
+
+    expect(library.automationFlows.map((flow) => flow.id)).toEqual(['flow-a'])
+    expect(library.diagnostics).toEqual([])
+  })
+
   it('ignores archived definitions and returns diagnostics for invalid formal flows', async () => {
     const homePath = await createTempRoot('mde-home-')
     const workspaceRoot = await createTempRoot('mde-workspace-')

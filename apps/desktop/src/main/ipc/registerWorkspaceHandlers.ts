@@ -26,6 +26,7 @@ interface WorkspaceIpcEvent {
 
 export interface WorkspaceHandlerSession {
   readonly getActiveWorkspaceRoot: (event?: WorkspaceIpcEvent | null) => string | null
+  readonly getWindowIdForWorkspaceRoot: (workspaceRoot: string) => number | null
   readonly removeWindow: (sender: Pick<WebContents, 'id'>) => void
   readonly setPendingLaunchPath: (
     sender: Pick<WebContents, 'id'>,
@@ -47,6 +48,42 @@ const getSenderId = (
   const senderId = event?.sender?.id
 
   return typeof senderId === 'number' ? senderId : DEFAULT_WINDOW_ID
+}
+
+const isWorkspaceLaunchResource = (
+  value: unknown
+): value is WorkspaceLaunchResource => {
+  if (typeof value === 'string') {
+    return true
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const resource = value as Record<string, unknown>
+
+  if (resource.type === 'workspace-file') {
+    return (
+      typeof resource.workspaceRoot === 'string' &&
+      typeof resource.filePath === 'string'
+    )
+  }
+
+  return (
+    resource.type === 'workspace-automation-flows' &&
+    typeof resource.workspaceRoot === 'string'
+  )
+}
+
+const assertWorkspaceLaunchResource = (
+  value: unknown
+): WorkspaceLaunchResource => {
+  if (!isWorkspaceLaunchResource(value)) {
+    throw new Error('Launch path must be a string or workspace launch resource')
+  }
+
+  return value
 }
 
 export const getTestWorkspacePath = (
@@ -365,11 +402,7 @@ export const registerWorkspaceHandlers = ({
   ipcMain.handle(
     WORKSPACE_CHANNELS.openPathInNewWindow,
     async (_event, resourcePath: unknown) => {
-      if (typeof resourcePath !== 'string') {
-        throw new Error('Launch path must be a string')
-      }
-
-      await openResourceInNewWindow(resourcePath)
+      await openResourceInNewWindow(assertWorkspaceLaunchResource(resourcePath))
     }
   )
 
@@ -415,6 +448,13 @@ export const registerWorkspaceHandlers = ({
   return {
     getActiveWorkspaceRoot: (event) =>
       getWindowState(event).activeWorkspaceRoot ?? lastActiveWorkspaceRoot,
+    getWindowIdForWorkspaceRoot: (workspaceRoot) => {
+      const match = Array.from(statesByWindowId.values()).find(
+        (state) => state.activeWorkspaceRoot === workspaceRoot
+      )
+
+      return match?.id ?? null
+    },
     removeWindow: (sender) => {
       statesByWindowId.delete(sender.id)
     },

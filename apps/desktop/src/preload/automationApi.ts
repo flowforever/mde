@@ -13,16 +13,41 @@ export const createAutomationApi = (
       AUTOMATION_CHANNELS.archiveFlow,
       command
     ) as ReturnType<AutomationApi['archiveFlow']>,
+  applyGlobalFlowToWorkspace: (request) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.applyGlobalFlowToWorkspace,
+      request
+    ) as ReturnType<AutomationApi['applyGlobalFlowToWorkspace']>,
   cancelRun: (command) =>
     ipcRenderer.invoke(
       AUTOMATION_CHANNELS.cancelRun,
       command
     ) as ReturnType<AutomationApi['cancelRun']>,
+  createExecutorDraft: (request) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.createExecutorDraft,
+      request
+    ) as ReturnType<AutomationApi['createExecutorDraft']>,
+  createFlowDraft: (request) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.createFlowDraft,
+      request
+    ) as ReturnType<AutomationApi['createFlowDraft']>,
   createFlowFromTemplate: (request) =>
     ipcRenderer.invoke(
       AUTOMATION_CHANNELS.createFlowFromTemplate,
       request
     ) as ReturnType<AutomationApi['createFlowFromTemplate']>,
+  deleteFlow: (command) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.deleteFlow,
+      command
+    ) as ReturnType<AutomationApi['deleteFlow']>,
+  getExplorerAutomationProjection: (request) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.getExplorerAutomationProjection,
+      request
+    ) as ReturnType<AutomationApi['getExplorerAutomationProjection']>,
   getProjection: (request) =>
     ipcRenderer.invoke(
       AUTOMATION_CHANNELS.getProjection,
@@ -51,6 +76,25 @@ export const createAutomationApi = (
       AUTOMATION_CHANNELS.openNativeSession,
       command
     ) as ReturnType<AutomationApi['openNativeSession']>,
+  openAutomationManagementTarget: (request) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.openAutomationManagementTarget,
+      request
+    ) as ReturnType<AutomationApi['openAutomationManagementTarget']>,
+  refreshSkillCatalog: () =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.refreshSkillCatalog
+    ) as ReturnType<AutomationApi['refreshSkillCatalog']>,
+  removeAppliedGlobalFlowFromWorkspace: (request) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.removeAppliedGlobalFlowFromWorkspace,
+      request
+    ) as ReturnType<AutomationApi['removeAppliedGlobalFlowFromWorkspace']>,
+  renameFlow: (command) =>
+    ipcRenderer.invoke(
+      AUTOMATION_CHANNELS.renameFlow,
+      command
+    ) as ReturnType<AutomationApi['renameFlow']>,
   restoreFlow: (command) =>
     ipcRenderer.invoke(
       AUTOMATION_CHANNELS.restoreFlow,

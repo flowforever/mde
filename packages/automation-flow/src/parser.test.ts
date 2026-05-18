@@ -26,6 +26,21 @@ allowedEngines:
   - claude-code
 defaultEngine: codex
 reportPattern: Concise Markdown summary with verification evidence.
+executors:
+  - id: implementation
+    type: markdown
+    path: ./local-dev-task/implementation.md
+    enabled: true
+    handles:
+      sourceTypes:
+        - workspace-markdown
+      taskTypes:
+        - requirement
+      tags:
+        - implementation
+  - id: execute-picked-task
+    type: skill
+    ref: skill:execute-picked-task
 ---
 
 # Local Dev Task Flow
@@ -76,6 +91,26 @@ describe('parseAutomationFlowMarkdown', () => {
       sourceTypes: ['workspace-markdown'],
       status: 'formal'
     })
+    expect(result.automationFlow.executors).toEqual([
+      {
+        enabled: true,
+        handles: {
+          sourceTypes: ['workspace-markdown'],
+          tags: ['implementation'],
+          taskTypes: ['requirement']
+        },
+        id: 'implementation',
+        path: './local-dev-task/implementation.md',
+        type: 'markdown'
+      },
+      {
+        enabled: true,
+        handles: {},
+        id: 'execute-picked-task',
+        ref: 'skill:execute-picked-task',
+        type: 'skill'
+      }
+    ])
     expect(result.automationFlow.sections).toMatchObject({
       acceptanceStandard: 'The requested behavior is implemented without unrelated changes.',
       executionStandard: 'Follow the task plan and keep changes scoped.',

@@ -628,3 +628,25 @@ E2E tests:
 User manual updates should cover the Explorer Automation Flows section,
 flow-authoring Chat behavior, applied global workflows, executor requirements,
 and the Automation Center task-data queue semantics.
+
+## Implementation Status
+
+Pre-release implementation handoff, 2026-05-15:
+
+- Shared schema, executor resolution, task-data snapshots, IPC/preload contracts,
+  Explorer Automation Flows management, authoring Chat context, Automation
+  Center scope/filter behavior, and executor-backed start semantics have been
+  implemented in the dirty Task 1-8 workspace.
+- Task 9 adds E2E coverage for Explorer flow and executor creation, normal
+  editor launch, blocked no-executor state, applied global flow add/remove,
+  default all-scope projection, scope and flow filtering, and selected executor
+  task start.
+- Chinese manual pages now describe the task-data/executor model, Explorer
+  Automation Flows management, Automation Center filtering/start semantics, and
+  the removal of Automation Center template management.
+- `AutomationFlowEditorHost` and `automationFlowEditorHostAdapter` remain as
+  compatibility code because existing unit coverage still imports them; they
+  are no longer the production authoring path and should be removed in a
+  separate cleanup after replacing that residual test surface.
+- This is not a release note. Remote tag publication remains blocked by the
+  requirement's manual-testing confirmation gate.

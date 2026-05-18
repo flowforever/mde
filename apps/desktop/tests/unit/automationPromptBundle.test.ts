@@ -49,7 +49,10 @@ describe('automationPromptBundle', () => {
       workspaceRoot: '/workspace'
     })
 
+    expect(bundle.prompt).toMatch(/^# Parse automation-flow: Local Dev Task/u)
+    expect(bundle.prompt).not.toMatch(/^# MDE Automation Runtime Contract/u)
     expect(bundle.prompt).toContain('## Required Structured Output')
+    expect(bundle.prompt).toContain('## MDE Automation Runtime Contract')
     expect(bundle.prompt).toContain('"discoveredTaskSources"')
     expect(bundle.prompt).toContain('"sourceType": "workspace-markdown"')
     expect(bundle.prompt).toContain(
@@ -61,6 +64,19 @@ describe('automationPromptBundle', () => {
     const bundle = createAutomationPromptBundle({
       automationFlow,
       automationFlowSnapshotId: 'snapshot-1',
+      executorSnapshot: {
+        autoDiscovered: false,
+        diagnostics: [],
+        displayName: 'Implementation',
+        enabled: true,
+        executorId: 'implementation',
+        executorSnapshotId: 'executor-snapshot-implementation',
+        handles: {},
+        order: 0,
+        resolvedSource: 'Run the selected task data.',
+        tags: [],
+        type: 'markdown'
+      },
       runId: 'run-1',
       runKind: 'task',
       taskSource: {
@@ -77,8 +93,15 @@ describe('automationPromptBundle', () => {
       workspaceRoot: '/workspace'
     })
 
+    expect(bundle.prompt).toMatch(/^# Run automation task: READY Example task/u)
+    expect(bundle.prompt).not.toMatch(/^# MDE Automation Runtime Contract/u)
     expect(bundle.prompt).toContain('"finalReport"')
     expect(bundle.prompt).toContain('"decisionPrompt"')
+    expect(bundle.prompt).toContain('## Task Data')
+    expect(bundle.prompt).toContain('## Executor')
+    expect(bundle.prompt).toContain('Executor id: implementation')
+    expect(bundle.prompt).toContain('Executor instructions:')
+    expect(bundle.prompt).toContain('Run the selected task data.')
     expect(bundle.prompt).toContain(
       'finalReport.outcome must be one of succeeded, failed, blocked, or cancelled.'
     )

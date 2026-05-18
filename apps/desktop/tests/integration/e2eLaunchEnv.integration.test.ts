@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_HOME_PATH_ENV,
   E2E_USER_DATA_PATH_ENV,
   E2E_WINDOW_MODE_ENV,
 } from "../../src/shared/appIdentity";
@@ -19,6 +20,7 @@ describe("E2E launch environment", () => {
 
     expect(env[CAPTURE_STARTUP_DIAGNOSTICS_ENV]).toBe("1");
     expect(env[DISABLE_SINGLE_INSTANCE_ENV]).toBe("1");
+    expect(env[E2E_HOME_PATH_ENV]).toBe("/tmp/mde-e2e-user-data");
     expect(env[E2E_USER_DATA_PATH_ENV]).toBe("/tmp/mde-e2e-user-data");
     expect(env[E2E_WINDOW_MODE_ENV]).toBe("hidden");
     expect(env.PATH).toBe("/bin");
@@ -32,6 +34,16 @@ describe("E2E launch environment", () => {
     });
 
     expect(env[E2E_WINDOW_MODE_ENV]).toBe("visible");
+  });
+
+  it("allows explicit E2E automation home overrides", () => {
+    const env = createElectronLaunchEnv({
+      baseEnv: { PATH: "/bin" },
+      e2eUserDataPath: "/tmp/mde-e2e-user-data",
+      overrideEnv: { [E2E_HOME_PATH_ENV]: "/tmp/mde-e2e-home" },
+    });
+
+    expect(env[E2E_HOME_PATH_ENV]).toBe("/tmp/mde-e2e-home");
   });
 
   it("filters Electron variables that make Playwright launch Electron as Node", () => {

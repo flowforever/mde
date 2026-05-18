@@ -28,6 +28,11 @@ describe('automationStore', () => {
       reportsRoot: join(appDataPath, 'automation', 'reports'),
       runsRoot: join(appDataPath, 'automation', 'runs'),
       runtimeRoot: join(appDataPath, 'automation', 'automation-flow-runtime'),
+      taskDataSnapshotsRoot: join(
+        appDataPath,
+        'automation',
+        'task-data-snapshots'
+      ),
       userTaskPromptsRoot: join(appDataPath, 'automation', 'user-task-prompts'),
       workspacesRoot: join(appDataPath, 'automation', 'workspaces')
     })
@@ -547,6 +552,90 @@ describe('automationStore', () => {
       expect.objectContaining({
         sourceItemId: 'safe-source',
         title: 'READY Safe source'
+      })
+    ])
+  })
+
+  it('persists task data snapshots and marks missing rediscovery snapshots removed', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({
+      appDataPath,
+      now: () => '2026-05-10T08:30:00.000Z'
+    })
+    const source = {
+      automationFlowId: 'workspace-flow',
+      automationFlowOwnerKey: 'workspace:%2Frepo:flow:workspace-flow',
+      discoveredAt: '2026-05-10T08:00:00.000Z',
+      sourceItemId: 'source-a',
+      sourceSnapshotHash: 'hash-a',
+      sourceType: 'workspace-markdown' as const,
+      taskDataId:
+        'automation-task-data:workspace:%2Frepo:flow:workspace-flow:source-a',
+      taskDataSnapshotId: 'automation-task-data-snapshot:snapshot-a',
+      title: 'READY Snapshot source'
+    }
+
+    await store.initialize()
+    await store.replaceTaskDataSnapshots(
+      'workspace:%2Frepo:flow:workspace-flow',
+      [source],
+      'discovery-1'
+    )
+    await store.replaceTaskDataSnapshots(
+      'workspace:%2Frepo:flow:workspace-flow',
+      [{ ...source, discoveredAt: '2026-05-10T08:05:00.000Z' }],
+      'discovery-2'
+    )
+
+    const currentSnapshots = await store.listTaskDataSnapshots()
+
+    expect(currentSnapshots).toEqual([
+      expect.objectContaining({
+        lastSeenDiscoveryRunId: 'discovery-2',
+        taskDataSnapshotId: 'automation-task-data-snapshot:snapshot-a'
+      })
+    ])
+    expect(currentSnapshots[0]).not.toHaveProperty('removedAt')
+
+    await store.replaceTaskDataSnapshots(
+      'workspace:%2Frepo:flow:workspace-flow',
+      [],
+      'discovery-3'
+    )
+
+    await expect(store.listTaskDataSnapshots()).resolves.toEqual([
+      expect.objectContaining({
+        lastSeenDiscoveryRunId: 'discovery-2',
+        removedAt: '2026-05-10T08:30:00.000Z',
+        taskDataSnapshotId: 'automation-task-data-snapshot:snapshot-a'
+      })
+    ])
+  })
+
+  it('preserves task and executor snapshot ids on run records', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({ appDataPath })
+
+    await store.initialize()
+    await store.createRun({
+      automationFlowId: 'workspace-flow',
+      engine: 'codex',
+      executorId: 'implementation',
+      executorSnapshotId: 'executor-snapshot-1',
+      runId: 'run-snapshot',
+      runKind: 'task',
+      state: 'running',
+      taskDataId: 'task-data-1',
+      taskDataSnapshotId: 'task-data-snapshot-1',
+      taskId: 'task-1'
+    })
+
+    await expect(store.listRuns()).resolves.toEqual([
+      expect.objectContaining({
+        executorId: 'implementation',
+        executorSnapshotId: 'executor-snapshot-1',
+        taskDataId: 'task-data-1',
+        taskDataSnapshotId: 'task-data-snapshot-1'
       })
     ])
   })

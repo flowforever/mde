@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
+  E2E_HOME_PATH_ENV,
   E2E_USER_DATA_PATH_ENV,
   E2E_WINDOW_MODE_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY,
@@ -22,6 +23,7 @@ describe('Electron window config', () => {
       'MDE_CAPTURE_STARTUP_DIAGNOSTICS'
     )
     expect(DISABLE_SINGLE_INSTANCE_ENV).toBe('MDE_DISABLE_SINGLE_INSTANCE')
+    expect(E2E_HOME_PATH_ENV).toBe('MDE_E2E_HOME_PATH')
     expect(E2E_USER_DATA_PATH_ENV).toBe('MDE_E2E_USER_DATA_PATH')
     expect(E2E_WINDOW_MODE_ENV).toBe('MDE_E2E_WINDOW_MODE')
     expect(STARTUP_DIAGNOSTICS_GLOBAL_KEY).toBe('__mdeStartupDiagnostics')
@@ -191,6 +193,10 @@ describe('Release automation config', () => {
       await readFile('apps/desktop/electron-builder.json', 'utf8')
     ) as {
       artifactName?: string
+      extraResources?: {
+        from?: string
+        to?: string
+      }[]
       files?: string[]
       linux?: unknown
       mac?: {
@@ -221,6 +227,18 @@ describe('Release automation config', () => {
     expect(rootPackageJson.main).toBe('apps/desktop/out/main/index.js')
     expect(electronBuilderConfig.files).toEqual(
       expect.arrayContaining(['out/**/*', 'package.json'])
+    )
+    expect(electronBuilderConfig.extraResources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: '../../bin/mde.js',
+          to: 'cli/mde'
+        }),
+        expect.objectContaining({
+          from: '../../skills/automation-flow-helper',
+          to: 'skills/automation-flow-helper'
+        })
+      ])
     )
     expect(electronBuilderConfig.files).not.toContain('../../out/**/*')
     expect(desktopPackageJson.scripts?.['release:github']).toBe(

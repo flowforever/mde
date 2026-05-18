@@ -1,13 +1,19 @@
-import type { JSX } from 'react'
+import { useState, type JSX } from 'react'
 
 import { COMPONENT_IDS } from '../componentIds'
 import type { AppText } from '../i18n/appLanguage'
 import type { AutomationCenterViewModel, AutomationFlowlinePhaseStatus } from './automationViewModel'
-import type { AutomationTaskCard } from '../../../shared/automation'
+import type {
+  AutomationTaskCard,
+  AutomationTaskExecutorSummary
+} from '../../../shared/automation'
 
 interface QuietFlowlineProps {
   readonly onClearSelection?: () => void
-  readonly onStartTask?: (taskId: string) => void
+  readonly onStartTask?: (
+    taskId: string,
+    executor: AutomationTaskExecutorSummary
+  ) => void
   readonly onSubmitDecision?: (decisionId: string, response: string) => void
   readonly text: AppText
   readonly viewModel: AutomationCenterViewModel
@@ -56,6 +62,11 @@ const getTaskEngine = (
   viewModel: AutomationCenterViewModel
 ): string => viewModel.readyPreview?.engine ?? task.engine ?? 'codex'
 
+const getExecutorLabel = (
+  executor: AutomationTaskExecutorSummary | undefined,
+  text: AppText
+): string => executor?.displayName ?? text('automation.noSelectedExecutor')
+
 export const QuietFlowline = ({
   onClearSelection,
   onStartTask,
@@ -64,6 +75,21 @@ export const QuietFlowline = ({
   viewModel
 }: QuietFlowlineProps): JSX.Element => {
   const selectedTask = viewModel.selectedTask
+  const [executorSelection, setExecutorSelection] = useState<{
+    readonly executorId?: string
+    readonly taskId?: string
+  }>({})
+
+  const eligibleExecutors = selectedTask?.eligibleExecutors ?? []
+  const selectedExecutorId =
+    executorSelection.taskId === selectedTask?.taskId
+      ? executorSelection.executorId ?? selectedTask?.primaryExecutor?.executorId
+      : selectedTask?.primaryExecutor?.executorId
+  const selectedExecutor =
+    eligibleExecutors.find((executor) => executor.executorId === selectedExecutorId) ??
+    selectedTask?.primaryExecutor
+  const blockingDiagnostics = selectedTask?.blockingDiagnostics ?? []
+  const startBlocked = blockingDiagnostics.length > 0 || selectedExecutor === undefined
 
   return (
     <section
@@ -113,11 +139,53 @@ export const QuietFlowline = ({
               <dt>{text('automation.owningFlow')}</dt>
               <dd>{getTaskFlowName(selectedTask, viewModel)}</dd>
             </div>
+            <div data-component-id={COMPONENT_IDS.automation.primaryExecutorLabel}>
+              <dt>{text('automation.primaryExecutor')}</dt>
+              <dd>{getExecutorLabel(selectedTask.primaryExecutor, text)}</dd>
+            </div>
             <div>
               <dt>{text('automation.engine')}</dt>
               <dd>{getTaskEngine(selectedTask, viewModel)}</dd>
             </div>
           </dl>
+          {eligibleExecutors.length > 1 ? (
+            <label className="automation-executor-selector">
+              <span>{text('automation.executorSelector')}</span>
+              <select
+                data-component-id={COMPONENT_IDS.automation.executorSelector}
+                onChange={(event) => {
+                  setExecutorSelection({
+                    executorId: event.currentTarget.value,
+                    taskId: selectedTask.taskId
+                  })
+                }}
+                value={selectedExecutor?.executorId}
+              >
+                {eligibleExecutors.map((executor) => (
+                  <option key={executor.executorId} value={executor.executorId}>
+                    {executor.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {blockingDiagnostics.length > 0 ? (
+            <section
+              aria-label={text('automation.blockedStartDiagnostics')}
+              className="automation-blocked-start-diagnostics"
+              data-component-id={COMPONENT_IDS.automation.blockedStartDiagnosticsPanel}
+            >
+              <h3>{text('automation.blockedStartDiagnostics')}</h3>
+              {blockingDiagnostics.map((diagnostic) => (
+                <p
+                  data-component-id={COMPONENT_IDS.automation.blockedStartDiagnosticRow}
+                  key={diagnostic.code}
+                >
+                  {text('automation.diagnosticUnavailable')}
+                </p>
+              ))}
+            </section>
+          ) : null}
           <section
             aria-label={text('automation.phasePlanPreview')}
             className="automation-ready-phase-plan"
@@ -154,13 +222,16 @@ export const QuietFlowline = ({
               {selectedTask.bucket === 'ready' ? (
                 <button
                   className="automation-flowline-start"
-                  data-component-id={COMPONENT_IDS.automation.flowlineStartButton}
+                  data-component-id={COMPONENT_IDS.automation.selectedExecutorStartButton}
+                  disabled={startBlocked}
                   onClick={() => {
-                    onStartTask?.(selectedTask.taskId)
+                    if (selectedExecutor !== undefined) {
+                      onStartTask?.(selectedTask.taskId, selectedExecutor)
+                    }
                   }}
                   type="button"
                 >
-                  {text('automation.startTask')}
+                  {text('automation.startTaskWithSelectedExecutor')}
                 </button>
               ) : null}
               {viewModel.selectedDecision !== undefined ? (

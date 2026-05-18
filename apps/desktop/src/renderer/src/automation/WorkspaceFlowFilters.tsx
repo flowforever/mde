@@ -1,4 +1,4 @@
-import { ArrowLeft, MoreHorizontal, Plus } from 'lucide-react'
+import { ArrowLeft, ChevronRight, FolderCog, Power } from 'lucide-react'
 import { useState } from 'react'
 import type { JSX } from 'react'
 
@@ -6,33 +6,50 @@ import { COMPONENT_IDS } from '../componentIds'
 import type { AppText } from '../i18n/appLanguage'
 import type {
   AutomationFlowRow,
+  AutomationCenterFilters,
+  AutomationCenterScopeId,
   AutomationProjectionBucketFilter,
-  AutomationProjectionFilters
+  AutomationRunSummary,
 } from '../../../shared/automation'
+import { AutomationRunHistory } from './AutomationRunHistory'
 
 type AutomationFlowScope = AutomationFlowRow['scope']
+type ToggleableAutomationFlowLifecycle = Extract<
+  AutomationFlowRow['lifecycle'],
+  'disabled' | 'enabled'
+>
 
 export interface AutomationFlowCreateTarget {
   readonly scope: AutomationFlowScope
   readonly workspaceId?: string
 }
 
+export interface AutomationWorkspaceFilterEntry {
+  readonly name: string
+  readonly rootPath: string
+}
+
 interface WorkspaceFlowFiltersProps {
   readonly flows: readonly AutomationFlowRow[]
   readonly onCreateFlow?: (target?: AutomationFlowCreateTarget) => void
-  readonly onEditFlow?: (flow: AutomationFlowRow) => void
-  readonly onArchiveFlow?: (flow: AutomationFlowRow) => void
-  readonly onReturnToWorkspace?: () => void
-  readonly onRestoreFlow?: (flow: AutomationFlowRow) => void
+  readonly onManageScope?: (target: {
+    readonly scopeId: AutomationCenterScopeId
+    readonly workspaceId?: string
+  }) => void
   readonly onSetFlowLifecycle?: (
     flow: AutomationFlowRow,
-    lifecycle: Extract<AutomationFlowRow['lifecycle'], 'disabled' | 'enabled'>
+    lifecycle: ToggleableAutomationFlowLifecycle
   ) => void
-  readonly onUpdateFilters?: (filters: AutomationProjectionFilters) => void
-  readonly filters?: AutomationProjectionFilters
+  readonly onOpenNativeSession?: (runId: string) => void
+  readonly onReturnToWorkspace?: () => void
+  readonly onUpdateFilters?: (filters: AutomationCenterFilters) => void
+  readonly filters?: AutomationCenterFilters
+  readonly runs?: readonly AutomationRunSummary[]
   readonly taskStackCounts?: AutomationTaskStackCounts
   readonly text: AppText
+  readonly currentWorkspaceRoot?: string
   readonly workspaceName?: string
+  readonly workspaces?: readonly AutomationWorkspaceFilterEntry[]
 }
 
 interface AutomationTaskStackCounts {
@@ -45,13 +62,14 @@ interface AutomationTaskStackCounts {
 interface WorkspaceFlowGroup {
   readonly flows: readonly AutomationFlowRow[]
   readonly scope: AutomationFlowScope
+  readonly scopeId: AutomationCenterScopeId
   readonly subtitle: string
   readonly title: string
   readonly workspaceId?: string
 }
 
 interface ArchivedVisibilityOverride {
-  readonly filters: AutomationProjectionFilters
+  readonly filters: AutomationCenterFilters
   readonly visible: boolean
 }
 
@@ -65,7 +83,7 @@ const EMPTY_TASK_STACK_COUNTS: AutomationTaskStackCounts = Object.freeze({
   ready: 0,
   running: 0
 })
-const EMPTY_FILTERS: AutomationProjectionFilters = Object.freeze({})
+const EMPTY_FILTERS: AutomationCenterFilters = Object.freeze({})
 
 const getStatusLight = (
   flow: AutomationFlowRow
@@ -187,19 +205,55 @@ const getWorkspaceDisplayTitle = (workspaceName: string, text: AppText): string 
   return pathName
 }
 
+const getFlowOwnerKey = (flow: AutomationFlowRow): string =>
+  flow.automationFlowOwnerKey ?? flow.automationFlowId
+
+const isAppliedGlobalFlow = (flow: AutomationFlowRow): boolean =>
+  getFlowOwnerKey(flow).includes(':applied-global:')
+
+const getFlowWorkspaceId = (
+  flow: AutomationFlowRow,
+  fallbackWorkspaceId?: string
+): string | undefined => {
+  if (
+    flow.workspaceId !== undefined &&
+    flow.workspaceId !== AUTOMATION_NO_WORKSPACE_ID
+  ) {
+    return flow.workspaceId
+  }
+
+  return flow.scope === 'workspace' || isAppliedGlobalFlow(flow)
+    ? fallbackWorkspaceId
+    : undefined
+}
+
+const getFlowScopeId = (
+  flow: AutomationFlowRow,
+  fallbackWorkspaceId?: string
+): AutomationCenterScopeId =>
+  flow.scope === 'user' && !isAppliedGlobalFlow(flow)
+    ? 'global'
+    : `workspace:${
+        getFlowWorkspaceId(flow, fallbackWorkspaceId) ?? AUTOMATION_NO_WORKSPACE_ID
+      }`
+
+const uniqueStrings = (values: readonly string[]): readonly string[] =>
+  Object.freeze(Array.from(new Set(values)))
+
 export const WorkspaceFlowFilters = ({
   flows,
-  onArchiveFlow,
-  onCreateFlow,
-  onEditFlow,
+  onManageScope,
+  onOpenNativeSession,
   onReturnToWorkspace,
-  onRestoreFlow,
   onSetFlowLifecycle,
   onUpdateFilters,
   filters = EMPTY_FILTERS,
+  runs = [],
   taskStackCounts = EMPTY_TASK_STACK_COUNTS,
   text,
-  workspaceName = text('automation.workspaceUnknown')
+  currentWorkspaceRoot,
+  workspaceName = text('automation.workspaceUnknown'),
+  workspaces = []
 }: WorkspaceFlowFiltersProps): JSX.Element => {
   const archivedVisible = filters.archivedVisible ?? false
   const [archivedOverride, setArchivedOverride] =
@@ -208,36 +262,92 @@ export const WorkspaceFlowFilters = ({
     archivedOverride?.filters === filters
       ? archivedOverride.visible
       : archivedVisible
-  const selectedFlowIds = filters.flowIds ?? []
-  const selectedWorkspaceIds = filters.workspaceIds ?? []
   const visibleFlows = flows.filter(
     (flow) => showArchivedFlows || flow.lifecycle !== 'archived'
   )
-  const workspaceFlows = sortFlowsForWorkspaceTree(
-    visibleFlows.filter((flow) => flow.scope === 'workspace')
-  )
   const userFlows = sortFlowsForWorkspaceTree(
-    visibleFlows.filter((flow) => flow.scope === 'user')
+    visibleFlows.filter(
+      (flow) => flow.scope === 'user' && !isAppliedGlobalFlow(flow)
+    )
   )
-  const workspaceGroups: readonly WorkspaceFlowGroup[] = [
-    {
-      flows: workspaceFlows,
-      scope: 'workspace',
-      subtitle: formatCount(
-        workspaceFlows.length,
-        text('automation.automationFlowsLabel')
-      ),
-      title: getWorkspaceDisplayTitle(workspaceName, text),
-      workspaceId: workspaceFlows[0]?.workspaceId
-    },
-    {
-      flows: userFlows,
-      scope: 'user',
-      subtitle: text('automation.personalAutomationFlows'),
-      title: text('automation.noWorkspace'),
-      workspaceId: AUTOMATION_NO_WORKSPACE_ID
-    }
-  ]
+  const workspaceFlows = sortFlowsForWorkspaceTree(
+    visibleFlows.filter((flow) =>
+      getFlowScopeId(flow, currentWorkspaceRoot).startsWith('workspace:')
+    )
+  )
+  const workspaceIdsFromFlows = uniqueStrings(
+    workspaceFlows.flatMap((flow) => {
+      const workspaceId = getFlowWorkspaceId(flow, currentWorkspaceRoot)
+
+      return workspaceId === undefined ? [] : [workspaceId]
+    })
+  )
+  const currentWorkspaceId =
+    currentWorkspaceRoot ?? workspaceIdsFromFlows[0] ?? undefined
+  const workspaceByRoot = new Map(
+    workspaces
+      .filter((workspace) => workspace.rootPath.trim().length > 0)
+      .map((workspace) => [workspace.rootPath, workspace])
+  )
+  const workspaceIds = uniqueStrings([
+    ...(currentWorkspaceId === undefined ? [] : [currentWorkspaceId]),
+    ...workspaces.map((workspace) => workspace.rootPath),
+    ...workspaceIdsFromFlows
+  ]).filter((workspaceId) => workspaceId !== AUTOMATION_NO_WORKSPACE_ID)
+  const workspaceGroups = workspaceIds
+    .map((workspaceId): WorkspaceFlowGroup => {
+      const groupFlows = sortFlowsForWorkspaceTree(
+        workspaceFlows.filter(
+          (flow) => getFlowWorkspaceId(flow, currentWorkspaceId) === workspaceId
+        )
+      )
+      const workspaceEntry = workspaceByRoot.get(workspaceId)
+      const title =
+        workspaceId === currentWorkspaceId && workspaceEntry === undefined
+          ? getWorkspaceDisplayTitle(workspaceName, text)
+          : getWorkspaceDisplayTitle(workspaceEntry?.name ?? workspaceId, text)
+
+      return {
+        flows: groupFlows,
+        scope: 'workspace',
+        scopeId: `workspace:${workspaceId}`,
+        subtitle: formatCount(
+          groupFlows.length,
+          text('automation.automationFlowsLabel')
+        ),
+        title,
+        workspaceId
+      }
+    })
+    .sort((left, right) => {
+      if (left.workspaceId === currentWorkspaceId) {
+        return -1
+      }
+
+      if (right.workspaceId === currentWorkspaceId) {
+        return 1
+      }
+
+      return left.title.localeCompare(right.title)
+    })
+  const globalFlowGroup: WorkspaceFlowGroup = {
+    flows: userFlows,
+    scope: 'user',
+    scopeId: 'global',
+    subtitle: text('automation.globalAutomationFlowsSubtitle'),
+    title: text('automation.globalAutomationFlows'),
+    workspaceId: AUTOMATION_NO_WORKSPACE_ID
+  }
+  const enabledWorkspaceGroups = workspaceGroups.filter(
+    (group) => group.flows.length > 0
+  )
+  const notEnabledWorkspaceGroups = workspaceGroups.filter(
+    (group) => group.flows.length === 0
+  )
+  const defaultScopeIds: readonly AutomationCenterScopeId[] =
+    currentWorkspaceId === undefined ? [] : [`workspace:${currentWorkspaceId}`]
+  const selectedScopeIds = filters.scopeIds ?? defaultScopeIds
+  const selectedFlowOwnerKeys = filters.flowOwnerKeys ?? []
   const taskStackRows = [
     {
       bucket: 'needsMe',
@@ -269,40 +379,238 @@ export const WorkspaceFlowFilters = ({
     readonly description: string
     readonly label: string
   }[]
-  const allVisibleFlowIds = visibleFlows.map((flow) => flow.automationFlowId)
-  const normalizeSelectedFlowIds = (
-    nextFlowIds: readonly string[]
+  const getVisibleFlowOwnerKeysForScopes = (
+    scopeIds: readonly AutomationCenterScopeId[]
   ): readonly string[] =>
-    nextFlowIds.length === allVisibleFlowIds.length && allVisibleFlowIds.length > 1
+    visibleFlows
+      .filter((flow) => scopeIds.includes(getFlowScopeId(flow, currentWorkspaceId)))
+      .map(getFlowOwnerKey)
+  const normalizeSelectedFlowOwnerKeys = (
+    nextFlowOwnerKeys: readonly string[],
+    nextScopeIds: readonly AutomationCenterScopeId[]
+  ): readonly string[] =>
+    nextFlowOwnerKeys.length === getVisibleFlowOwnerKeysForScopes(nextScopeIds).length &&
+    nextFlowOwnerKeys.length > 1
       ? []
-      : nextFlowIds
-  const isFlowSelected = (flowId: string): boolean =>
-    selectedFlowIds.length === 0 || selectedFlowIds.includes(flowId)
-  const toggleFlow = (flowId: string): void => {
-    const nextFlowIds =
-      selectedFlowIds.length === 0
-        ? allVisibleFlowIds.length <= 1
-          ? [flowId]
-          : allVisibleFlowIds.filter((item) => item !== flowId)
-        : selectedFlowIds.includes(flowId)
-          ? selectedFlowIds.filter((item) => item !== flowId)
-          : [...selectedFlowIds, flowId]
+      : nextFlowOwnerKeys
+  const isFlowSelected = (flow: AutomationFlowRow): boolean => {
+    const ownerKey = getFlowOwnerKey(flow)
+    const scopeId = getFlowScopeId(flow, currentWorkspaceId)
+
+    return (
+      selectedScopeIds.includes(scopeId) &&
+      (selectedFlowOwnerKeys.length === 0 ||
+        selectedFlowOwnerKeys.includes(ownerKey))
+    )
+  }
+  const toggleFlow = (flow: AutomationFlowRow): void => {
+    const ownerKey = getFlowOwnerKey(flow)
+    const scopeId = getFlowScopeId(flow, currentWorkspaceId)
+    const scopeIdsWithFlow = selectedScopeIds.includes(scopeId)
+      ? selectedScopeIds
+      : [...selectedScopeIds, scopeId]
+    const selectedOwnerKeys =
+      selectedFlowOwnerKeys.length === 0
+        ? getVisibleFlowOwnerKeysForScopes(selectedScopeIds)
+        : selectedFlowOwnerKeys
+    const nextSelectedOwnerKeys = selectedOwnerKeys.includes(ownerKey)
+      ? selectedOwnerKeys.filter((item) => item !== ownerKey)
+      : uniqueStrings([...selectedOwnerKeys, ownerKey])
+    const nextScopeIds =
+      nextSelectedOwnerKeys.length === 0
+        ? selectedScopeIds.filter((item) => item !== scopeId)
+        : scopeIdsWithFlow.filter((item) =>
+            visibleFlows.some(
+              (visibleFlow) =>
+                getFlowScopeId(visibleFlow, currentWorkspaceId) === item &&
+                nextSelectedOwnerKeys.includes(getFlowOwnerKey(visibleFlow))
+            )
+          )
 
     onUpdateFilters?.({
       ...filters,
-      flowIds: normalizeSelectedFlowIds(nextFlowIds)
+      flowOwnerKeys: normalizeSelectedFlowOwnerKeys(
+        nextSelectedOwnerKeys,
+        nextScopeIds
+      ),
+      scopeIds: nextScopeIds
     })
   }
-  const toggleWorkspace = (workspaceId: string): void => {
-    const nextWorkspaceIds = selectedWorkspaceIds.includes(workspaceId)
-      ? selectedWorkspaceIds.filter((item) => item !== workspaceId)
-      : [...selectedWorkspaceIds, workspaceId]
+  const toggleScope = (scopeId: AutomationCenterScopeId): void => {
+    const selecting = !selectedScopeIds.includes(scopeId)
+    const nextScopeIds = selecting
+      ? [...selectedScopeIds, scopeId]
+      : selectedScopeIds.filter((item) => item !== scopeId)
+    const flowOwnerKeysFromNewScope = selecting
+      ? visibleFlows
+          .filter((flow) => getFlowScopeId(flow, currentWorkspaceId) === scopeId)
+          .map(getFlowOwnerKey)
+      : []
+    const nextFlowOwnerKeys =
+      selectedFlowOwnerKeys.length === 0
+        ? []
+        : normalizeSelectedFlowOwnerKeys(
+            uniqueStrings([
+              ...selectedFlowOwnerKeys.filter((ownerKey) => {
+                const flow = visibleFlows.find(
+                  (visibleFlow) => getFlowOwnerKey(visibleFlow) === ownerKey
+                )
+
+                return (
+                  flow !== undefined &&
+                  nextScopeIds.includes(getFlowScopeId(flow, currentWorkspaceId))
+                )
+              }),
+              ...flowOwnerKeysFromNewScope
+            ]),
+            nextScopeIds
+          )
 
     onUpdateFilters?.({
       ...filters,
-      workspaceIds: nextWorkspaceIds
+      flowOwnerKeys: nextFlowOwnerKeys,
+      scopeIds: nextScopeIds
     })
   }
+  const renderFlowLifecycleButton = (
+    flow: AutomationFlowRow
+  ): JSX.Element | null => {
+    if (flow.lifecycle === 'archived' || flow.definitionPath === undefined) {
+      return null
+    }
+
+    const nextLifecycle: ToggleableAutomationFlowLifecycle =
+      flow.lifecycle === 'disabled' ? 'enabled' : 'disabled'
+    const textKey =
+      nextLifecycle === 'enabled'
+        ? 'automation.enableFlowNamed'
+        : 'automation.disableFlowNamed'
+
+    return (
+      <button
+        aria-label={text(textKey, { name: flow.name })}
+        aria-pressed={flow.lifecycle === 'enabled'}
+        className="automation-icon-action automation-flow-row__lifecycle-button"
+        data-component-id={COMPONENT_IDS.automation.flowLifecycleButton}
+        disabled={onSetFlowLifecycle === undefined}
+        onClick={(event) => {
+          event.stopPropagation()
+          onSetFlowLifecycle?.(flow, nextLifecycle)
+        }}
+        title={text(textKey, { name: flow.name })}
+        type="button"
+      >
+        <Power aria-hidden="true" focusable="false" size={13} />
+      </button>
+    )
+  }
+  const renderFlowList = (group: WorkspaceFlowGroup): JSX.Element => (
+    <div className="automation-flow-list">
+      {group.flows.length === 0 ? (
+        <div className="automation-flow-empty">
+          <span>{text('automation.noActiveFlows')}</span>
+        </div>
+      ) : null}
+      {group.flows.map((flow) => {
+        const statusLight = getStatusLight(flow)
+        const selected = isFlowSelected(flow)
+
+        return (
+          <article
+            className={`automation-flow-row${
+              selected ? ' automation-flow-row--selected' : ''
+            }`}
+            data-component-id={COMPONENT_IDS.automation.flowRow}
+            key={getFlowOwnerKey(flow)}
+          >
+            <span
+              aria-label={text(statusLight.labelKey)}
+              className={`automation-status-light ${statusLight.className}`}
+              data-component-id={COMPONENT_IDS.automation.statusLight}
+              role="img"
+            />
+            <button
+              aria-pressed={selected}
+              className="automation-flow-row__button"
+              data-component-id={COMPONENT_IDS.automation.flowFilterToggle}
+              onClick={() => {
+                toggleFlow(flow)
+              }}
+              type="button"
+            >
+              <span>{flow.name}</span>
+              <small>{getFlowSourceLabel(flow, text)}</small>
+            </button>
+            <div className="automation-flow-row__actions">
+              {renderFlowLifecycleButton(flow)}
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+  const renderScopeManagementButton = (group: WorkspaceFlowGroup): JSX.Element => (
+    <button
+      aria-label={text('automation.manageAutomationFlowsForScope', {
+        workspace: group.title
+      })}
+      className="automation-icon-action"
+      data-component-id={COMPONENT_IDS.automation.scopeFilterManagementButton}
+      onClick={(event) => {
+        event.stopPropagation()
+        onManageScope?.({
+          scopeId: group.scopeId,
+          ...(group.scope === 'workspace' &&
+          group.workspaceId !== undefined &&
+          group.workspaceId !== AUTOMATION_NO_WORKSPACE_ID
+            ? { workspaceId: group.workspaceId }
+            : {})
+        })
+      }}
+      title={text('automation.manageAutomationFlows')}
+      type="button"
+    >
+      <FolderCog aria-hidden="true" size={14} />
+    </button>
+  )
+  const renderScopeFilterButton = (group: WorkspaceFlowGroup): JSX.Element => (
+    <button
+      aria-pressed={selectedScopeIds.includes(group.scopeId)}
+      className="automation-scope-filter-button"
+      data-component-id={COMPONENT_IDS.automation.scopeFilterToggle}
+      onClick={(event) => {
+        event.stopPropagation()
+        toggleScope(group.scopeId)
+      }}
+      type="button"
+    >
+      <div>
+        <div className="automation-workspace-title">{group.title}</div>
+        <div className="automation-workspace-subtitle">{group.subtitle}</div>
+      </div>
+    </button>
+  )
+  const renderWorkspaceGroup = (group: WorkspaceFlowGroup): JSX.Element => (
+    <details
+      className="automation-workspace-card"
+      data-component-id={COMPONENT_IDS.automation.workspaceFilterCard}
+      key={group.scopeId}
+    >
+      <summary>
+        <span className="automation-details-chevron" aria-hidden="true">
+          <ChevronRight focusable="false" size={13} />
+        </span>
+        {renderScopeFilterButton(group)}
+        <span className="automation-workspace-actions">
+          <span className="automation-workspace-pill">
+            {formatCount(sumTaskCount(group.flows), text('automation.tasksCountLabel'))}
+          </span>
+          {renderScopeManagementButton(group)}
+        </span>
+      </summary>
+      {renderFlowList(group)}
+    </details>
+  )
 
   return (
     <section
@@ -322,23 +630,6 @@ export const WorkspaceFlowFilters = ({
           <ArrowLeft aria-hidden="true" focusable="false" size={17} />
         </button>
         <div className="explorer-header">{text('automation.workspaceFlows')}</div>
-        <button
-          aria-label={text('automation.newAutomationFlow')}
-          className="explorer-icon-button"
-          data-component-id={COMPONENT_IDS.automation.newFlowButton}
-          onClick={() => {
-            onCreateFlow?.({
-              scope: 'workspace',
-              ...(workspaceFlows[0]?.workspaceId !== undefined
-                ? { workspaceId: workspaceFlows[0].workspaceId }
-                : {})
-            })
-          }}
-          title={text('automation.newAutomationFlow')}
-          type="button"
-        >
-          <Plus aria-hidden="true" size={16} />
-        </button>
       </div>
       <div className="automation-left-panel explorer-content">
         <section
@@ -389,279 +680,103 @@ export const WorkspaceFlowFilters = ({
             data-component-id={COMPONENT_IDS.automation.flowToolbar}
           >
             <span>{text('automation.activeFlows')}</span>
-            <label className="automation-archived-pill">
-              <input
-                aria-label={text('automation.showArchivedFlows')}
-                checked={showArchivedFlows}
-                data-component-id={COMPONENT_IDS.automation.archivedToggle}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
+            <button
+              aria-label={text('automation.showArchivedFlows')}
+              aria-pressed={showArchivedFlows}
+              className="automation-archived-pill"
+              data-component-id={COMPONENT_IDS.automation.archivedToggle}
+              onClick={() => {
+                const nextVisible = !showArchivedFlows
 
-                  setArchivedOverride({
-                    filters,
-                    visible: checked
-                  })
-                  onUpdateFilters?.({
-                    ...filters,
-                    archivedVisible: checked
-                  })
-                }}
-                type="checkbox"
-              />
+                setArchivedOverride({
+                  filters,
+                  visible: nextVisible
+                })
+                onUpdateFilters?.({
+                  ...filters,
+                  archivedVisible: nextVisible
+                })
+              }}
+              type="button"
+            >
               <span>{text('automation.archivedFilter')}</span>
-            </label>
+            </button>
           </div>
           <div className="automation-workspace-tree">
-            {workspaceGroups.map((group) => (
-              <details
-                className="automation-workspace-card"
-                data-component-id={COMPONENT_IDS.automation.workspaceFilterCard}
-                key={group.title}
-                open
-              >
-                <summary>
-                  <input
-                    aria-label={group.title}
-                    checked={
-                      group.workspaceId !== undefined &&
-                      selectedWorkspaceIds.includes(group.workspaceId)
-                    }
-                    className="automation-workspace-check"
-                    data-component-id={COMPONENT_IDS.automation.workspaceFilterToggle}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                    }}
-                    onChange={() => {
-                      const workspaceId = group.workspaceId
-
-                      if (workspaceId !== undefined) {
-                        toggleWorkspace(workspaceId)
-                      }
-                    }}
-                    type="checkbox"
-                  />
-                  <div>
-                    <div className="automation-workspace-title">{group.title}</div>
-                    <div className="automation-workspace-subtitle">
-                      {group.subtitle}
-                    </div>
-                  </div>
-                  <span className="automation-workspace-actions">
-                    <span className="automation-workspace-pill">
-                      {formatCount(
-                        sumTaskCount(group.flows),
-                        text('automation.tasksCountLabel')
-                      )}
-                    </span>
-                    <button
-                      aria-label={text('automation.addFlowForWorkspace', {
-                        workspace: group.title
-                      })}
-                      className="automation-icon-action"
-                      data-component-id={
-                        COMPONENT_IDS.automation.workspaceAddFlowButton
-                      }
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onCreateFlow?.({
-                          scope: group.scope,
-                          ...(group.scope === 'workspace' &&
-                          group.workspaceId !== undefined
-                            ? { workspaceId: group.workspaceId }
-                            : {})
-                        })
-                      }}
-                      title={text('automation.newAutomationFlow')}
-                      type="button"
-                    >
-                      <Plus aria-hidden="true" size={14} />
-                    </button>
+            <details
+              className="automation-flow-filter-section"
+              data-component-id={COMPONENT_IDS.automation.globalFlowSection}
+              open
+            >
+              <summary>
+                <span className="automation-details-chevron" aria-hidden="true">
+                  <ChevronRight focusable="false" size={13} />
+                </span>
+                <span className="automation-flow-filter-section-title">
+                  {text('automation.globalSection')}
+                </span>
+                <span className="automation-workspace-actions">
+                  <span className="automation-workspace-pill">
+                    {formatCount(
+                      sumTaskCount(globalFlowGroup.flows),
+                      text('automation.tasksCountLabel')
+                    )}
                   </span>
-                </summary>
-                <div className="automation-flow-list">
-                  {group.flows.length === 0 ? (
-                    <div className="automation-flow-empty">
-                      <span>{text('automation.chooseTemplateForWorkspace')}</span>
-                      <button
-                        aria-label={text('automation.addFlowForWorkspace', {
-                          workspace: group.title
-                        })}
-                        className="automation-mini-action"
-                        data-component-id={
-                          COMPONENT_IDS.automation.workspaceAddFlowButton
-                        }
-                        onClick={() => {
-                          onCreateFlow?.({
-                            scope: group.scope,
-                            ...(group.scope === 'workspace' &&
-                            group.workspaceId !== undefined
-                              ? { workspaceId: group.workspaceId }
-                              : {})
-                          })
-                        }}
-                        type="button"
-                      >
-                        {text('automation.newAutomationFlow')}
-                      </button>
-                    </div>
-                  ) : null}
-                  {group.flows.map((flow) => {
-                    const statusLight = getStatusLight(flow)
-                    const selected = isFlowSelected(flow.automationFlowId)
-                    const hasDefinition = flow.definitionPath !== undefined
-                    const canEnable =
-                      hasDefinition && flow.lifecycle === 'disabled'
-                    const canDisable =
-                      hasDefinition && flow.lifecycle === 'enabled'
-                    const canArchive =
-                      hasDefinition && flow.lifecycle !== 'archived'
-                    const canRestore =
-                      hasDefinition && flow.lifecycle === 'archived'
-
-                    return (
-                      <article
-                        className={`automation-flow-row${
-                          selected ? ' automation-flow-row--selected' : ''
-                        }`}
-                        data-component-id={COMPONENT_IDS.automation.flowRow}
-                        key={flow.automationFlowId}
-                      >
-                        <span
-                          aria-label={text(statusLight.labelKey)}
-                          className={`automation-status-light ${statusLight.className}`}
-                          data-component-id={COMPONENT_IDS.automation.statusLight}
-                          role="img"
-                        />
-                        <label
-                          className="automation-flow-row__name"
-                          data-component-id={
-                            COMPONENT_IDS.automation.flowFilterToggle
-                          }
-                        >
-                          <input
-                            aria-label={flow.name}
-                            checked={selected}
-                            onChange={() => {
-                              toggleFlow(flow.automationFlowId)
-                            }}
-                            type="checkbox"
-                          />
-                          <span>{flow.name}</span>
-                          <small>{getFlowSourceLabel(flow, text)}</small>
-                        </label>
-                        <details className="automation-flow-menu">
-                          <summary
-                            aria-label={text('automation.flowActions')}
-                            data-component-id={
-                              COMPONENT_IDS.automation.flowContextMenu
-                            }
-                            role="button"
-                          >
-                            <MoreHorizontal aria-hidden="true" size={16} />
-                          </summary>
-                          <menu>
-                            <li>
-                              <button
-                                data-component-id={
-                                  COMPONENT_IDS.automation.flowMenuItem
-                                }
-                                disabled={flow.definitionPath === undefined}
-                                onClick={() => {
-                                  if (flow.definitionPath !== undefined) {
-                                    onEditFlow?.(flow)
-                                  }
-                                }}
-                                type="button"
-                              >
-                                {text('automation.editFlow')}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                data-component-id={
-                                  COMPONENT_IDS.automation.flowMenuItem
-                                }
-                                disabled
-                                title={text('automation.stopFlowDeferred')}
-                                type="button"
-                              >
-                                {text('automation.stopFlow')}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                data-component-id={
-                                  COMPONENT_IDS.automation.flowMenuItem
-                                }
-                                disabled={!canEnable}
-                                onClick={() => {
-                                  if (canEnable) {
-                                    onSetFlowLifecycle?.(flow, 'enabled')
-                                  }
-                                }}
-                                type="button"
-                              >
-                                {text('automation.enableFlow')}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                data-component-id={
-                                  COMPONENT_IDS.automation.flowMenuItem
-                                }
-                                disabled={!canDisable}
-                                onClick={() => {
-                                  if (canDisable) {
-                                    onSetFlowLifecycle?.(flow, 'disabled')
-                                  }
-                                }}
-                                type="button"
-                              >
-                                {text('automation.disableFlow')}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                data-component-id={
-                                  COMPONENT_IDS.automation.flowMenuItem
-                                }
-                                disabled={!canArchive}
-                                onClick={() => {
-                                  if (canArchive) {
-                                    onArchiveFlow?.(flow)
-                                  }
-                                }}
-                                type="button"
-                              >
-                                {text('automation.archiveFlow')}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                data-component-id={
-                                  COMPONENT_IDS.automation.flowMenuItem
-                                }
-                                disabled={!canRestore}
-                                onClick={() => {
-                                  if (canRestore) {
-                                    onRestoreFlow?.(flow)
-                                  }
-                                }}
-                                type="button"
-                              >
-                                {text('automation.restoreFlow')}
-                              </button>
-                            </li>
-                          </menu>
-                        </details>
-                      </article>
-                    )
-                  })}
-                </div>
-              </details>
-            ))}
+                  {renderScopeManagementButton(globalFlowGroup)}
+                </span>
+              </summary>
+              <div className="automation-global-flow-scope">
+                {renderScopeFilterButton(globalFlowGroup)}
+                {renderFlowList(globalFlowGroup)}
+              </div>
+            </details>
+            <details
+              className="automation-flow-filter-section"
+              data-component-id={COMPONENT_IDS.automation.flowEnabledSection}
+              open
+            >
+              <summary>
+                <span className="automation-details-chevron" aria-hidden="true">
+                  <ChevronRight focusable="false" size={13} />
+                </span>
+                <span className="automation-flow-filter-section-title">
+                  {text('automation.automationFlowEnabledSection')}
+                </span>
+                <span className="automation-flow-filter-section-count">
+                  {enabledWorkspaceGroups.length}
+                </span>
+              </summary>
+              <div className="automation-workspace-tree automation-workspace-tree--nested">
+                {enabledWorkspaceGroups.map(renderWorkspaceGroup)}
+              </div>
+            </details>
+            <details
+              className="automation-flow-filter-section"
+              data-component-id={COMPONENT_IDS.automation.flowNotEnabledSection}
+              open
+            >
+              <summary>
+                <span className="automation-details-chevron" aria-hidden="true">
+                  <ChevronRight focusable="false" size={13} />
+                </span>
+                <span className="automation-flow-filter-section-title">
+                  {text('automation.automationFlowNotEnabledSection')}
+                </span>
+                <span className="automation-flow-filter-section-count">
+                  {notEnabledWorkspaceGroups.length}
+                </span>
+              </summary>
+              <div className="automation-workspace-tree automation-workspace-tree--nested">
+                {notEnabledWorkspaceGroups.map(renderWorkspaceGroup)}
+              </div>
+            </details>
           </div>
         </section>
+        <AutomationRunHistory
+          onOpenNativeSession={onOpenNativeSession}
+          runs={runs}
+          text={text}
+        />
       </div>
     </section>
   )

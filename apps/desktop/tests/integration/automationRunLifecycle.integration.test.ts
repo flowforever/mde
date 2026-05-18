@@ -2,7 +2,11 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import type { AutomationFlow, AutomationFlowTaskCandidate } from '@mde/automation-flow'
+import type {
+  AutomationFlow,
+  AutomationFlowExecutorRef,
+  AutomationFlowTaskCandidate
+} from '@mde/automation-flow'
 import { describe, expect, it } from 'vitest'
 
 import { createAutomationAdapterRegistry } from '../../src/main/services/automation/automationAdapterRegistry'
@@ -55,7 +59,23 @@ const createCandidate = (workspaceRoot: string): AutomationFlowTaskCandidate => 
   sourcePath: join(workspaceRoot, '.mde', 'docs', 'tasks', 'ready.md'),
   sourceType: 'workspace-markdown',
   taskId: 'task-a',
+  taskDataId: 'task-data-a',
+  taskDataSnapshotId: 'task-data-snapshot-a',
   title: 'READY Persist run'
+})
+
+const executorSnapshot: AutomationFlowExecutorRef = Object.freeze({
+  autoDiscovered: false,
+  diagnostics: [],
+  displayName: 'Implementation',
+  enabled: true,
+  executorId: 'implementation',
+  executorSnapshotId: 'executor-snapshot-implementation',
+  handles: {},
+  order: 0,
+  resolvedSource: 'Run the selected task data.',
+  tags: [],
+  type: 'markdown'
 })
 
 describe('automation run lifecycle integration', () => {
@@ -80,6 +100,7 @@ describe('automation run lifecycle integration', () => {
     const started = await runtime.startRun({
       automationFlow: createFlow(),
       candidate: createCandidate(workspaceRoot),
+      executorSnapshot,
       workspaceRoot
     })
     const resumed = await runtime.resumeRun({
@@ -110,8 +131,12 @@ describe('automation run lifecycle integration', () => {
           'adapter-session-lifecycle-2'
         ],
         automationFlowSnapshotId: 'snapshot-lifecycle',
+        executorId: 'implementation',
+        executorSnapshotId: 'executor-snapshot-implementation',
         runId: 'run-lifecycle',
-        state: 'done'
+        state: 'done',
+        taskDataId: 'task-data-a',
+        taskDataSnapshotId: 'task-data-snapshot-a'
       }
     ])
     await expect(store.listReports()).resolves.toMatchObject([

@@ -6,17 +6,17 @@ description: Use when Codex should run a strictly serial autonomous loop over RE
 
 ## Overview
 
-Run a continuous strictly-serial task-picking loop for MDE. The main agent is only the selector, dispatcher, and in-flight monitor: pull the latest branch state, reload this skill, scan for one eligible local READY task or GitHub issue marked `WILL-DO`, apply the pick gate, claim the selected source when required, directly execute `skills/execute-picked-task/SKILL.md` in a dedicated task execution SubAgent, then wait for that selected task to reach a terminal execution state before considering any other task.
+Run a continuous strictly-serial task-picking loop for MDE. The main agent is the selector, dispatcher, and in-flight monitor during the auto-pick phase: pull the latest branch state, reload this skill, scan for one eligible local READY task or GitHub issue marked `WILL-DO`, apply the pick gate, claim the selected source when required, directly invoke `skills/execute-picked-task/SKILL.md` in the current run, then wait for that selected task to reach a terminal execution state before considering any other task.
 
-The main agent must not implement, test, release, or archive the selected task. Those responsibilities belong to `execute-picked-task` and the SubAgents it arranges.
+During the auto-pick phase, the main agent must not implement, test, release, or archive the selected task. Those responsibilities begin only after `execute-picked-task` is invoked and must follow that skill's lifecycle and SubAgent rules.
 
-The dispatch target is always `skills/execute-picked-task/SKILL.md`. Do not create an ad hoc worker prompt or a generic execution workflow for a picked task.
+The dispatch target is always `skills/execute-picked-task/SKILL.md`. Do not create an ad hoc worker prompt, a generic execution workflow, or a dedicated wrapper SubAgent merely to start the execution skill.
 
 Strict serial means there can be at most one auto-pick-dispatched task in flight across local READY documents and GitHub `WILL-DO` issues. Do not scan for, claim, or dispatch the next task while the current selected task is still "Dispatched" or "In progress".
 
-## Main Agent Boundary
+## Auto-Pick Phase Boundary
 
-The main agent owns only these responsibilities:
+During the auto-pick phase, the main agent owns only these responsibilities:
 
 * Refresh branch state before each pick cycle.
 
@@ -28,13 +28,13 @@ The main agent owns only these responsibilities:
 
 * Claim or mark the selected source as in progress when the source requires visible coordination.
 
-* Dispatch exactly one selected task by directly invoking `skills/execute-picked-task/SKILL.md` with enough context to continue independently.
+* Dispatch exactly one selected task by directly invoking `skills/execute-picked-task/SKILL.md` with enough context for that workflow to continue.
 
 * Monitor the selected source after dispatch until it records a terminal execution state.
 
 * Resume candidate polling only after the in-flight task is completed, released/archived, blocked, marked as needing human input, marked not autonomous, or explicitly handed off/cleared by the user.
 
-The main agent must not:
+During the auto-pick phase, the main agent must not:
 
 * Perform deeper implementation analysis after the handoff has enough context.
 
@@ -44,7 +44,7 @@ The main agent must not:
 
 * Commit, push, create MR/PR, tag, release, close issues, or move completed task documents to `done` for the selected task.
 
-* Finish the selected task locally just because task execution agents are slow or unavailable.
+* Finish the selected task inside the auto-pick phase just because execution is slow or temporarily unavailable.
 
 If `execute-picked-task` cannot be started, do not start local implementation. Record that dispatch is blocked when there is a selected source to annotate, then continue the pick loop.
 
@@ -84,7 +84,7 @@ If `execute-picked-task` cannot be started, do not start local implementation. R
 
 * Skip documents that already contain an unresolved auto-pick "Needs human input" or "Not autonomous" status note unless the user has edited the document or explicitly cleared the blocker.
 
-* Skip GitHub issues that already contain an unresolved auto-pick "Dispatched", "In progress", or "Dispatch blocked" comment unless the user has added a newer `WILL-DO` comment, the task execution agent has added a newer completion/release/blocked/handoff comment, or the user has explicitly cleared the status.
+* Skip GitHub issues that already contain an unresolved auto-pick "Dispatched", "In progress", or "Dispatch blocked" comment unless the user has added a newer `WILL-DO` comment, `execute-picked-task` has added a newer completion/release/blocked/handoff comment, or the user has explicitly cleared the status.
 
 * Skip GitHub issues that already contain an unresolved auto-pick "Needs human input" or "Not autonomous" comment unless the user has added a newer `WILL-DO` comment or explicitly cleared the blocker.
 
@@ -92,7 +92,7 @@ If `execute-picked-task` cannot be started, do not start local implementation. R
 
 ## Autonomy Gate
 
-Before dispatching a task, decide whether it appears completable end-to-end by a task execution agent without immediate human participation. This is a pick gate, not a full implementation plan. Bias toward resolving uncertainty autonomously; do not classify a task as human-blocked just because it has minor gaps, ordinary ambiguity, or implementation choices.
+Before dispatching a task, decide whether it appears completable end-to-end by `execute-picked-task` without immediate human participation. This is a pick gate, not a full implementation plan. Bias toward resolving uncertainty autonomously; do not classify a task as human-blocked just because it has minor gaps, ordinary ambiguity, or implementation choices.
 
 First try to remove uncertainty by:
 
@@ -136,7 +136,7 @@ If the task is not fully autonomous after this investigation, do not dispatch it
 
 ## GitHub Issue Coordination
 
-For GitHub issues, coordination happens immediately after the Autonomy Gate passes and before handoff to the task execution agent. The main agent performs only the visible claim needed to prevent duplicate handling; the task execution agent owns deeper analysis, implementation, branch work, MR/PR creation, verification, release, and closure.
+For GitHub issues, coordination happens immediately after the Autonomy Gate passes and before handoff to `execute-picked-task`. The auto-pick phase performs only the visible claim needed to prevent duplicate handling; `execute-picked-task` owns deeper analysis, implementation, branch work, MR/PR creation, verification, release, and closure.
 
 When claiming a GitHub issue for dispatch:
 
@@ -152,7 +152,7 @@ When claiming a GitHub issue for dispatch:
 
 ## GitHub Issue Execution Boundary
 
-GitHub issues require visible coordination before handoff, but branch work, commits, PR/MR creation, release/deploy, and issue closure belong to `skills/execute-picked-task/SKILL.md`. The main agent must pass the issue URL, claim details, and any observed coordination constraints in the handoff, then enter the Serial In-Flight Gate for that issue.
+GitHub issues require visible coordination before handoff, but branch work, commits, PR/MR creation, release/deploy, and issue closure belong to `skills/execute-picked-task/SKILL.md`. The main agent must pass the issue URL, claim details, and any observed coordination constraints in the handoff, then keep that issue in the Serial In-Flight Gate until terminal status is recorded.
 
 ## Serial In-Flight Gate
 
@@ -170,19 +170,19 @@ The in-flight task is terminal only when one of these is true:
 
 * A local task document has been moved to the matching `done` directory after required release/deploy.
 
-* The selected source records "Completed", "Released", "Archived", or equivalent completion/release details from the task execution agent.
+* The selected source records "Completed", "Released", "Archived", or equivalent completion/release details from `execute-picked-task`.
 
 * The selected source records "Blocked", "Needs human input", or "Not autonomous" with a concrete blocker.
 
-* A GitHub issue has a newer task-execution completion, release, blocked, or handoff comment.
+* A GitHub issue has a newer `execute-picked-task` completion, release, blocked, or handoff comment.
 
 * The user explicitly clears the in-flight status or changes priority.
 
-While an in-flight task is not terminal:
+While an in-flight task is not terminal and the current run is outside the active `execute-picked-task` lifecycle:
 
 1. Pull latest branch state and reload this skill on the normal polling cadence.
 
-2. Re-check only the active in-flight task source and, when available in the current harness, the task execution agent status.
+2. Re-check only the active in-flight task source and, when available in the current harness, the `execute-picked-task` workflow status.
 
 3. Do not scan `docs/bugs/`, `docs/requirements/`, or GitHub issues for new candidates.
 
@@ -196,7 +196,7 @@ When the in-flight task becomes terminal, do not silently continue. Send a user-
 
 * The terminal state: completed, released, archived, blocked, needs human input, not autonomous, or user-cleared.
 
-* The task execution summary available from the task source or GitHub issue comment.
+* The `execute-picked-task` summary available from the task source or GitHub issue comment.
 
 * Verification, release/deploy, PR/MR, archive/close, and manual divergent testing status when present.
 
@@ -206,9 +206,27 @@ When the in-flight task becomes terminal, do not silently continue. Send a user-
 
 If the terminal state is "Needs human input", include the concrete question in the notification and leave that selected task blocked or waiting for the user's answer. Do not wait for the answer before resuming candidate polling for other autonomous work unless the missing input is required to safely run any task, the user explicitly pauses the loop, or continuing would require destructive action, credential disclosure, force-push, or another unsafe operation.
 
+## User Chat Feedback Handling
+
+When the user sends chat feedback while the auto-pick loop is running, handle the newest user message before the next pick, poll, or dispatch action. Do not leave feedback that changes selection, execution, or blockers only in chat; record it on the selected source, GitHub issue, or a new task source when it affects the queue.
+
+Classify user feedback before acting:
+
+* Stop, pause, or priority change: follow the user's instruction immediately. Do not mark an in-flight task terminal only because the loop is paused; record a status note only when the user explicitly clears, blocks, reprioritizes, or hands off that source.
+
+* Answer to "Needs human input" or "Blocked": add the answer to the waiting local task document or GitHub issue comment, clear or supersede the old blocker in the same source, then re-apply the Autonomy Gate or resume `execute-picked-task` when the answer makes the task dispatchable.
+
+* Feedback about the active in-flight task: route it into the active `execute-picked-task` lifecycle. The auto-pick phase must not inspect diffs, make fixes, rerun tests, release, archive, or close issues as a shortcut. If the feedback changes acceptance criteria, scope, UX, copy, safety, or release constraints, require `execute-picked-task` to record the change on the selected source and invalidate any affected review, manual testing, or release gate.
+
+* Feedback that reports a new independent bug or requirement: do not attach it silently to an unrelated in-flight task. If the user clearly wants it queued, create or update an appropriate task source under `docs/bugs/`, `docs/requirements/`, or the relevant GitHub issue surface, and leave it for the normal priority order. If the intent is unclear, ask a concise clarification instead of creating a hidden queue item.
+
+* Feedback that only asks for status: answer with the active source, current terminal or in-flight state, last recorded `execute-picked-task` evidence, and next loop action. Then continue the loop unless the user also asked to stop, pause, or reprioritize.
+
+After feedback handling, preserve strict serial execution: do not select another task while the current source is still in flight unless the user explicitly clears, blocks, cancels, or reprioritizes that source and the selected source records the resulting state.
+
 ## Execute Picked Task Handoff
 
-After a candidate passes the Autonomy Gate and any required claim succeeds, directly start a dedicated SubAgent using `skills/execute-picked-task/SKILL.md`. The handoff must include:
+After a candidate passes the Autonomy Gate and any required claim succeeds, directly invoke `skills/execute-picked-task/SKILL.md` in the current run. The handoff must include:
 
 * The selected task source: local file path or GitHub issue URL.
 
@@ -224,39 +242,41 @@ After a candidate passes the Autonomy Gate and any required claim succeeds, dire
 
 * A clear ownership statement: `execute-picked-task` owns arranging the required SubAgents for analysis, code or task changes, tests, verification, review, manual testing, commit/MR/PR when allowed, release/deploy when required and allowed, task-source completion notes, and archive/close steps.
 
-Once the `execute-picked-task` SubAgent accepts the handoff, the main agent enters the Serial In-Flight Gate for that selected source. Wait for terminal execution status before selecting another task, but do not inspect diffs, run tests, release, archive, or perform task execution work unless the user explicitly changes the main agent role.
+Once `execute-picked-task` starts, the selected source is in flight. Do not select another task until terminal execution status is recorded, and do not perform selector-side implementation shortcuts outside the `execute-picked-task` lifecycle.
 
 ## Loop
 
 1. Pull the latest branch state from the configured remote, then reload `skills/auto-pick-tasks/SKILL.md` so the latest workflow rules apply.
 
-2. Check for an active in-flight auto-pick task. If one exists, enter the Serial In-Flight Gate and do not scan for new candidates.
+2. Process any new user chat feedback using the User Chat Feedback Handling rules.
 
-3. Select the highest-priority candidate only when no in-flight task exists: READY local bug, then READY local requirement, then GitHub `WILL-DO` issue.
+3. Check for an active in-flight auto-pick task. If one exists, enter the Serial In-Flight Gate and do not scan for new candidates.
 
-4. Apply the Autonomy Gate. If investigation confirms the task is not dispatchable without immediate human input, record what was checked plus the needed human input, then return to step 3. If every visible candidate is blocked, wait 15 minutes and restart from step 1 instead of pausing.
+4. Select the highest-priority candidate only when no in-flight task exists: READY local bug, then READY local requirement, then GitHub `WILL-DO` issue.
 
-5. Confirm `execute-picked-task` can be started as a dedicated SubAgent. If not, record "Dispatch blocked" on the selected source when possible, then return to step 3.
+5. Apply the Autonomy Gate. If investigation confirms the task is not dispatchable without immediate human input, record what was checked plus the needed human input, then return to step 4. If every visible candidate is blocked, wait 15 minutes and restart from step 1 instead of pausing.
 
-6. Claim or mark the selected task source as dispatched: edit the local task document with a short auto-pick status note, or for GitHub issues follow the GitHub Issue Coordination rules before handoff.
+6. Confirm `execute-picked-task` can be invoked directly. If not, record "Dispatch blocked" on the selected source when possible, then return to step 4.
 
-7. Directly execute `skills/execute-picked-task/SKILL.md` in the dedicated SubAgent using the Execute Picked Task Handoff rules.
+7. Claim or mark the selected task source as dispatched: edit the local task document with a short auto-pick status note, or for GitHub issues follow the GitHub Issue Coordination rules before handoff.
 
-8. If the handoff is accepted, enter the Serial In-Flight Gate and wait for terminal execution status before returning to step 1.
+8. Directly invoke `skills/execute-picked-task/SKILL.md` using the Execute Picked Task Handoff rules.
 
-9. If the handoff fails after the source was claimed, record the dispatch blocker on the selected source when possible. Treat that selected source as the in-flight task until the dispatch blocker is resolved, cleared, or marked terminal.
+9. If the handoff begins, keep the selected source in the Serial In-Flight Gate until terminal execution status is recorded before returning to step 1.
 
-10. When the in-flight task reaches a terminal state, send the non-blocking Terminal User Notification before returning to step 1.
+10. If the handoff fails after the source was claimed, record the dispatch blocker on the selected source when possible. Treat that selected source as the in-flight task until the dispatch blocker is resolved, cleared, or marked terminal.
 
-11. Repeat indefinitely until the user explicitly stops the loop or the environment prevents further polling.
+11. When the in-flight task reaches a terminal state, send the non-blocking Terminal User Notification before returning to step 1.
+
+12. Repeat indefinitely until the user explicitly stops the loop or the environment prevents further polling.
 
 If any loop finds no selectable candidate, do not send a final status response solely because the queue is empty. Wait 15 minutes and restart from step 1. Brief progress updates are fine while waiting; the main agent must keep the turn alive and keep polling.
 
 ## Execution Follow-up Boundary
 
-The main agent waits for selected-task terminal status but does not inspect the worker's diffs, run its verification, release/deploy, move task documents to `done`, or close GitHub issues. Those actions belong to `skills/execute-picked-task/SKILL.md`.
+Outside the active `execute-picked-task` lifecycle, the main agent waits for selected-task terminal status but does not inspect diffs, run verification, release/deploy, move task documents to `done`, or close GitHub issues. Those actions belong to `skills/execute-picked-task/SKILL.md`.
 
-If a task execution agent later records completion, release/deploy, blocker, or handoff details, the next pick loop may use those notes only to decide whether the in-flight source is terminal. The main agent must not retroactively finish the task locally.
+If `execute-picked-task` later records completion, release/deploy, blocker, or handoff details, the next pick loop may use those notes only to decide whether the in-flight source is terminal. The main agent must not retroactively finish the task locally.
 
 ## Continuous Loop Rules
 
@@ -286,14 +306,18 @@ Only stop the continuous loop when:
 
 | Situation                          | Action                                                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| READY local task found             | Apply the Autonomy Gate, mark it dispatched, and directly execute `skills/execute-picked-task/SKILL.md` |
-| GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; apply the Autonomy Gate, claim it on GitHub, and directly execute `skills/execute-picked-task/SKILL.md` |
+| READY local task found             | Apply the Autonomy Gate, mark it dispatched, and directly invoke `skills/execute-picked-task/SKILL.md` |
+| GitHub issue has `WILL-DO` comment | Use only after no local READY candidate is available; apply the Autonomy Gate, claim it on GitHub, and directly invoke `skills/execute-picked-task/SKILL.md` |
 | In-flight task exists              | Do not scan or dispatch another task; wait 15 minutes and re-check the active task source            |
 | Multiple candidates found          | Prefer `docs/bugs/`, then `docs/requirements/`, then GitHub; dispatch one task only when none is in flight |
 | Candidate appears ambiguous        | Investigate repository context and make reasonable conservative assumptions                          |
+| User answers a blocker             | Record the answer on the blocked source, clear or supersede the blocker, then re-apply Autonomy Gate or resume execution |
+| User reports current-task issue    | Route it into `execute-picked-task`; do not fix it in the auto-pick phase                            |
+| User reports independent issue     | Create or update a separate task source only when the user clearly wants it queued                    |
+| User asks for status               | Report active source, state, latest evidence, and next loop action, then continue unless told to pause |
 | Candidate still needs human input  | Do not dispatch it; record checks, blocker, and select another candidate; if none remain, wait and loop |
 | No candidate found                 | Wait 15 minutes and check again indefinitely; do not stop the loop                                   |
 | In-flight task reaches terminal    | Notify the user with terminal state, summary, verification/release/manual-test status, and next action, then continue picking automatically |
 | Handoff fails                      | Do not implement locally; record the dispatch blocker and keep the task in-flight until cleared or terminal |
-| Execution or release fails         | Task execution agent records the blocker through `skills/execute-picked-task/SKILL.md`; the main agent does not fix it locally |
+| Execution or release fails         | `execute-picked-task` records the blocker through `skills/execute-picked-task/SKILL.md`; the main agent does not fix it locally |
 | Skill file changes                 | Pull the latest branch state, then reload it before the next loop                                    |

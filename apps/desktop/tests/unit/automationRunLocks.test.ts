@@ -15,7 +15,9 @@ describe('automationRunLocks', () => {
         taskId: 'ready-task',
         workspaceScope: 'workspace:/repo'
       })
-    ).toBe('dev-profile::workspace:/repo::flow-1::task.md::ready-task')
+    ).toBe(
+      'dev-profile::workspace:/repo::flow-1::task.md::ready-task::no-owner::no-executor-snapshot::no-task-data-snapshot'
+    )
   })
 
   it('separates the same task under different flows or workspaces', () => {
@@ -37,6 +39,18 @@ describe('automationRunLocks', () => {
       createAutomationRunLockKey({
         ...baseIdentity,
         workspaceScope: 'workspace:/other-repo'
+      })
+    ).not.toBe(createAutomationRunLockKey(baseIdentity))
+    expect(
+      createAutomationRunLockKey({
+        ...baseIdentity,
+        executorSnapshotId: 'executor-snapshot-2'
+      })
+    ).not.toBe(createAutomationRunLockKey(baseIdentity))
+    expect(
+      createAutomationRunLockKey({
+        ...baseIdentity,
+        taskDataSnapshotId: 'task-data-snapshot-2'
       })
     ).not.toBe(createAutomationRunLockKey(baseIdentity))
   })

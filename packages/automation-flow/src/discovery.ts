@@ -4,7 +4,11 @@ import type {
   AutomationFlow,
   AutomationFlowTaskCandidate
 } from './types'
-import { createAutomationTaskId } from './taskIdentity'
+import {
+  createAutomationTaskDataId,
+  createAutomationTaskDataSnapshotId,
+  createAutomationTaskId
+} from './taskIdentity'
 
 export interface AutomationDiscoverySourceInput {
   readonly adapterId?: AutomationDiscoveredTaskSource['adapterId']
@@ -16,12 +20,15 @@ export interface AutomationDiscoverySourceInput {
   readonly priority?: number
   readonly provider?: string
   readonly relativePath?: string
+  readonly requiredExecutorId?: string
+  readonly requiredExecutorRef?: string
   readonly sourceItemId: string
   readonly sourcePath?: string
   readonly sourceSnapshotHash?: string
   readonly sourceType: AutomationDiscoveredTaskSource['sourceType']
   readonly sourceUri?: string
   readonly tags?: readonly string[]
+  readonly taskType?: string
   readonly title: string
   readonly workspaceId?: string
 }
@@ -155,13 +162,29 @@ export const normalizeAutomationDiscoveredTaskSources = ({
         externalId: source.externalId,
         provider: source.provider,
         relativePath: source.relativePath,
+        requiredExecutorId: source.requiredExecutorId,
+        requiredExecutorRef: source.requiredExecutorRef,
         sourceItemId: source.sourceItemId,
         sourcePath: source.sourcePath,
         sourceType: source.sourceType,
         sourceUri: source.sourceUri,
+        tags: source.tags,
+        taskType: source.taskType,
         title: source.title,
         workspaceId: source.workspaceId
       }
+      const ownerKey = source.automationFlowOwnerKey ?? automationFlow.id
+      const taskDataId = createAutomationTaskDataId({
+        ownerKey,
+        sourceItemId: source.sourceItemId
+      })
+      const sourceSnapshotHash =
+        source.sourceSnapshotHash ?? createStableHash(hashInput)
+      const taskDataSnapshotId = createAutomationTaskDataSnapshotId({
+        normalizedTaskPayloadHash: createStableHash(hashInput),
+        sourceSnapshotHash,
+        taskDataId
+      })
 
       return [Object.freeze({
         ...(source.adapterId !== undefined ? { adapterId: source.adapterId } : {}),
@@ -181,13 +204,21 @@ export const normalizeAutomationDiscoveredTaskSources = ({
         ...(source.priority !== undefined ? { priority: source.priority } : {}),
         ...(source.provider !== undefined ? { provider: source.provider } : {}),
         ...(source.relativePath !== undefined ? { relativePath: source.relativePath } : {}),
+        ...(source.requiredExecutorId !== undefined
+          ? { requiredExecutorId: source.requiredExecutorId }
+          : {}),
+        ...(source.requiredExecutorRef !== undefined
+          ? { requiredExecutorRef: source.requiredExecutorRef }
+          : {}),
         sourceItemId: source.sourceItemId,
         ...(source.sourcePath !== undefined ? { sourcePath: source.sourcePath } : {}),
-        sourceSnapshotHash:
-          source.sourceSnapshotHash ?? createStableHash(hashInput),
+        sourceSnapshotHash,
         sourceType: source.sourceType,
         ...(source.sourceUri !== undefined ? { sourceUri: source.sourceUri } : {}),
         ...(source.tags !== undefined ? { tags: source.tags } : {}),
+        taskDataId,
+        taskDataSnapshotId,
+        ...(source.taskType !== undefined ? { taskType: source.taskType } : {}),
         title: source.title,
         ...(source.workspaceId !== undefined ? { workspaceId: source.workspaceId } : {})
       }) satisfies AutomationDiscoveredTaskSource]
@@ -210,6 +241,33 @@ export const createAutomationTaskCandidateFromDiscoveredSource = (
     automationFlow.allowedEngines.includes(source.engine)
       ? source.engine
       : automationFlow.defaultEngine
+  const ownerKey = source.automationFlowOwnerKey ?? automationFlow.id
+  const taskDataId =
+    source.taskDataId ??
+    createAutomationTaskDataId({
+      ownerKey,
+      sourceItemId: source.sourceItemId
+    })
+  const taskDataSnapshotId =
+    source.taskDataSnapshotId ??
+    createAutomationTaskDataSnapshotId({
+      normalizedTaskPayloadHash: createStableHash({
+        priority: source.priority,
+        relativePath: source.relativePath,
+        requiredExecutorId: source.requiredExecutorId,
+        requiredExecutorRef: source.requiredExecutorRef,
+        sourceItemId: source.sourceItemId,
+        sourcePath: source.sourcePath,
+        sourceType: source.sourceType,
+        sourceUri: source.sourceUri,
+        tags: source.tags,
+        taskType: source.taskType,
+        title: source.title,
+        workspaceId: source.workspaceId
+      }),
+      sourceSnapshotHash: source.sourceSnapshotHash,
+      taskDataId
+    })
 
   return Object.freeze({
     automationFlowId: automationFlow.id,
@@ -224,15 +282,24 @@ export const createAutomationTaskCandidateFromDiscoveredSource = (
     priority: source.priority,
     ...(source.provider !== undefined ? { provider: source.provider } : {}),
     relativePath: source.relativePath,
+    ...(source.requiredExecutorId !== undefined
+      ? { requiredExecutorId: source.requiredExecutorId }
+      : {}),
+    ...(source.requiredExecutorRef !== undefined
+      ? { requiredExecutorRef: source.requiredExecutorRef }
+      : {}),
     sourceItemId: source.sourceItemId,
     sourcePath: source.sourcePath,
     sourceSnapshotHash: source.sourceSnapshotHash,
     sourceType: source.sourceType,
     ...(source.sourceUri !== undefined ? { sourceUri: source.sourceUri } : {}),
     taskId: createAutomationTaskId({
-      automationFlowId: source.automationFlowOwnerKey ?? automationFlow.id,
+      automationFlowId: ownerKey,
       sourceItemId: source.sourceItemId
     }),
+    taskDataId,
+    taskDataSnapshotId,
+    ...(source.taskType !== undefined ? { taskType: source.taskType } : {}),
     title: source.title,
     workspaceId: source.workspaceId
   })

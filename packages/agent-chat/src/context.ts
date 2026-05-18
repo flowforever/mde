@@ -37,12 +37,37 @@ export const validateAgentChatContextManifest = (
 ): AgentChatContextManifest => {
   const modelName = manifest.modelName?.trim()
   const currentDocumentPath = manifest.currentDocumentPath?.trim()
+  const automationAuthoringContext =
+    manifest.automationAuthoringContext === undefined
+      ? undefined
+      : Object.freeze({
+          diagnostics: Object.freeze([
+            ...manifest.automationAuthoringContext.diagnostics
+          ]),
+          executorRefs: Object.freeze([
+            ...manifest.automationAuthoringContext.executorRefs
+          ]),
+          ...(manifest.automationAuthoringContext.flowPath?.trim()
+            ? { flowPath: manifest.automationAuthoringContext.flowPath.trim() }
+            : {}),
+          ...(manifest.automationAuthoringContext.runtimeConstraints ===
+          undefined
+            ? {}
+            : {
+                runtimeConstraints: Object.freeze([
+                  ...manifest.automationAuthoringContext.runtimeConstraints
+                ])
+              })
+        })
 
   if (!manifest.workspaceRoot.trim()) {
     throw new Error('Agent Chat context requires a workspace root')
   }
 
   return Object.freeze({
+    ...(automationAuthoringContext !== undefined
+      ? { automationAuthoringContext }
+      : {}),
     ...(currentDocumentPath ? { currentDocumentPath } : {}),
     currentDocumentSnapshot: manifest.currentDocumentSnapshot,
     ...(modelName ? { modelName } : {}),
@@ -52,6 +77,32 @@ export const validateAgentChatContextManifest = (
     sessionPurpose: assertSessionPurpose(manifest.sessionPurpose),
     workspaceRoot: manifest.workspaceRoot
   })
+}
+
+const buildAutomationAuthoringContextSection = (
+  manifest: AgentChatContextManifest
+): string => {
+  const context = manifest.automationAuthoringContext
+
+  if (context === undefined) {
+    return ''
+  }
+
+  const sections = [
+    'Automation flow authoring context:',
+    context.flowPath ? `Flow path: ${context.flowPath}` : '',
+    context.executorRefs.length > 0
+      ? `Executors:\n${context.executorRefs.map((ref) => `- ${ref}`).join('\n')}`
+      : 'Executors:\n- none',
+    context.diagnostics.length > 0
+      ? `Diagnostics:\n${context.diagnostics.map((diagnostic) => `- ${diagnostic}`).join('\n')}`
+      : 'Diagnostics:\n- none',
+    context.runtimeConstraints && context.runtimeConstraints.length > 0
+      ? `Runtime constraints:\n${context.runtimeConstraints.map((constraint) => `- ${constraint}`).join('\n')}`
+      : ''
+  ].filter((section) => section.length > 0)
+
+  return sections.join('\n')
 }
 
 export const buildCodexUserInputItems = (input: {
@@ -75,6 +126,7 @@ export const buildCodexUserInputItems = (input: {
     input.contextManifest.currentDocumentSnapshot.trim()
       ? `Current Markdown snapshot:\n${input.contextManifest.currentDocumentSnapshot}`
       : '',
+    buildAutomationAuthoringContextSection(input.contextManifest),
     content ? `User message:\n${content}` : ''
   ].filter((section) => section.length > 0)
   const text = contextSections.join('\n\n').trim()

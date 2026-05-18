@@ -30,6 +30,25 @@ export const automationFlowMatchSchema = z
   })
   .default({})
 
+export const automationFlowExecutorHandlesSchema = z
+  .object({
+    sourceTypes: z.array(automationFlowSourceTypeSchema).optional(),
+    tags: z.array(nonEmptyStringSchema).optional(),
+    taskTypes: z.array(nonEmptyStringSchema).optional()
+  })
+  .default({})
+
+export const automationFlowExecutorDeclarationSchema = z.object({
+  displayName: nonEmptyStringSchema.optional(),
+  enabled: z.boolean().default(true),
+  handles: automationFlowExecutorHandlesSchema.optional().default({}),
+  id: nonEmptyStringSchema,
+  path: nonEmptyStringSchema.optional(),
+  ref: nonEmptyStringSchema.optional(),
+  tags: z.array(nonEmptyStringSchema).optional(),
+  type: z.enum(['markdown', 'skill'])
+})
+
 export const automationFlowLoopPolicySchema = z.object({
   intervalMinutes: z.number().int().positive().default(15),
   maxActiveRuns: z.number().int().positive().default(1),
@@ -64,6 +83,7 @@ export const automationFlowSchema = z
     allowedEngines: z.array(nonEmptyStringSchema).min(1),
     confirmationPolicy: automationFlowConfirmationPolicySchema,
     defaultEngine: nonEmptyStringSchema,
+    executors: z.array(automationFlowExecutorDeclarationSchema).default([]),
     id: nonEmptyStringSchema,
     lifecycle: automationFlowLifecycleSchema,
     loopPolicy: automationFlowLoopPolicySchema,

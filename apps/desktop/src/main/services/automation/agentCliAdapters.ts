@@ -65,6 +65,7 @@ export type AgentCliNormalizedEvent =
 
 export interface AgentCliRunInput {
   readonly automationFlow: AutomationFlow
+  readonly automationFlowOwnerKey?: string
   readonly automationFlowSnapshotId: string
   readonly candidate?: AutomationFlowTaskCandidate
   readonly preferredAdapterSessionId: string
@@ -233,6 +234,9 @@ const discoverLocalWorkspaceSources = async (
 
         return {
           ...(contentSnapshot !== undefined ? { contentSnapshot } : {}),
+          ...(input.automationFlowOwnerKey !== undefined
+            ? { automationFlowOwnerKey: input.automationFlowOwnerKey }
+            : {}),
           provider: 'mde-local-helper',
           relativePath: source.relativePath,
           sourceItemId: source.sourceItemId,

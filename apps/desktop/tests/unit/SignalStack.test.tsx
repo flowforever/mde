@@ -1,5 +1,5 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SignalStack } from '../../src/renderer/src/automation/SignalStack'
 import { createAppText, BUILT_IN_APP_LANGUAGE_PACKS } from '../../src/renderer/src/i18n/appLanguage'
@@ -11,10 +11,12 @@ const text = createAppText(BUILT_IN_APP_LANGUAGE_PACKS.en)
 const createViewModel = (): AutomationCenterViewModel => ({
   diagnostics: [
     {
-      code: 'setup',
+      automationFlowId: 'flow-a',
+      code: 'automationFlow.missingExecutor',
       diagnosticId: 'diagnostic-1',
-      message: 'Adapter setup is incomplete.',
-      severity: 'error'
+      message: 'automationFlow.missingExecutor',
+      severity: 'error',
+      sourceFile: '/workspace/.mde/automation-flows/flow-a.md'
     }
   ],
   doneTasks: [
@@ -181,15 +183,24 @@ describe('SignalStack', () => {
   })
 
   it('renders a card-based task queue and keeps diagnostics out of task cards', () => {
+    const onOpenDiagnosticsTarget = vi.fn()
+
     render(
       <SignalStack
+        onOpenDiagnosticsTarget={onOpenDiagnosticsTarget}
         selectedTaskId="needs-me-task"
         text={text}
         viewModel={createViewModel()}
       />
     )
 
-    expect(screen.getAllByRole('button')).toHaveLength(6)
+    const signalStack = screen.getByRole('region', { name: 'Signal Stack' })
+
+    expect(
+      signalStack.querySelectorAll(
+        `[data-component-id="${COMPONENT_IDS.automation.signalTaskRow}"]`
+      )
+    ).toHaveLength(6)
     expect(screen.getByText('READY needs input').closest('button')).toHaveClass(
       'automation-task-card',
       'automation-task-card--selected'
@@ -239,16 +250,30 @@ describe('SignalStack', () => {
       name: 'Setup diagnostics'
     })
     expect(
-      within(diagnosticList).getByText('1 setup item outside the task queue')
+      within(diagnosticList).getByText(
+        '1 setup issue needs changes before tasks can appear'
+      )
     ).toBeInTheDocument()
     expect(within(diagnosticList).getByText('Error')).toBeInTheDocument()
     expect(
       within(diagnosticList).getByText(
-        'Automation setup needs attention. Check the automation-flow configuration.'
+        'No enabled executor is available. Add or enable a Markdown or skill executor for this automation-flow.'
       )
     ).toBeInTheDocument()
-    expect(within(diagnosticList).queryByText('Adapter setup is incomplete.'))
-      .not.toBeInTheDocument()
+    expect(
+      within(diagnosticList).getByText(
+        'File: /workspace/.mde/automation-flows/flow-a.md'
+      )
+    ).toBeInTheDocument()
+    expect(within(diagnosticList).getByText('Flow: flow-a')).toBeInTheDocument()
+    expect(within(diagnosticList).getByText('Code: automationFlow.missingExecutor'))
+      .toBeInTheDocument()
+    fireEvent.click(
+      within(diagnosticList).getByRole('button', {
+        name: 'Open Automation Flows'
+      })
+    )
+    expect(onOpenDiagnosticsTarget).toHaveBeenCalledTimes(1)
     expect(within(diagnosticList).queryByText('READY visible task'))
       .not.toBeInTheDocument()
   })

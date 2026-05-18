@@ -210,9 +210,17 @@ import { APP_THEME_STORAGE_KEY } from "../../src/renderer/src/theme/appThemes";
 import { WINDOW_WORKSPACE_SESSION_STORAGE_KEY } from "../../src/renderer/src/workspaces/recentWorkspaces";
 import type { AiApi, AiGenerationResult } from "../../src/shared/ai";
 import type { AgentChatApi, AgentChatEvent } from "../../src/shared/agentChat";
+import type {
+  AutomationApi,
+  AutomationExplorerProjection,
+} from "../../src/shared/automation";
 import type { TreeNode } from "@mde/editor-host/file-tree";
 import type { UpdateApi } from "../../src/shared/update";
-import type { EditorApi, Workspace } from "../../src/shared/workspace";
+import type {
+  EditorApi,
+  Workspace,
+  WorkspaceLaunchResource,
+} from "../../src/shared/workspace";
 
 const createDeferred = <Value,>(): {
   readonly promise: Promise<Value>;
@@ -308,6 +316,7 @@ describe("App shell", () => {
     Reflect.deleteProperty(window, "aiApi");
     Reflect.deleteProperty(window, "agentChatApi");
     Reflect.deleteProperty(window, "editorApi");
+    Reflect.deleteProperty(window, "mdeAutomation");
     Reflect.deleteProperty(window, "updateApi");
     mockNavigatorLanguages(["en-US"]);
   });
@@ -1177,6 +1186,215 @@ describe("App shell", () => {
     expect(
       screen.queryByRole("dialog", { name: /workspace manager/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("expands Automation Flows when a runtime launch event targets workspace automation management", async () => {
+    let launchPathListener:
+      | ((resourcePath: WorkspaceLaunchResource) => void)
+      | undefined;
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(
+        (listener: (resourcePath: WorkspaceLaunchResource) => void) => {
+          launchPathListener = listener;
+          return vi.fn();
+        },
+      ),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn(),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn().mockResolvedValue({
+        name: "Workspace",
+        rootPath: "/workspace",
+        tree: [{ name: "README.md", path: "README.md", type: "file" }],
+        type: "workspace",
+      }),
+      readMarkdownFile: vi.fn().mockResolvedValue({
+        contents: "# README",
+        path: "README.md",
+      }),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+    localStorage.setItem("mde.explorerAutomationFlowsPanel", "collapsed");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith("/workspace");
+    });
+    const automationFlowsPanel = await screen.findByRole("region", {
+      name: "Automation Flows",
+    });
+
+    expect(automationFlowsPanel).toHaveClass("is-collapsed");
+
+    act(() => {
+      launchPathListener?.({
+        type: "workspace-automation-flows",
+        workspaceRoot: "/workspace",
+      });
+    });
+
+    await waitFor(() => {
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(automationFlowsPanel).not.toHaveClass("is-collapsed");
+    });
+  });
+
+  it("opens global automation-flow executors through the global automation workspace root", async () => {
+    const user = userEvent.setup();
+    const workspace: Workspace = {
+      name: "Workspace",
+      rootPath: "/workspace",
+      tree: [{ name: "README.md", path: "README.md", type: "file" }],
+      type: "workspace",
+    };
+    const globalAutomationWorkspace: Workspace = {
+      name: ".mde",
+      openedFilePath: "automation-flows/weekly/implementation.md",
+      rootPath: "/Users/example/.mde",
+      tree: [
+        {
+          children: [
+            { name: "weekly.md", path: "automation-flows/weekly.md", type: "file" },
+            {
+              children: [
+                {
+                  name: "implementation.md",
+                  path: "automation-flows/weekly/implementation.md",
+                  type: "file",
+                },
+              ],
+              name: "weekly",
+              path: "automation-flows/weekly",
+              type: "directory",
+            },
+          ],
+          name: "automation-flows",
+          path: "automation-flows",
+          type: "directory",
+        },
+      ],
+      type: "workspace",
+    };
+    const automationProjection = {
+      diagnostics: [],
+      flows: [
+        {
+          appliedToWorkspace: true,
+          executors: [
+            {
+              displayName: "Global Implementation",
+              executorId: "implementation",
+              sourcePath:
+                "/Users/example/.mde/automation-flows/weekly/implementation.md",
+              type: "markdown",
+            },
+          ],
+          flowOwnerKey: "global:flow:weekly",
+          id: "weekly",
+          name: "Weekly",
+          scope: "user",
+          sourceFile: "/Users/example/.mde/automation-flows/weekly.md",
+        },
+      ],
+      workspaceRoot: "/workspace",
+    } satisfies AutomationExplorerProjection;
+    const editorApi = {
+      consumeLaunchPath: vi.fn().mockResolvedValue(null),
+      createFolder: vi.fn(),
+      createMarkdownFile: vi.fn(),
+      deleteEntry: vi.fn(),
+      listDirectory: vi.fn(),
+      onLaunchPath: vi.fn(() => vi.fn()),
+      openFile: vi.fn(),
+      openFileByPath: vi.fn().mockResolvedValue(globalAutomationWorkspace),
+      openPath: vi.fn(),
+      openWorkspace: vi.fn(),
+      openWorkspaceByPath: vi.fn((rootPath: string) =>
+        Promise.resolve(
+          rootPath === "/Users/example/.mde"
+            ? globalAutomationWorkspace
+            : workspace,
+        ),
+      ),
+      readMarkdownFile: vi.fn((filePath: string, workspaceRoot: string) =>
+        Promise.resolve({
+          contents: `${workspaceRoot}:${filePath}`,
+          path: filePath,
+        }),
+      ),
+      renameEntry: vi.fn(),
+      saveImageAsset: vi.fn(),
+      writeMarkdownFile: vi.fn(),
+    } satisfies EditorApi;
+    const automationApi = {
+      getExplorerAutomationProjection: vi.fn().mockResolvedValue({
+        projection: automationProjection,
+      }),
+    } as unknown as AutomationApi;
+
+    Object.defineProperty(window, "editorApi", {
+      configurable: true,
+      value: editorApi,
+    });
+    Object.defineProperty(window, "mdeAutomation", {
+      configurable: true,
+      value: automationApi,
+    });
+    localStorage.setItem(
+      "mde.activeWorkspace",
+      JSON.stringify({
+        name: "Workspace",
+        rootPath: "/workspace",
+        type: "workspace",
+      }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(editorApi.openWorkspaceByPath).toHaveBeenCalledWith("/workspace");
+    });
+    await user.click(
+      await screen.findByRole("button", { name: /Global Implementation/i }),
+    );
+
+    expect(editorApi.openFileByPath).toHaveBeenCalledWith(
+      "/Users/example/.mde/automation-flows/weekly/implementation.md",
+      ["/Users/example/.mde"],
+    );
+    expect(editorApi.readMarkdownFile).toHaveBeenCalledWith(
+      "automation-flows/weekly/implementation.md",
+      "/Users/example/.mde",
+    );
+    expect(
+      await screen.findByText(
+        "/Users/example/.mde:automation-flows/weekly/implementation.md",
+      ),
+    ).toBeVisible();
   });
 
   it("restores the current window workspace and file on renderer reload before the global active workspace", async () => {

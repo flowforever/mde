@@ -54,7 +54,15 @@ export interface AgentChatSessionBinding {
   readonly workspaceRoot: string
 }
 
+export interface AgentChatAutomationAuthoringContext {
+  readonly diagnostics: readonly string[]
+  readonly executorRefs: readonly string[]
+  readonly flowPath?: string
+  readonly runtimeConstraints?: readonly string[]
+}
+
 export interface AgentChatContextManifest {
+  readonly automationAuthoringContext?: AgentChatAutomationAuthoringContext
   readonly currentDocumentPath?: string
   readonly currentDocumentSnapshot: string
   readonly modelName?: string

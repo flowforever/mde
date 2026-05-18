@@ -18,6 +18,7 @@ interface StartupDiagnostics {
 
 interface LaunchedElectronApp {
   app: ElectronApplication
+  e2eUserDataPath: string
   startupDiagnostics: StartupDiagnostics
   window: Page
 }
@@ -139,7 +140,7 @@ export const launchElectronApp = async (
   startupDiagnostics.errors.push(...mainDiagnostics.errors)
   startupDiagnostics.output.push(...mainDiagnostics.output)
 
-  return { app, startupDiagnostics, window }
+  return { app, e2eUserDataPath, startupDiagnostics, window }
 }
 
 export const buildElectronApp = async (): Promise<void> => {

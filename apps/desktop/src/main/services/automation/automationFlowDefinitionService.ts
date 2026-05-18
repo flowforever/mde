@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
 import {
@@ -48,6 +48,11 @@ export interface AutomationFlowDefinitionService {
   readonly loadEditableDocument: (
     filePath: string
   ) => Promise<EditableAutomationFlowDocument>
+  readonly deleteDefinition: (filePath: string) => Promise<void>
+  readonly renameDefinition: (
+    filePath: string,
+    name: string
+  ) => Promise<EditableAutomationFlowDocument>
   readonly restoreDefinition: (
     filePath: string
   ) => Promise<EditableAutomationFlowDocument>
@@ -80,6 +85,25 @@ const replaceLifecycle = (
     /^status:\s*.+$/mu,
     (line) => `${line}\nlifecycle: ${lifecycle}`
   )
+}
+
+const yamlScalar = (value: string): string =>
+  /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/u.test(value)
+    ? value
+    : JSON.stringify(value)
+
+const replaceName = (markdown: string, name: string): string => {
+  const nextNameLine = `name: ${yamlScalar(name)}`
+
+  if (/^name:\s*.*$/mu.test(markdown)) {
+    return markdown.replace(/^name:\s*.*$/mu, nextNameLine)
+  }
+
+  if (/^id:\s*.*$/mu.test(markdown)) {
+    return markdown.replace(/^id:\s*.*$/mu, (line) => `${line}\n${nextNameLine}`)
+  }
+
+  return markdown.replace(/^---[ \t]*$/u, `---\n${nextNameLine}`)
 }
 
 const noop = (): void => undefined
@@ -167,7 +191,24 @@ export const createAutomationFlowDefinitionService = ({
 
       return writeDefinition(filePath, markdown)
     },
+    async deleteDefinition(filePath: string) {
+      const editable = await readDefinition(filePath)
+      const flowId =
+        editable.validation.ok
+          ? editable.validation.automationFlow.id
+          : basename(editable.path, '.md')
+      const executorRoot = join(dirname(editable.path), flowId)
+
+      await rm(editable.path)
+      await rm(executorRoot, { force: true, recursive: true })
+      onDidChange()
+    },
     loadEditableDocument: readDefinition,
+    async renameDefinition(filePath: string, name: string) {
+      const editable = await readDefinition(filePath)
+
+      return writeDefinition(filePath, replaceName(editable.markdown, name))
+    },
     async restoreDefinition(filePath: string) {
       const safePath = await assertDefinitionPath(filePath)
       const restoredPath = join(dirname(dirname(safePath)), basename(safePath))

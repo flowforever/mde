@@ -1,11 +1,13 @@
+import { FolderCog } from 'lucide-react'
 import type { JSX } from 'react'
 
 import { COMPONENT_IDS } from '../componentIds'
-import { isAppTextKey, type AppText } from '../i18n/appLanguage'
+import { isAppTextKey, type AppText, type AppTextKey } from '../i18n/appLanguage'
 import type { AutomationCenterViewModel } from './automationViewModel'
 import type { AutomationTaskCard } from '../../../shared/automation'
 
 interface SignalStackProps {
+  readonly onOpenDiagnosticsTarget?: () => void
   readonly onSelectTask?: (task: AutomationTaskCard) => void
   readonly selectedTaskId?: string
   readonly text: AppText
@@ -79,13 +81,47 @@ const getTaskSourceHint = (task: AutomationTaskCard, text: AppText): string => {
   return text('automation.taskSourceHint', { source })
 }
 
+const getDiagnosticMessageKey = (
+  diagnostic: AutomationCenterViewModel['diagnostics'][number]
+): AppTextKey | undefined => {
+  if (
+    diagnostic.messageKey !== undefined &&
+    isAppTextKey(diagnostic.messageKey)
+  ) {
+    return diagnostic.messageKey
+  }
+
+  const automationFlowKey = `automationFlow.diagnostics.${diagnostic.code.replace(
+    /^automationFlow\./u,
+    ''
+  )}`
+
+  if (isAppTextKey(automationFlowKey)) {
+    return automationFlowKey
+  }
+
+  const automationSourceKey = `automationSource.diagnostics.${diagnostic.code.replace(
+    /^automationSource\./u,
+    ''
+  )}`
+
+  return isAppTextKey(automationSourceKey) ? automationSourceKey : undefined
+}
+
 const getDiagnosticMessage = (
   diagnostic: AutomationCenterViewModel['diagnostics'][number],
   text: AppText
-): string =>
-  diagnostic.messageKey !== undefined && isAppTextKey(diagnostic.messageKey)
-    ? text(diagnostic.messageKey)
+): string => {
+  const diagnosticMessageKey = getDiagnosticMessageKey(diagnostic)
+
+  return diagnosticMessageKey !== undefined
+    ? text(diagnosticMessageKey, {
+        field: diagnostic.missingField ?? text('automation.diagnosticUnknownField'),
+        section:
+          diagnostic.sectionName ?? text('automation.diagnosticUnknownSection')
+      })
     : text('automation.diagnosticUnavailable')
+}
 
 const getDiagnosticSeverityLabel = (
   severity: AutomationCenterViewModel['diagnostics'][number]['severity'],
@@ -141,6 +177,9 @@ const getFlowDisplayName = (task: AutomationTaskCard): string =>
     ? task.automationFlowId
     : `${task.automationFlowId} · ${task.engine}`
 
+const getPrimaryExecutorName = (task: AutomationTaskCard, text: AppText): string =>
+  task.primaryExecutor?.displayName ?? text('automation.noSelectedExecutor')
+
 const getTaskDescription = (
   task: AutomationTaskCard,
   bucketLabel: string,
@@ -151,10 +190,12 @@ const getTaskDescription = (
     hasTaskWorkspace(task)
       ? getWorkspaceDisplayName(task.workspaceId, text)
       : text('automation.noWorkspace'),
-    getFlowDisplayName(task)
+    getFlowDisplayName(task),
+    getPrimaryExecutorName(task, text)
   ].join(' · ')
 
 export const SignalStack = ({
+  onOpenDiagnosticsTarget,
   onSelectTask,
   selectedTaskId,
   text,
@@ -213,6 +254,12 @@ export const SignalStack = ({
                   : text('automation.noWorkspace')}
               </span>
               <span className="automation-task-badge">{getFlowDisplayName(task)}</span>
+              <span
+                className="automation-task-badge"
+                data-component-id={COMPONENT_IDS.automation.primaryExecutorLabel}
+              >
+                {getPrimaryExecutorName(task, text)}
+              </span>
             </span>
             <span className="automation-task-card__footer">
               <span className="automation-task-card__source">
@@ -232,7 +279,22 @@ export const SignalStack = ({
         className="automation-diagnostic-list"
         data-component-id={COMPONENT_IDS.automation.diagnosticList}
       >
-        <h3>{text('automation.setupDiagnostics')}</h3>
+        <div className="automation-diagnostic-list__header">
+          <h3>{text('automation.setupDiagnostics')}</h3>
+          {onOpenDiagnosticsTarget !== undefined ? (
+            <button
+              className="automation-diagnostic-management-button"
+              data-component-id={
+                COMPONENT_IDS.automation.diagnosticManagementButton
+              }
+              onClick={onOpenDiagnosticsTarget}
+              type="button"
+            >
+              <FolderCog aria-hidden="true" focusable="false" size={14} />
+              <span>{text('automation.diagnosticManagementAction')}</span>
+            </button>
+          ) : null}
+        </div>
         <p className="automation-diagnostic-summary">
           {getDiagnosticsSummary(viewModel.diagnostics.length, text)}
         </p>
@@ -247,6 +309,27 @@ export const SignalStack = ({
                   {getDiagnosticSeverityLabel(diagnostic.severity, text)}
                 </span>
                 <p>{getDiagnosticMessage(diagnostic, text)}</p>
+                <ul className="automation-diagnostic-meta">
+                  {diagnostic.sourceFile !== undefined ? (
+                    <li>
+                      {text('automation.diagnosticFile', {
+                        path: diagnostic.sourceFile
+                      })}
+                    </li>
+                  ) : null}
+                  {diagnostic.automationFlowId !== undefined ? (
+                    <li>
+                      {text('automation.diagnosticFlow', {
+                        flowId: diagnostic.automationFlowId
+                      })}
+                    </li>
+                  ) : null}
+                  <li>
+                    {text('automation.diagnosticCode', {
+                      code: diagnostic.code
+                    })}
+                  </li>
+                </ul>
               </div>
             </article>
           ))}

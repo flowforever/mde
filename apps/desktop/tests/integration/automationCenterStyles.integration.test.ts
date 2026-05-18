@@ -48,7 +48,7 @@ describe("Automation Center theme styles", () => {
     ].map((selector) => getCssBlock(css, selector).trim());
     const primaryActionBlock = getCssBlock(
       css,
-      ".automation-flowline-start,\n.automation-agent-chat-button",
+      ".automation-flowline-start",
     );
     const taskStartBlock = getCssBlock(css, ".automation-task-start");
     const selectedTaskStackBlock = getCssBlock(
@@ -93,5 +93,19 @@ describe("Automation Center theme styles", () => {
     expect(getCssBlock(css, ".automation-flowline-actions")).toContain(
       "grid-template-columns",
     );
+  });
+
+  it("keeps Automation Run History large enough to review records", async () => {
+    const css = await readAutomationCss();
+    const runHistoryBlock = getCssBlock(css, ".automation-run-history");
+    const runHistoryRowsBlock = getCssBlock(
+      css,
+      ".automation-run-history__rows",
+    );
+
+    expect(runHistoryBlock).toContain("min-height: clamp(320px, 44vh, 520px);");
+    expect(runHistoryBlock).toContain("overflow: hidden;");
+    expect(runHistoryRowsBlock).toContain("flex: 1 1 auto;");
+    expect(runHistoryRowsBlock).toContain("overflow: auto;");
   });
 });

@@ -35,12 +35,16 @@ interface CreateRunInput {
   readonly runId: string
   readonly runKind: AutomationRunKind
   readonly runLockKey?: string
+  readonly executorId?: string
+  readonly executorSnapshotId?: string
   readonly sourceItemId?: string
   readonly sourcePath?: string
   readonly sourceSnapshotHash?: string
   readonly taskSourceSnapshot?: AutomationDiscoveredTaskSource
   readonly state: AutomationRunState
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
   readonly title?: string
   readonly workspaceRoot?: string
 }
@@ -93,12 +97,16 @@ export interface AutomationStoredRun {
   readonly runId: string
   readonly runKind: AutomationRunKind
   readonly runLockKey?: string
+  readonly executorId?: string
+  readonly executorSnapshotId?: string
   readonly sourceItemId?: string
   readonly sourcePath?: string
   readonly sourceSnapshotHash?: string
   readonly startedAt: string
   readonly state: AutomationRunState
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
   readonly taskSourceSnapshot?: AutomationDiscoveredTaskSource
   readonly title?: string
   readonly updatedAt: string
@@ -125,6 +133,20 @@ export interface AutomationStoredDecision {
   readonly type: 'approval' | 'choice' | 'input'
 }
 
+export interface AutomationTaskDataSnapshotRecord {
+  readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
+  readonly discoveredAt: string
+  readonly lastSeenDiscoveryRunId: string
+  readonly removedAt?: string
+  readonly sourceItemId: string
+  readonly sourceSnapshotHash: string
+  readonly sourceType: AutomationDiscoveredTaskSource['sourceType']
+  readonly taskDataId: string
+  readonly taskDataSnapshotId: string
+  readonly taskSourceSnapshot: AutomationDiscoveredTaskSource
+}
+
 interface StoredRunFile {
   readonly decisions: readonly AutomationStoredDecision[]
   readonly events: readonly AutomationStoredEvent[]
@@ -137,6 +159,7 @@ export interface AutomationStorePaths {
   readonly reportsRoot: string
   readonly runsRoot: string
   readonly runtimeRoot: string
+  readonly taskDataSnapshotsRoot: string
   readonly userTaskPromptsRoot: string
   readonly workspacesRoot: string
 }
@@ -163,6 +186,9 @@ export interface AutomationStore {
   readonly listDiscoveredTaskSources: () => Promise<
     readonly AutomationDiscoveredTaskSource[]
   >
+  readonly listTaskDataSnapshots: () => Promise<
+    readonly AutomationTaskDataSnapshotRecord[]
+  >
   readonly listReports: () => Promise<readonly AutomationReportSummary[]>
   readonly listRuns: () => Promise<readonly AutomationStoredRun[]>
   readonly loadFilterState: () => Promise<AutomationProjectionFilters>
@@ -186,6 +212,11 @@ export interface AutomationStore {
     sources: readonly AutomationDiscoveredTaskSource[],
     ownerKey?: string
   ) => Promise<readonly AutomationDiscoveredTaskSource[]>
+  readonly replaceTaskDataSnapshots: (
+    ownerKey: string,
+    sources: readonly AutomationDiscoveredTaskSource[],
+    discoveryRunId: string
+  ) => Promise<readonly AutomationTaskDataSnapshotRecord[]>
   readonly saveFilterState: (filters: AutomationProjectionFilters) => Promise<void>
   readonly updateRunState: (
     runId: string,
@@ -216,6 +247,7 @@ export const getAutomationStorePaths = (
     reportsRoot: join(automationRoot, 'reports'),
     runsRoot: join(automationRoot, 'runs'),
     runtimeRoot: join(automationRoot, 'automation-flow-runtime'),
+    taskDataSnapshotsRoot: join(automationRoot, 'task-data-snapshots'),
     userTaskPromptsRoot: join(automationRoot, 'user-task-prompts'),
     workspacesRoot: join(automationRoot, 'workspaces')
   })
@@ -285,6 +317,12 @@ const normalizeStoredFilterState = (value: unknown): AutomationProjectionFilters
     : typeof record.workspaceId === 'string'
       ? [record.workspaceId]
       : undefined
+  const flowOwnerKeys = Array.isArray(record.flowOwnerKeys)
+    ? record.flowOwnerKeys.filter((item): item is string => typeof item === 'string')
+    : undefined
+  const scopeIds = Array.isArray(record.scopeIds)
+    ? record.scopeIds.filter((item): item is string => typeof item === 'string')
+    : undefined
 
   return Object.freeze({
     ...(typeof record.archivedVisible === 'boolean'
@@ -294,6 +332,10 @@ const normalizeStoredFilterState = (value: unknown): AutomationProjectionFilters
       ? { bucket: record.bucket as AutomationProjectionFilters['bucket'] }
       : {}),
     ...(flowIds !== undefined ? { flowIds: Object.freeze(flowIds) } : {}),
+    ...(flowOwnerKeys !== undefined
+      ? { flowOwnerKeys: Object.freeze(flowOwnerKeys) }
+      : {}),
+    ...(scopeIds !== undefined ? { scopeIds: Object.freeze(scopeIds) } : {}),
     ...(workspaceIds !== undefined
       ? { workspaceIds: Object.freeze(workspaceIds) }
       : {})
@@ -371,6 +413,8 @@ export const createAutomationStore = ({
         ? encodeStorageId(automationFlowId)
         : encodeOwnerStorageId(ownerKey)
     )
+  const taskDataSnapshotsPath = (ownerKey: string): string =>
+    join(paths.taskDataSnapshotsRoot, encodeOwnerStorageId(ownerKey))
   const runPath = (runId: string): string => join(paths.runsRoot, encodeStorageId(runId))
   const reportPath = (reportId: string): string =>
     join(paths.reportsRoot, encodeStorageId(reportId))
@@ -382,6 +426,7 @@ export const createAutomationStore = ({
       mkdir(paths.discoveredSourcesRoot, { recursive: true }),
       mkdir(paths.runsRoot, { recursive: true }),
       mkdir(paths.runtimeRoot, { recursive: true }),
+      mkdir(paths.taskDataSnapshotsRoot, { recursive: true }),
       mkdir(paths.userTaskPromptsRoot, { recursive: true }),
       mkdir(paths.workspacesRoot, { recursive: true })
     ])
@@ -582,6 +627,10 @@ export const createAutomationStore = ({
         runId: run.runId,
         runKind: run.runKind,
         ...(run.runLockKey !== undefined ? { runLockKey: run.runLockKey } : {}),
+        ...(run.executorId !== undefined ? { executorId: run.executorId } : {}),
+        ...(run.executorSnapshotId !== undefined
+          ? { executorSnapshotId: run.executorSnapshotId }
+          : {}),
         ...(run.sourceItemId !== undefined ? { sourceItemId: run.sourceItemId } : {}),
         ...(run.sourcePath !== undefined ? { sourcePath: run.sourcePath } : {}),
         ...(run.sourceSnapshotHash !== undefined
@@ -590,6 +639,10 @@ export const createAutomationStore = ({
         startedAt: timestamp,
         state: run.state,
         taskId: run.taskId,
+        ...(run.taskDataId !== undefined ? { taskDataId: run.taskDataId } : {}),
+        ...(run.taskDataSnapshotId !== undefined
+          ? { taskDataSnapshotId: run.taskDataSnapshotId }
+          : {}),
         ...(run.taskSourceSnapshot !== undefined
           ? { taskSourceSnapshot: run.taskSourceSnapshot }
           : {}),
@@ -658,6 +711,33 @@ export const createAutomationStore = ({
             left.sourceItemId.localeCompare(right.sourceItemId)
           )
       )
+    },
+    async listTaskDataSnapshots() {
+      try {
+        const entries = await readdir(paths.taskDataSnapshotsRoot, {
+          withFileTypes: true
+        })
+        const snapshotGroups = await Promise.all(
+          entries
+            .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+            .map((entry) =>
+              readJsonFile<readonly AutomationTaskDataSnapshotRecord[]>(
+                join(paths.taskDataSnapshotsRoot, entry.name)
+              )
+            )
+        )
+
+        return Object.freeze(
+          snapshotGroups
+            .flatMap((snapshots) => snapshots)
+            .sort((left, right) =>
+              left.taskDataId.localeCompare(right.taskDataId) ||
+              left.taskDataSnapshotId.localeCompare(right.taskDataSnapshotId)
+            )
+        )
+      } catch {
+        return Object.freeze([])
+      }
     },
     async listReports() {
       const entries = await readdir(paths.reportsRoot, { withFileTypes: true })
@@ -882,6 +962,73 @@ export const createAutomationStore = ({
 
       return normalizedSources
     },
+    async replaceTaskDataSnapshots(ownerKey, sources, discoveryRunId) {
+      const timestamp = now()
+      const existingSnapshots = await readJsonFile<
+        readonly AutomationTaskDataSnapshotRecord[]
+      >(taskDataSnapshotsPath(ownerKey)).catch(() => [])
+      const validSources = sources
+        .filter(isValidAutomationDiscoverySourceInput)
+        .filter(
+          (source) =>
+            source.taskDataId !== undefined &&
+            source.taskDataSnapshotId !== undefined
+        )
+      const seenTaskDataIds = new Set(
+        validSources.map((source) => source.taskDataId)
+      )
+      const existingBySnapshotId = new Map(
+        existingSnapshots.map((snapshot) => [
+          snapshot.taskDataSnapshotId,
+          snapshot
+        ])
+      )
+      const nextSnapshots = [
+        ...validSources.map((source) => {
+          const existing = existingBySnapshotId.get(source.taskDataSnapshotId!)
+
+          return Object.freeze({
+            ...(existing ?? {}),
+            automationFlowId: source.automationFlowId,
+            ...(source.automationFlowOwnerKey !== undefined
+              ? { automationFlowOwnerKey: source.automationFlowOwnerKey }
+              : {}),
+            discoveredAt: source.discoveredAt,
+            lastSeenDiscoveryRunId: discoveryRunId,
+            sourceItemId: source.sourceItemId,
+            sourceSnapshotHash: source.sourceSnapshotHash,
+            sourceType: source.sourceType,
+            taskDataId: source.taskDataId!,
+            taskDataSnapshotId: source.taskDataSnapshotId!,
+            taskSourceSnapshot: source
+          }) satisfies AutomationTaskDataSnapshotRecord
+        }),
+        ...existingSnapshots
+          .filter(
+            (snapshot) =>
+              !seenTaskDataIds.has(snapshot.taskDataId) &&
+              !validSources.some(
+                (source) =>
+                  source.taskDataSnapshotId === snapshot.taskDataSnapshotId
+              )
+          )
+          .map((snapshot) =>
+            snapshot.removedAt !== undefined
+              ? snapshot
+              : Object.freeze({
+                  ...snapshot,
+                  removedAt: timestamp
+                }) satisfies AutomationTaskDataSnapshotRecord
+          )
+      ].sort((left, right) =>
+        left.taskDataId.localeCompare(right.taskDataId) ||
+        left.taskDataSnapshotId.localeCompare(right.taskDataSnapshotId)
+      )
+
+      await writeJsonFile(taskDataSnapshotsPath(ownerKey), nextSnapshots)
+
+      return Object.freeze(nextSnapshots)
+    },
     async saveFilterState(filters: AutomationProjectionFilters) {
       await writeJsonFile(filterStatePath, {
         ...(filters.archivedVisible !== undefined
@@ -889,6 +1036,10 @@ export const createAutomationStore = ({
           : {}),
         ...(filters.bucket !== undefined ? { bucket: filters.bucket } : {}),
         ...(filters.flowIds !== undefined ? { flowIds: filters.flowIds } : {}),
+        ...(filters.flowOwnerKeys !== undefined
+          ? { flowOwnerKeys: filters.flowOwnerKeys }
+          : {}),
+        ...(filters.scopeIds !== undefined ? { scopeIds: filters.scopeIds } : {}),
         ...(filters.workspaceIds !== undefined
           ? { workspaceIds: filters.workspaceIds }
           : {})

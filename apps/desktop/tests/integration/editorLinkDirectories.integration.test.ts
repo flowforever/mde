@@ -61,6 +61,6 @@ describe('editor link directory integration', () => {
         visibleTree,
         new Set(['docs'])
       ).map((directory) => directory.path)
-    ).toEqual(['docs', 'docs/nested'])
+    ).toEqual(['.mde', 'docs', 'docs/nested'])
   })
 })

@@ -1,5 +1,6 @@
 export * from './diagnostics'
 export * from './discovery'
+export * from './executors'
 export * from './loopPlanner'
 export * from './matching'
 export * from './ownership'

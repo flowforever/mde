@@ -1,12 +1,14 @@
 import type {
   AutomationDiscoveredTaskSource,
   AutomationFlow,
+  AutomationFlowExecutorRef,
   AutomationRunKind
 } from '@mde/automation-flow'
 
 export interface AutomationPromptBundleInput {
   readonly automationFlow: AutomationFlow
   readonly automationFlowSnapshotId: string
+  readonly executorSnapshot?: AutomationFlowExecutorRef
   readonly runId: string
   readonly runKind: AutomationRunKind
   readonly taskSource?: AutomationDiscoveredTaskSource
@@ -28,6 +30,19 @@ export interface AutomationPromptBundle {
 }
 
 const toJsonBlock = (value: unknown): string => JSON.stringify(value, null, 2)
+
+const createPromptTitle = ({
+  automationFlow,
+  runKind,
+  taskSource
+}: {
+  readonly automationFlow: AutomationFlow
+  readonly runKind: AutomationRunKind
+  readonly taskSource?: AutomationDiscoveredTaskSource
+}): string =>
+  runKind === 'discovery'
+    ? `Parse automation-flow: ${automationFlow.name}`
+    : `Run automation task: ${taskSource?.title ?? automationFlow.name}`
 
 const createStructuredOutputContract = (
   runKind: AutomationRunKind
@@ -95,6 +110,7 @@ const createStructuredOutputContract = (
 export const createAutomationPromptBundle = ({
   automationFlow,
   automationFlowSnapshotId,
+  executorSnapshot,
   runId,
   runKind,
   taskSource,
@@ -118,7 +134,9 @@ export const createAutomationPromptBundle = ({
       ? 'Return normalized discovered task sources. Do not execute any task.'
       : 'Execute exactly one task source. Emit structured events and a final report.'
   const prompt = [
-    '# MDE Automation Runtime Contract',
+    `# ${createPromptTitle({ automationFlow, runKind, taskSource })}`,
+    '',
+    '## MDE Automation Runtime Contract',
     '',
     runtimeContract,
     '',
@@ -139,15 +157,28 @@ export const createAutomationPromptBundle = ({
       ? []
       : [
           '',
-          '## Task Source Snapshot',
+          '## Task Data',
           '',
           '```json',
           toJsonBlock(taskSource),
           '```',
           '',
-          '## Task Source Content',
+          '## Task Data Content',
           '',
           taskSource.contentSnapshot ?? ''
+        ]),
+    ...(executorSnapshot === undefined
+      ? []
+      : [
+          '',
+          '## Executor',
+          '',
+          `Executor id: ${executorSnapshot.executorId}`,
+          `Executor type: ${executorSnapshot.type}`,
+          '',
+          'Executor instructions:',
+          '',
+          executorSnapshot.resolvedSource ?? ''
         ])
   ].join('\n')
 
