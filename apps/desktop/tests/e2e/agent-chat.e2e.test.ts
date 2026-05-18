@@ -46,12 +46,14 @@ const installFakeShellPathCodexCli = async (): Promise<{
 const installFakeShellPathCodexCliWithOptions = async (
   options: {
     readonly loginStatus?: 'authenticated' | 'authentication-required'
+    readonly turnErrorMessage?: string
   } = {}
 ): Promise<{
   readonly fakeBinPath: string
   readonly fakeShellPath: string
 }> => {
   const loginStatus = options.loginStatus ?? 'authenticated'
+  const turnErrorMessageLiteral = JSON.stringify(options.turnErrorMessage ?? null)
   const fakeBinPath = await mkdtemp(join(tmpdir(), 'mde-agent-chat-bin-'))
   const fakeShellPathRoot = await mkdtemp(
     join(tmpdir(), 'mde-agent-chat-shell-path-')
@@ -89,6 +91,7 @@ const installFakeShellPathCodexCliWithOptions = async (
       'const { join } = require("node:path")',
       'const readline = require("node:readline")',
       'const args = process.argv.slice(2)',
+      `const turnErrorMessage = ${turnErrorMessageLiteral}`,
       'if (args[0] === "--version") {',
       '  process.stdout.write("codex-cli 0.130.0\\n")',
       '  process.exit(0)',
@@ -130,6 +133,10 @@ const installFakeShellPathCodexCliWithOptions = async (
       '    }',
       '    if (message.method === "turn/start") {',
       '      writeJson({ id: message.id, result: { turn: { id: "shell-path-turn-1" } } })',
+      '      if (turnErrorMessage) {',
+      '        writeJson({ method: "error", params: { error: { additionalDetails: null, codexErrorInfo: "unauthorized", message: turnErrorMessage }, threadId: message.params.threadId, turnId: "shell-path-turn-1", willRetry: false } })',
+      '        return',
+      '      }',
       '      writeJson({ method: "item/agentMessage/delta", params: { delta: "Shell PATH codex response", itemId: "shell-path-message-1", threadId: message.params.threadId, turnId: "shell-path-turn-1" } })',
       '      writeJson({ method: "turn/completed", params: { threadId: message.params.threadId, turn: { id: "shell-path-turn-1" } } })',
       '      return',
@@ -339,6 +346,54 @@ test('sends Editor Agent Chat through packaged app-server when Codex is only on 
     await expect(panel).toContainText('Verify packaged app-server spawn')
     await expect(panel).toContainText('Shell PATH codex response')
     await expect(panel.getByRole('alert')).toHaveCount(0)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('shows the Codex app-server turn failure reason in Editor Agent Chat', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const { fakeShellPath } = await installFakeShellPathCodexCliWithOptions({
+    turnErrorMessage: 'Codex session expired. Run codex login status.'
+  })
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath],
+    env: {
+      PATH: ['/usr/bin', '/bin'].join(delimiter),
+      SHELL: fakeShellPath
+    }
+  })
+
+  try {
+    await window
+      .getByRole('button', { name: /README\.md Markdown file/i })
+      .click({ timeout: E2E_UI_READY_TIMEOUT_MS })
+    await expect(window.getByTestId('markdown-block-editor')).toContainText(
+      'Root markdown file.'
+    )
+
+    const agentChatButton = window.getByRole('button', { name: /^Agent Chat$/ })
+
+    await expect(agentChatButton).toBeVisible({
+      timeout: AGENT_CHAT_CAPABILITY_TIMEOUT_MS
+    })
+    await agentChatButton.click()
+
+    const panel = window.getByRole('complementary', { name: /^Agent Chat$/ })
+    const messageField = panel.getByRole('textbox', {
+      name: /message agent chat/i
+    })
+
+    await expect(panel).toBeVisible()
+    await messageField.fill('Trigger a Codex failure')
+    await panel.getByRole('button', { name: /^Send$/ }).click()
+
+    await expect(panel).toContainText('Trigger a Codex failure')
+    await expect(messageField).toHaveValue('Trigger a Codex failure')
+    await expect(panel.getByRole('alert')).toContainText(
+      'Agent Chat turn failed: Codex session expired. Run codex login status.'
+    )
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

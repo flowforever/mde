@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentChatChildProcess, AgentChatProcessRunner } from '../host'
-import type { AgentChatSession } from '../types'
+import type { AgentChatEngineEvent, AgentChatSession } from '../types'
 import type { CodexClientRequest } from './protocolTypes'
 
 import { createCodexAgentChatAdapter } from './codexAdapter'
@@ -808,7 +808,7 @@ describe('createCodexAgentChatAdapter', () => {
       processRunner
     })
 
-    const events = []
+    const events: AgentChatEngineEvent[] = []
     for await (const event of adapter.startSession({
       attachments: [],
       content: 'Explain',
@@ -905,7 +905,7 @@ describe('createCodexAgentChatAdapter', () => {
       processRunner
     })
 
-    const events = []
+    const events: AgentChatEngineEvent[] = []
     for await (const event of adapter.startSession({
       attachments: [],
       content: 'Explain',
@@ -975,6 +975,75 @@ describe('createCodexAgentChatAdapter', () => {
           sessionId: 'mde-chat-1'
         },
         type: 'assistant-message-completed'
+      }
+    ])
+  })
+
+  it('rejects with the Codex app-server notification error message', async () => {
+    const scripted = createScriptedChild((request, push) => {
+      if (request.method === 'thread/start') {
+        push({
+          id: request.id,
+          result: {
+            thread: { cwd: '/workspace', id: 'thread-1' }
+          }
+        })
+        return
+      }
+
+      if (request.method === 'turn/start') {
+        push({
+          id: request.id,
+          result: {
+            turn: { id: 'turn-1' }
+          }
+        })
+        push({
+          method: 'error',
+          params: {
+            error: {
+              additionalDetails: 'token=abc123',
+              codexErrorInfo: 'unauthorized',
+              message: 'Codex session expired. Run codex login status.'
+            },
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            willRetry: false
+          }
+        })
+      }
+    })
+    const processRunner = {
+      execFile: vi.fn<AgentChatProcessRunner['execFile']>(),
+      spawn: vi.fn<AgentChatProcessRunner['spawn']>(() => scripted.child)
+    } satisfies AgentChatProcessRunner
+    const adapter = createCodexAgentChatAdapter({
+      now: () => '2026-05-12T00:00:00.000Z',
+      processRunner
+    })
+    const events: AgentChatEngineEvent[] = []
+
+    await expect(
+      (async () => {
+        for await (const event of adapter.startSession({
+          attachments: [],
+          content: 'Explain',
+          contextManifest,
+          session: createSession(),
+          workspaceRoot: '/workspace'
+        })) {
+          events.push(event)
+          // Drain the stream until the adapter surfaces the app-server failure.
+        }
+      })()
+    ).rejects.toThrow(
+      'Codex app-server turn failed: Codex session expired. Run codex login status.'
+    )
+    expect(events).toEqual([
+      {
+        nativeSessionId: 'thread-1',
+        sessionId: 'mde-chat-1',
+        type: 'session-started'
       }
     ])
   })

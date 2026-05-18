@@ -4,6 +4,7 @@ import { createAttachmentCachePath, sanitizeAttachmentFileName } from './attachm
 import { captureChangedFilesAroundTurn } from './changedFiles'
 import {
   createAgentChatDiagnostic,
+  createAgentChatTurnFailedMessage,
   getAgentChatErrorDetails,
   isAgentChatExecutableMissingError
 } from './diagnostics'
@@ -630,6 +631,7 @@ export const createAgentChatRuntime = (
             )
         )
       } catch (error) {
+        const errorDetails = getAgentChatErrorDetails(error)
         const failedSession = {
           ...startingSession,
           state: 'failed',
@@ -638,7 +640,8 @@ export const createAgentChatRuntime = (
         emit({
           diagnostic: createAgentChatDiagnostic({
             code: 'turn-failed',
-            details: error instanceof Error ? error.message : undefined
+            details: errorDetails,
+            message: createAgentChatTurnFailedMessage(error)
           }),
           session: failedSession,
           type: 'session-failed'

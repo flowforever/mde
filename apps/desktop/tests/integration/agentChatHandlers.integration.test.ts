@@ -372,6 +372,62 @@ describe('agentChatHandlers integration', () => {
     })
   })
 
+  it('keeps safe failed-session diagnostic messages while stripping details', async () => {
+    const sender = { id: 1, send: vi.fn() }
+    const { emit, handlers } = registerHandlers()
+
+    await handlers.get(AGENT_CHAT_CHANNELS.createDraftSession)?.(
+      { sender },
+      {
+        engineId: 'codex',
+        host: 'editor',
+        sessionPurpose: 'document-chat',
+        workspaceRoot: '/workspace'
+      }
+    )
+
+    emit({
+      diagnostic: {
+        code: 'turn-failed',
+        details: '/private/tmp/workspace/.mde/agent-chat/codex.log TOKEN=secret',
+        message: 'Codex session expired token=[redacted]. Run codex login status.',
+        recoverable: true
+      },
+      session: {
+        createdAt: '2026-05-12T00:00:00.000Z',
+        engineId: 'codex',
+        host: 'editor',
+        permissionMode: 'max-permission',
+        sessionId: 'mde-chat-1',
+        sessionPurpose: 'document-chat',
+        state: 'failed',
+        updatedAt: '2026-05-12T00:00:00.000Z',
+        workspaceRoot: '/workspace'
+      },
+      type: 'session-failed'
+    })
+
+    expect(sender.send).toHaveBeenCalledWith(AGENT_CHAT_CHANNELS.event, {
+      diagnostic: {
+        code: 'turn-failed',
+        message: 'Codex session expired token=[redacted]. Run codex login status.',
+        recoverable: true
+      },
+      session: {
+        createdAt: '2026-05-12T00:00:00.000Z',
+        engineId: 'codex',
+        host: 'editor',
+        permissionMode: 'max-permission',
+        sessionId: 'mde-chat-1',
+        sessionPurpose: 'document-chat',
+        state: 'failed',
+        updatedAt: '2026-05-12T00:00:00.000Z',
+        workspaceRoot: '/workspace'
+      },
+      type: 'session-failed'
+    })
+  })
+
   it('cleans Agent Chat runtime subscriptions when the sender is destroyed', async () => {
     let destroyedListener: (() => void) | undefined
     let isDestroyed = false

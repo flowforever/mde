@@ -313,17 +313,31 @@ export function AgentChatPanel({
   const showGenericDiagnostic = useCallback(() => {
     setDiagnosticMessage(text('agentChat.diagnostic'));
   }, [text]);
-  const showDiagnostic = useCallback(
-    (diagnostic?: Pick<AgentChatDiagnostic, 'code'>) => {
+  const getDiagnosticMessage = useCallback(
+    (diagnostic?: Pick<AgentChatDiagnostic, 'code' | 'message'>) => {
       if (diagnostic?.code === 'turn-failed') {
-        setDiagnosticMessage(text('agentChat.turnFailed'));
-        return;
+        const reason = diagnostic.message?.trim();
+
+        return reason && reason !== diagnostic.code
+          ? text('agentChat.turnFailedWithReason', { reason })
+          : text('agentChat.turnFailed');
       }
 
-      showGenericDiagnostic();
+      return text('agentChat.diagnostic');
     },
-    [showGenericDiagnostic, text],
+    [text],
   );
+  const showDiagnostic = useCallback(
+    (diagnostic?: Pick<AgentChatDiagnostic, 'code' | 'message'>) => {
+      setDiagnosticMessage(getDiagnosticMessage(diagnostic));
+    },
+    [getDiagnosticMessage],
+  );
+  const showTurnFailedFallbackDiagnostic = useCallback(() => {
+    setDiagnosticMessage((currentMessage) =>
+      currentMessage ?? text('agentChat.turnFailed'),
+    );
+  }, [text]);
 
   const activeSession = useMemo(
     () =>
@@ -655,7 +669,7 @@ export function AgentChatPanel({
       setAttachments((currentAttachments) =>
         currentAttachments.length > 0 ? currentAttachments : submittedAttachments,
       );
-      showDiagnostic({ code: 'turn-failed' });
+      showTurnFailedFallbackDiagnostic();
     } finally {
       setPendingSendSessionIds((currentSessionIds) => {
         const nextSessionIds = new Set(currentSessionIds);

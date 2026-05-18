@@ -335,8 +335,18 @@ const runTurn = async function* (
     }
 
     if (notification.method === 'error') {
+      const errorMessage = (
+        notification.params.message ??
+        notification.params.error?.message ??
+        notification.params.error?.additionalDetails ??
+        ''
+      ).trim()
       enqueue({
-        error: new Error('Codex app-server turn failed'),
+        error: new Error(
+          errorMessage
+            ? `Codex app-server turn failed: ${errorMessage}`
+            : 'Codex app-server turn failed'
+        ),
         type: 'error'
       })
     }

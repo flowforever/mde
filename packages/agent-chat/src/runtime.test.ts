@@ -579,9 +579,11 @@ describe('createAgentChatRuntime', () => {
     ).toBe(false)
   })
 
-  it('marks the session failed when the engine send rejects', async () => {
+  it('marks the session failed with a safe turn failure reason when the engine send rejects', async () => {
     const adapter = createRecordingAdapter({
-      sendRejects: new Error('native failure')
+      sendRejects: new Error(
+        'Codex app-server turn failed: Codex session expired token=abc123. Run codex login status.'
+      )
     })
     const runtime = createAgentChatRuntime({
       adapters: [adapter],
@@ -608,12 +610,16 @@ describe('createAgentChatRuntime', () => {
         sessionId: session.sessionId,
         workspaceRoot: '/workspace'
       })
-    ).rejects.toThrow('native failure')
+    ).rejects.toThrow('Codex app-server turn failed')
 
     expect(events).toMatchObject([
       {
         diagnostic: {
-          code: 'turn-failed'
+          code: 'turn-failed',
+          details:
+            'Codex app-server turn failed: Codex session expired token=abc123. Run codex login status.',
+          message:
+            'Codex session expired token=[redacted]. Run codex login status.'
         },
         session: {
           sessionId: session.sessionId,

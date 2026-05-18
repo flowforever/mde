@@ -156,6 +156,18 @@ export interface CodexJsonRpcResponse<T> {
   readonly result?: T
 }
 
+export interface CodexErrorNotificationParams {
+  readonly error?: {
+    readonly additionalDetails?: string | null
+    readonly codexErrorInfo?: unknown
+    readonly message?: string
+  }
+  readonly message?: string
+  readonly threadId?: string
+  readonly turnId?: string
+  readonly willRetry?: boolean
+}
+
 export type CodexServerNotification =
   | {
       readonly method: 'thread/started'
@@ -213,5 +225,5 @@ export type CodexServerNotification =
     }
   | {
       readonly method: 'error'
-      readonly params: { readonly message?: string }
+      readonly params: CodexErrorNotificationParams
     }

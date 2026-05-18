@@ -560,6 +560,55 @@ describe('AgentChatPanel', () => {
     )
   })
 
+  it('keeps a runtime turn failure reason when send rejection follows the failed event', async () => {
+    let rejectSend: ((error: Error) => void) | undefined
+    const { api: baseApi, emit, session } = createAgentChatApi()
+    const api = {
+      ...baseApi,
+      sendMessage: vi.fn<AgentChatApi['sendMessage']>(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectSend = reject
+          })
+      )
+    } satisfies AgentChatApi
+
+    renderPanel(api)
+    fireEvent.click(await screen.findByRole('button', { name: 'New session' }))
+    fireEvent.change(screen.getByLabelText('Message Agent Chat'), {
+      target: { value: 'What changed?' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(api.sendMessage).toHaveBeenCalled()
+    })
+    act(() => {
+      emit({
+        diagnostic: {
+          code: 'turn-failed',
+          details: 'Raw adapter failure with private details',
+          message: 'Codex session expired. Run codex login status.',
+          recoverable: true
+        },
+        session: {
+          ...session,
+          state: 'failed'
+        },
+        type: 'session-failed'
+      })
+    })
+    await act(async () => {
+      rejectSend?.(new Error('native failure'))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Agent Chat turn failed: Codex session expired. Run codex login status.'
+    )
+    expect(screen.getByRole('alert')).not.toHaveTextContent('private details')
+  })
+
   it('shows a specific turn failure diagnostic for failed session events', async () => {
     const { api, emit, session } = createAgentChatApi()
 
@@ -570,7 +619,8 @@ describe('AgentChatPanel', () => {
       emit({
         diagnostic: {
           code: 'turn-failed',
-          message: 'Raw adapter failure with private details',
+          details: 'Raw adapter failure with private details',
+          message: 'Codex session expired. Run codex login status.',
           recoverable: true
         },
         session: {
@@ -582,7 +632,7 @@ describe('AgentChatPanel', () => {
     })
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Agent Chat turn failed. Check Codex and try again.'
+      'Agent Chat turn failed: Codex session expired. Run codex login status.'
     )
     expect(screen.getByRole('alert')).not.toHaveTextContent('private details')
   })
