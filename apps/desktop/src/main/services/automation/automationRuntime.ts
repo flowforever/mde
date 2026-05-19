@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { realpath, stat } from 'node:fs/promises'
+import { isAbsolute, win32 } from 'node:path'
 
 import { normalizeAutomationDiscoveredTaskSources } from '@mde/automation-flow'
 import type {
@@ -145,11 +147,11 @@ const createDefaultIdFactory = (): ((prefix: string) => string) => {
   }
 }
 
-const getWorkspaceRoot = (
+const getRequestedExecutionRoot = (
   inputWorkspaceRoot: string | undefined,
   candidate: AutomationFlowTaskCandidate
 ): string | undefined =>
-  inputWorkspaceRoot ?? candidate.sourcePath
+  candidate.executionRoot ?? inputWorkspaceRoot
 
 const getWorkspaceScope = (
   workspaceRoot: string | undefined,
@@ -158,6 +160,101 @@ const getWorkspaceScope = (
   workspaceRoot === undefined
     ? `source:${candidate.sourceItemId}`
     : `workspace:${workspaceRoot}`
+
+const hasControlCharacters = (value: string): boolean =>
+  Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+
+    return codePoint <= 0x1f || codePoint === 0x7f
+  })
+
+const hasUriScheme = (value: string): boolean =>
+  !win32.isAbsolute(value) && /^[a-z][a-z0-9+.-]*:/iu.test(value)
+
+const hasTraversalSegment = (value: string): boolean =>
+  value.split(/[\\/]+/u).includes('..')
+
+const isAbsoluteLocalPath = (value: string): boolean =>
+  isAbsolute(value) || win32.isAbsolute(value)
+
+export class AutomationExecutionRootError extends Error {
+  readonly code = 'automationRun.invalidExecutionRoot'
+  readonly executionRoot: string
+  readonly reason: string
+  readonly taskTitle: string
+
+  constructor({
+    executionRoot,
+    reason,
+    taskTitle
+  }: {
+    readonly executionRoot: string
+    readonly reason: string
+    readonly taskTitle: string
+  }) {
+    super(
+      `Task "${taskTitle}" requested executionRoot "${executionRoot}", but ${reason}.`
+    )
+    this.name = 'AutomationExecutionRootError'
+    this.executionRoot = executionRoot
+    this.reason = reason
+    this.taskTitle = taskTitle
+  }
+}
+
+const resolveEffectiveExecutionRoot = async ({
+  candidate,
+  inputWorkspaceRoot
+}: {
+  readonly candidate: AutomationFlowTaskCandidate
+  readonly inputWorkspaceRoot?: string
+}): Promise<string | undefined> => {
+  const executionRoot = getRequestedExecutionRoot(inputWorkspaceRoot, candidate)
+
+  if (executionRoot === undefined) {
+    return undefined
+  }
+
+  if (executionRoot.trim().length === 0 || executionRoot.trim() !== executionRoot) {
+    throw new AutomationExecutionRootError({
+      executionRoot,
+      reason: 'the path is empty or malformed',
+      taskTitle: candidate.title
+    })
+  }
+
+  if (
+    hasControlCharacters(executionRoot) ||
+    hasUriScheme(executionRoot) ||
+    hasTraversalSegment(executionRoot) ||
+    !isAbsoluteLocalPath(executionRoot)
+  ) {
+    throw new AutomationExecutionRootError({
+      executionRoot,
+      reason: 'the path is not a valid absolute local path',
+      taskTitle: candidate.title
+    })
+  }
+
+  const canonicalExecutionRoot = await realpath(executionRoot).catch(() => null)
+  const executionRootStats =
+    canonicalExecutionRoot === null
+      ? null
+      : await stat(canonicalExecutionRoot).catch(() => null)
+
+  if (
+    canonicalExecutionRoot === null ||
+    executionRootStats?.isDirectory() !== true
+  ) {
+    throw new AutomationExecutionRootError({
+      executionRoot,
+      reason: 'the path is not an existing directory',
+      taskTitle: candidate.title
+    })
+  }
+
+  return canonicalExecutionRoot
+}
 
 const createDiscoveryRunLockKey = ({
   automationFlow,
@@ -218,6 +315,9 @@ const createSourceSnapshotFromCandidate = (
       : {}),
     discoveredAt: new Date(0).toISOString(),
     ...(candidate.engine !== undefined ? { engine: candidate.engine } : {}),
+    ...(candidate.executionRoot !== undefined
+      ? { executionRoot: candidate.executionRoot }
+      : {}),
     ...(candidate.externalId !== undefined ? { externalId: candidate.externalId } : {}),
     ...(candidate.priority !== undefined ? { priority: candidate.priority } : {}),
     ...(candidate.provider !== undefined ? { provider: candidate.provider } : {}),
@@ -235,6 +335,34 @@ const createSourceSnapshotFromCandidate = (
     title: candidate.title,
     ...(candidate.workspaceId !== undefined ? { workspaceId: candidate.workspaceId } : {})
   })
+
+const normalizeTaskSourceExecutionRoot = ({
+  executionRoot,
+  taskSource
+}: {
+  readonly executionRoot?: string
+  readonly taskSource: AutomationDiscoveredTaskSource
+}): AutomationDiscoveredTaskSource =>
+  taskSource.executionRoot === undefined || executionRoot === undefined
+    ? taskSource
+    : Object.freeze({
+        ...taskSource,
+        executionRoot
+      })
+
+const normalizeCandidateExecutionRoot = ({
+  candidate,
+  executionRoot
+}: {
+  readonly candidate: AutomationFlowTaskCandidate
+  readonly executionRoot?: string
+}): AutomationFlowTaskCandidate =>
+  candidate.executionRoot === undefined || executionRoot === undefined
+    ? candidate
+    : Object.freeze({
+        ...candidate,
+        executionRoot
+      })
 
 const normalizeDiscoveredSourcesForOwner = ({
   automationFlow,
@@ -378,6 +506,9 @@ export const createAutomationRuntime = ({
         event.title !== undefined
       ) {
         await store.createReport({
+          ...(event.evidencePath !== undefined
+            ? { evidencePath: event.evidencePath }
+            : {}),
           outcome: event.outcome,
           reportId: createId('report'),
           runId,
@@ -495,6 +626,9 @@ export const createAutomationRuntime = ({
         runKind: existingRun.runKind,
         ...(existingRun.taskSourceSnapshot !== undefined
           ? { taskSource: existingRun.taskSourceSnapshot }
+          : {}),
+        ...(existingRun.executionRoot !== undefined
+          ? { executionRoot: existingRun.executionRoot }
           : {}),
         workspaceRoot: existingRun.workspaceRoot
       })
@@ -676,9 +810,16 @@ export const createAutomationRuntime = ({
         throw new Error('Automation task cannot start without a selected executor.')
       }
 
-      const resolvedWorkspaceRoot = getWorkspaceRoot(workspaceRoot, candidate)
+      const resolvedWorkspaceRoot = await resolveEffectiveExecutionRoot({
+        candidate,
+        inputWorkspaceRoot: workspaceRoot
+      })
+      const resolvedCandidate = normalizeCandidateExecutionRoot({
+        candidate,
+        executionRoot: resolvedWorkspaceRoot
+      })
       const automationFlowOwnerKey =
-        candidate.automationFlowOwnerKey ??
+        resolvedCandidate.automationFlowOwnerKey ??
         createAutomationFlowOwnerKey({
           automationFlow,
           workspaceRoot: resolvedWorkspaceRoot
@@ -687,18 +828,18 @@ export const createAutomationRuntime = ({
         executorSnapshot.executorSnapshotId ?? executorSnapshot.executorId
       const selectedTaskDataSnapshotId =
         taskSource?.taskDataSnapshotId ??
-        candidate.taskDataSnapshotId ??
-        candidate.sourceSnapshotHash ??
-        candidate.sourceItemId
+        resolvedCandidate.taskDataSnapshotId ??
+        resolvedCandidate.sourceSnapshotHash ??
+        resolvedCandidate.sourceItemId
       const runLockKey = createAutomationRunLockKey({
         automationFlowId: automationFlow.id,
         automationFlowOwnerKey,
         executorSnapshotId: selectedExecutorSnapshotId,
         profileId,
-        sourceItemId: candidate.sourceItemId,
+        sourceItemId: resolvedCandidate.sourceItemId,
         taskDataSnapshotId: selectedTaskDataSnapshotId,
-        taskId: candidate.taskId,
-        workspaceScope: getWorkspaceScope(resolvedWorkspaceRoot, candidate)
+        taskId: resolvedCandidate.taskId,
+        workspaceScope: getWorkspaceScope(resolvedWorkspaceRoot, resolvedCandidate)
       })
 
       return runWithStartLock(runLockKey, async () => {
@@ -707,7 +848,7 @@ export const createAutomationRuntime = ({
         if (activeRun !== null) {
           return Object.freeze({
             adapterCapabilityReport: await adapterRegistry.probe(
-              candidate.engine,
+              resolvedCandidate.engine,
               {
                 workspaceRoot: resolvedWorkspaceRoot
               }
@@ -721,7 +862,7 @@ export const createAutomationRuntime = ({
         }
 
         const capabilityReport = await adapterRegistry.assertCanStartRun(
-          candidate.engine,
+          resolvedCandidate.engine,
           {
             workspaceRoot: resolvedWorkspaceRoot
           }
@@ -730,8 +871,10 @@ export const createAutomationRuntime = ({
         const automationFlowSnapshotId = createId('snapshot')
         const adapterSessionId = createId('adapter-session')
         const runtimeToken = createRuntimeToken()
-        const resolvedTaskSource =
-          taskSource ?? createSourceSnapshotFromCandidate(candidate)
+        const resolvedTaskSource = normalizeTaskSourceExecutionRoot({
+          executionRoot: resolvedWorkspaceRoot,
+          taskSource: taskSource ?? createSourceSnapshotFromCandidate(resolvedCandidate)
+        })
         const promptBundle = createAutomationPromptBundle({
           automationFlow,
           automationFlowSnapshotId,
@@ -739,6 +882,9 @@ export const createAutomationRuntime = ({
           runId,
           runKind: 'task',
           taskSource: resolvedTaskSource,
+          ...(resolvedWorkspaceRoot !== undefined
+            ? { executionRoot: resolvedWorkspaceRoot }
+            : {}),
           workspaceRoot: resolvedWorkspaceRoot
         })
 
@@ -749,7 +895,10 @@ export const createAutomationRuntime = ({
           automationFlowOwnerKey,
           automationFlowSnapshot: automationFlow,
           automationFlowSnapshotId,
-          engine: candidate.engine,
+          engine: resolvedCandidate.engine,
+          ...(resolvedWorkspaceRoot !== undefined
+            ? { executionRoot: resolvedWorkspaceRoot }
+            : {}),
           promptBundleMetadata: promptBundle.metadata,
           runId,
           runKind: 'task',
@@ -762,36 +911,36 @@ export const createAutomationRuntime = ({
                   : {})
               }
             : {}),
-          sourceItemId: candidate.sourceItemId,
-          ...(candidate.sourcePath !== undefined
-            ? { sourcePath: candidate.sourcePath }
+          sourceItemId: resolvedCandidate.sourceItemId,
+          ...(resolvedCandidate.sourcePath !== undefined
+            ? { sourcePath: resolvedCandidate.sourcePath }
             : {}),
           sourceSnapshotHash: resolvedTaskSource.sourceSnapshotHash,
           state: 'starting',
-          taskId: candidate.taskId,
-          ...(candidate.taskDataId !== undefined
-            ? { taskDataId: candidate.taskDataId }
+          taskId: resolvedCandidate.taskId,
+          ...(resolvedCandidate.taskDataId !== undefined
+            ? { taskDataId: resolvedCandidate.taskDataId }
             : {}),
-          ...(candidate.taskDataSnapshotId !== undefined
-            ? { taskDataSnapshotId: candidate.taskDataSnapshotId }
+          ...(resolvedCandidate.taskDataSnapshotId !== undefined
+            ? { taskDataSnapshotId: resolvedCandidate.taskDataSnapshotId }
             : {}),
           taskSourceSnapshot: resolvedTaskSource,
-          title: candidate.title,
+          title: resolvedCandidate.title,
           ...(resolvedWorkspaceRoot !== undefined
             ? { workspaceRoot: resolvedWorkspaceRoot }
             : {})
         })
 
         if (
-          candidate.sourcePath !== undefined &&
+          resolvedCandidate.sourcePath !== undefined &&
           resolvedWorkspaceRoot !== undefined
         ) {
           runtimeBridge.registerRun({
             automationFlowSnapshotId,
             runId,
-            sourceItemId: candidate.sourceItemId,
-            sourcePath: candidate.sourcePath,
-            taskId: candidate.taskId,
+            sourceItemId: resolvedCandidate.sourceItemId,
+            sourcePath: resolvedCandidate.sourcePath,
+            taskId: resolvedCandidate.taskId,
             token: runtimeToken,
             workspaceRoot: resolvedWorkspaceRoot
           })
@@ -801,7 +950,7 @@ export const createAutomationRuntime = ({
           const decision = await store.markNeedsMe(runId, {
             decisionId: createId('decision'),
             prompt: automationFlow.sections.acceptanceStandard,
-            taskId: candidate.taskId,
+            taskId: resolvedCandidate.taskId,
             type: 'approval'
           })
 
@@ -815,11 +964,11 @@ export const createAutomationRuntime = ({
           })
         }
 
-        const adapterResult = await adapterRegistry.startRun(candidate.engine, {
+        const adapterResult = await adapterRegistry.startRun(resolvedCandidate.engine, {
           automationFlow,
           automationFlowOwnerKey,
           automationFlowSnapshotId,
-          candidate,
+          candidate: resolvedCandidate,
           preferredAdapterSessionId: adapterSessionId,
           promptBundle: promptBundle.prompt,
           runId,
@@ -831,7 +980,7 @@ export const createAutomationRuntime = ({
         const decision = await persistTaskAdapterEvents({
           events: adapterResult.events,
           runId,
-          taskId: candidate.taskId
+          taskId: resolvedCandidate.taskId
         })
 
         const state = getStateAfterAdapterEvents(adapterResult.events)

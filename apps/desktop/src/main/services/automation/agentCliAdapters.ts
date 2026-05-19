@@ -57,6 +57,7 @@ export type AgentCliNormalizedEvent =
       readonly type: 'discovered-task-sources'
     }
   | {
+      readonly evidencePath?: string
       readonly outcome: 'blocked' | 'cancelled' | 'failed' | 'succeeded'
       readonly summary?: string
       readonly title: string

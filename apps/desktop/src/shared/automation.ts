@@ -22,6 +22,7 @@ export interface AutomationTaskCard {
   readonly bucket: AutomationTaskBucket
   readonly eligibleExecutors?: readonly AutomationTaskExecutorSummary[]
   readonly engine?: AgentEngineId
+  readonly executionRoot?: string
   readonly executorSnapshotId?: string
   readonly latestReportId?: string
   readonly primaryExecutor?: AutomationTaskExecutorSummary
@@ -32,6 +33,7 @@ export interface AutomationTaskCard {
   readonly sourceType?: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly taskId: string
+  readonly taskKey?: string
   readonly taskDataId?: string
   readonly taskDataSnapshotId?: string
   readonly title: string
@@ -56,6 +58,7 @@ export interface AutomationDiagnostic {
   readonly automationFlowId?: string
   readonly code: string
   readonly diagnosticId: string
+  readonly executionRoot?: string
   readonly message: string
   readonly messageKey?: string
   readonly missingField?: string
@@ -63,7 +66,9 @@ export interface AutomationDiagnostic {
   readonly sectionName?: string
   readonly sourceFile?: string
   readonly taskId?: string
+  readonly taskTitle?: string
   readonly technicalMessage?: string
+  readonly userSafeReason?: string
 }
 
 export interface AutomationDecision {
@@ -81,11 +86,21 @@ export interface AutomationDecision {
 
 export interface AutomationReportSummary {
   readonly completedAt: string
+  readonly evidencePath?: string
   readonly outcome: 'blocked' | 'cancelled' | 'failed' | 'succeeded'
   readonly reportId: string
   readonly runId?: string
   readonly summary?: string
   readonly taskId: string
+  readonly title: string
+}
+
+export interface AutomationRunReportReference {
+  readonly completedAt: string
+  readonly evidencePath?: string
+  readonly outcome: AutomationReportSummary['outcome']
+  readonly reportId: string
+  readonly summary?: string
   readonly title: string
 }
 
@@ -97,6 +112,7 @@ export type AutomationRunAction =
   | 'view-evidence'
 
 export interface AutomationRunDiscoverySourceSummary {
+  readonly executionRoot?: string
   readonly relativePath?: string
   readonly sourceItemId: string
   readonly sourcePath?: string
@@ -135,9 +151,11 @@ export interface AutomationRunSummary {
   readonly availableActions?: readonly AutomationRunAction[]
   readonly discoveryResult?: AutomationRunDiscoveryResultSummary
   readonly engine: AgentEngineId
+  readonly executionRoot?: string
   readonly executorId?: string
   readonly executorSnapshotId?: string
   readonly processSteps?: readonly AutomationRunProcessStep[]
+  readonly reportReference?: AutomationRunReportReference
   readonly runId: string
   readonly runKind: AutomationRunKind
   readonly sourceItemId?: string
@@ -146,6 +164,7 @@ export interface AutomationRunSummary {
   readonly startedAt: string
   readonly state: AutomationRunState
   readonly taskId: string
+  readonly taskKey?: string
   readonly taskDataId?: string
   readonly taskDataSnapshotId?: string
   readonly title?: string
@@ -255,6 +274,8 @@ export interface AutomationProjection {
 
 export interface AutomationGetProjectionRequest {
   readonly filters?: AutomationCenterFilters
+  readonly selectedTaskId?: string
+  readonly selectedTaskKey?: string
   readonly workspaceRoot?: string
   readonly workspaceRoots?: readonly string[]
 }
@@ -269,6 +290,7 @@ export interface AutomationStartRunCommand {
   readonly taskDataId: string
   readonly taskDataSnapshotId: string
   readonly taskId: string
+  readonly taskKey?: string
   readonly type: 'start-run'
 }
 

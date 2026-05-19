@@ -1,3 +1,5 @@
+import { normalize, parse, win32 } from 'node:path'
+
 import type {
   AutomationFlowSourceType,
   AutomationDiscoveredTaskSource,
@@ -16,6 +18,7 @@ export interface AutomationDiscoverySourceInput {
   readonly automationFlowOwnerKey?: string
   readonly contentSnapshot?: string
   readonly engine?: AutomationDiscoveredTaskSource['engine']
+  readonly executionRoot?: string
   readonly externalId?: string
   readonly priority?: number
   readonly provider?: string
@@ -85,9 +88,40 @@ const hasControlCharacters = (value: string): boolean =>
 
 const isAbsoluteLikePath = (value: string): boolean =>
   value.startsWith('/') ||
-  value.startsWith('~') ||
   value.startsWith('\\\\') ||
   /^[A-Za-z]:[\\/]/u.test(value)
+
+const stripTrailingSeparatorsUnlessRoot = (
+  normalized: string,
+  root: string
+): string => {
+  if (normalized === root) {
+    return normalized
+  }
+
+  const withoutTrailingSeparator = normalized.replace(/[\\/]+$/u, '')
+
+  return withoutTrailingSeparator.length === 0 ? normalized : withoutTrailingSeparator
+}
+
+const normalizeExecutionRoot = (value: string | undefined): string | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value.startsWith('\\\\') || /^[A-Za-z]:[\\/]/u.test(value)) {
+    const normalized = win32.normalize(value)
+
+    return stripTrailingSeparatorsUnlessRoot(
+      normalized,
+      win32.parse(normalized).root
+    )
+  }
+
+  const normalized = normalize(value)
+
+  return stripTrailingSeparatorsUnlessRoot(normalized, parse(normalized).root)
+}
 
 const hasTraversalSegment = (value: string): boolean =>
   value.split(/[\\/]+/u).includes('..')
@@ -128,6 +162,15 @@ const isSafeSourceUri = (value: string | undefined): boolean => {
   }
 }
 
+const isSafeExecutionRoot = (value: string | undefined): boolean =>
+  value === undefined ||
+  (value.trim().length > 0 &&
+    value.trim() === value &&
+    !hasControlCharacters(value) &&
+    isAbsoluteLikePath(value) &&
+    !hasUriScheme(value) &&
+    !hasTraversalSegment(value))
+
 const isSafeDiscoveryString = (value: string): boolean =>
   value.trim().length > 0 && !hasControlCharacters(value)
 
@@ -140,6 +183,7 @@ export const isValidAutomationDiscoverySourceInput = (
     isSafeDiscoveryString(source.automationFlowOwnerKey)) &&
   AUTOMATION_SOURCE_TYPES.has(source.sourceType) &&
   (source.workspaceId === undefined || isSafeDiscoveryString(source.workspaceId)) &&
+  isSafeExecutionRoot(source.executionRoot) &&
   isSafeRelativePath(source.relativePath) &&
   isSafeSourcePath(source.sourcePath) &&
   isSafeSourceUri(source.sourceUri)
@@ -155,10 +199,12 @@ export const normalizeAutomationDiscoveredTaskSources = ({
         return []
       }
 
+      const executionRoot = normalizeExecutionRoot(source.executionRoot)
       const hashInput = {
         automationFlowId: automationFlow.id,
         automationFlowOwnerKey: source.automationFlowOwnerKey,
         contentSnapshot: source.contentSnapshot,
+        executionRoot,
         externalId: source.externalId,
         provider: source.provider,
         relativePath: source.relativePath,
@@ -200,6 +246,9 @@ export const normalizeAutomationDiscoveredTaskSources = ({
           : {}),
         discoveredAt,
         ...(source.engine !== undefined ? { engine: source.engine } : {}),
+        ...(executionRoot !== undefined
+          ? { executionRoot }
+          : {}),
         ...(source.externalId !== undefined ? { externalId: source.externalId } : {}),
         ...(source.priority !== undefined ? { priority: source.priority } : {}),
         ...(source.provider !== undefined ? { provider: source.provider } : {}),
@@ -253,6 +302,7 @@ export const createAutomationTaskCandidateFromDiscoveredSource = (
     createAutomationTaskDataSnapshotId({
       normalizedTaskPayloadHash: createStableHash({
         priority: source.priority,
+        executionRoot: source.executionRoot,
         relativePath: source.relativePath,
         requiredExecutorId: source.requiredExecutorId,
         requiredExecutorRef: source.requiredExecutorRef,
@@ -279,6 +329,9 @@ export const createAutomationTaskCandidateFromDiscoveredSource = (
       : {}),
     engine,
     ...(source.externalId !== undefined ? { externalId: source.externalId } : {}),
+    ...(source.executionRoot !== undefined
+      ? { executionRoot: source.executionRoot }
+      : {}),
     priority: source.priority,
     ...(source.provider !== undefined ? { provider: source.provider } : {}),
     relativePath: source.relativePath,

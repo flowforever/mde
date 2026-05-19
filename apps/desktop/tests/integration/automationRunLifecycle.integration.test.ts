@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,16 +7,19 @@ import type {
   AutomationFlowExecutorRef,
   AutomationFlowTaskCandidate
 } from '@mde/automation-flow'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createAutomationAdapterRegistry } from '../../src/main/services/automation/automationAdapterRegistry'
-import { createFakeAgentCliAdapter } from '../../src/main/services/automation/agentCliAdapters'
+import {
+  createFakeAgentCliAdapter,
+  type AgentCliAdapter
+} from '../../src/main/services/automation/agentCliAdapters'
 import { createAutomationRuntime } from '../../src/main/services/automation/automationRuntime'
 import { createAutomationStore } from '../../src/main/services/automation/automationStore'
 import { createMdeRuntimeBridge } from '../../src/main/services/automation/mdeRuntimeBridge'
 
-const createTempRoot = (prefix: string): Promise<string> =>
-  mkdtemp(join(tmpdir(), prefix))
+const createTempRoot = async (prefix: string): Promise<string> =>
+  realpath(await mkdtemp(join(tmpdir(), prefix)))
 
 const createFlow = (): AutomationFlow => ({
   allowedEngines: ['codex'],
@@ -79,6 +82,73 @@ const executorSnapshot: AutomationFlowExecutorRef = Object.freeze({
 })
 
 describe('automation run lifecycle integration', () => {
+  it('passes a task execution root through adapter start, prompt metadata, store, and runtime bridge', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const executionRoot = await createTempRoot('mde-execution-root-')
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const startRun = vi.fn(fakeAdapter.startRun)
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      startRun
+    })
+    const bridge = createMdeRuntimeBridge({ appDataPath, now: () => 1_000 })
+    const runtimeCredential = 'runtime-credential-execution-root'
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      createId: (prefix) => `${prefix}-execution-root`,
+      createRuntimeToken: () => runtimeCredential,
+      runtimeBridge: bridge,
+      store
+    })
+
+    await store.initialize()
+
+    const started = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: {
+        ...createCandidate(workspaceRoot),
+        executionRoot
+      },
+      executorSnapshot,
+      workspaceRoot
+    })
+
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: executionRoot
+      })
+    )
+    expect(startRun.mock.calls[0]?.[0].promptBundle).toContain(
+      `"executionRoot": "${executionRoot}"`
+    )
+    await expect(store.listRuns()).resolves.toMatchObject([
+      {
+        executionRoot,
+        promptBundleMetadata: {
+          executionRoot
+        },
+        runId: started.runId,
+        workspaceRoot: executionRoot
+      }
+    ])
+    await expect(
+      bridge.handleRuntimeToolCall({
+        automationFlowSnapshotId: 'snapshot-execution-root',
+        evidencePath: executionRoot,
+        runId: started.runId,
+        sourceItemId: 'source-a',
+        taskId: 'task-a',
+        token: runtimeCredential,
+        toolName: 'report_phase_update'
+      })
+    ).resolves.toMatchObject({ accepted: true })
+  })
+
   it('starts, resumes, and completes a run through persisted store state', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
     const workspaceRoot = await createTempRoot('mde-workspace-')

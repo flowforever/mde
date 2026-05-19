@@ -143,10 +143,36 @@ const getAutomationCommandFailureMessage = (
   diagnostic: AutomationDiagnostic | undefined,
   text: AppText,
   fallbackKey: AppTextKey,
-): string =>
-  diagnostic?.messageKey !== undefined && isAppTextKey(diagnostic.messageKey)
+): string => {
+  if (
+    diagnostic?.code === "automationRun.invalidExecutionRoot" &&
+    diagnostic.executionRoot !== undefined &&
+    diagnostic.taskTitle !== undefined &&
+    diagnostic.userSafeReason !== undefined
+  ) {
+    const reasonKey =
+      diagnostic.userSafeReason === "the path is empty or malformed"
+        ? "automation.executionRootReasonMalformed"
+        : diagnostic.userSafeReason === "the path is not a valid absolute local path"
+          ? "automation.executionRootReasonInvalidAbsolutePath"
+          : diagnostic.userSafeReason === "the path is not an existing directory"
+            ? "automation.executionRootReasonMissingDirectory"
+            : undefined;
+
+    return text("automation.executionRootDiagnosticDetail", {
+      reason:
+        reasonKey === undefined
+          ? text("automation.executionRootReasonInvalidAbsolutePath")
+          : text(reasonKey),
+      root: diagnostic.executionRoot,
+      task: diagnostic.taskTitle,
+    });
+  }
+
+  return diagnostic?.messageKey !== undefined && isAppTextKey(diagnostic.messageKey)
     ? text(diagnostic.messageKey)
     : text(fallbackKey);
+};
 
 export const AutomationCenterWindow = ({
   automationApi,
@@ -162,7 +188,7 @@ export const AutomationCenterWindow = ({
         rootPath: workspace.rootPath,
       })),
   );
-  const [selectedTaskId, setSelectedTaskId] = useState<
+  const [selectedTaskKey, setSelectedTaskKey] = useState<
     string | null | undefined
   >(undefined);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">(
@@ -352,7 +378,7 @@ export const AutomationCenterWindow = ({
   const viewModel =
     projection === null
       ? null
-      : createAutomationCenterViewModel(projection, selectedTaskId);
+      : createAutomationCenterViewModel(projection, selectedTaskKey);
   const currentWorkspaceRoot = projection?.workspaceRoot;
   const effectiveLoadState =
     resolvedAutomationApi === undefined ? "error" : loadState;
@@ -367,6 +393,7 @@ export const AutomationCenterWindow = ({
       readonly taskDataId: string
       readonly taskDataSnapshotId: string
       readonly taskId: string
+      readonly taskKey?: string
     }) => {
       if (resolvedAutomationApi === undefined) {
         return;
@@ -450,7 +477,7 @@ export const AutomationCenterWindow = ({
 
       applyLocalFilters(nextFilters);
       await resolvedAutomationApi.updateFilters({ filters: nextFilters });
-      setSelectedTaskId(undefined);
+      setSelectedTaskKey(undefined);
       await refreshProjection();
     },
     [applyLocalFilters, refreshProjection, resolvedAutomationApi],
@@ -631,20 +658,20 @@ export const AutomationCenterWindow = ({
                 onOpenDiagnosticsTarget={openDiagnosticsTarget}
                 onSelectTask={(task) => {
                   setStatusMessage(null);
-                  setSelectedTaskId(task.taskId);
+                  setSelectedTaskKey(task.taskKey ?? task.taskId);
                 }}
-                selectedTaskId={viewModel.selectedTask?.taskId}
+                selectedTaskKey={
+                  viewModel.selectedTask?.taskKey ?? viewModel.selectedTask?.taskId
+                }
                 text={text}
                 viewModel={viewModel}
               />
               <QuietFlowline
                 onClearSelection={() => {
                   setStatusMessage(null);
-                  setSelectedTaskId(null);
+                  setSelectedTaskKey(null);
                 }}
-                onStartTask={(taskId, executor) => {
-                  const task = viewModel.selectedTask;
-
+                onStartTask={(task, executor) => {
                   if (
                     task?.taskDataId !== undefined &&
                     task.taskDataSnapshotId !== undefined &&
@@ -657,7 +684,10 @@ export const AutomationCenterWindow = ({
                         : {}),
                       taskDataId: task.taskDataId,
                       taskDataSnapshotId: task.taskDataSnapshotId,
-                      taskId,
+                      taskId: task.taskId,
+                      ...(task.taskKey !== undefined
+                        ? { taskKey: task.taskKey }
+                        : {}),
                     });
                   }
                 }}

@@ -32,6 +32,7 @@ interface AutomationStructuredEnvelope {
   readonly discoveredTaskSources?: readonly {
     readonly contentSnapshot?: string
     readonly engine?: AgentEngineId
+    readonly executionRoot?: string
     readonly externalId?: string
     readonly priority?: number
     readonly provider?: string

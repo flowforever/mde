@@ -1,10 +1,11 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { dirname, isAbsolute, join, relative, resolve, win32 } from 'node:path'
 
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
 import {
   listBuiltInAutomationFlowTemplates,
+  createAutomationTaskProjectionKey,
   type AutomationDiscoveredTaskSource,
   type AutomationFlowDiagnostic,
   type AutomationFlowExecutorRef,
@@ -36,9 +37,11 @@ import type {
   AutomationLoadFlowDefinitionCommand,
   AutomationProjection,
   AutomationRenameFlowCommand,
+  AutomationReportSummary,
   AutomationRunAction,
   AutomationRunDiscoveryResultSummary,
   AutomationRunProcessStep,
+  AutomationRunReportReference,
   AutomationRunSummary,
   AutomationSaveFlowDefinitionCommand,
   AutomationSetFlowLifecycleCommand,
@@ -83,6 +86,7 @@ import type {
   AutomationTaskDataSnapshotRecord
 } from '../services/automation/automationStore'
 import {
+  AutomationExecutionRootError,
   AutomationRunCancellationError,
   type AutomationRuntime
 } from '../services/automation/automationRuntime'
@@ -135,6 +139,9 @@ const mapFlowDiagnostic = (
   Object.freeze({
     code: diagnostic.code,
     diagnosticId: `automation-flow:${diagnostic.code}:${diagnostic.sourceFile ?? 'inline'}`,
+    ...(diagnostic.executionRoot !== undefined
+      ? { executionRoot: diagnostic.executionRoot }
+      : {}),
     message: diagnostic.code,
     messageKey: diagnostic.messageKey,
     ...(diagnostic.missingField !== undefined
@@ -147,8 +154,15 @@ const mapFlowDiagnostic = (
     ...(diagnostic.sourceFile !== undefined
       ? { sourceFile: diagnostic.sourceFile }
       : {}),
+    ...(diagnostic.taskId !== undefined ? { taskId: diagnostic.taskId } : {}),
+    ...(diagnostic.taskTitle !== undefined
+      ? { taskTitle: diagnostic.taskTitle }
+      : {}),
     ...(diagnostic.technicalMessage !== undefined
       ? { technicalMessage: diagnostic.technicalMessage }
+      : {}),
+    ...(diagnostic.userSafeReason !== undefined
+      ? { userSafeReason: diagnostic.userSafeReason }
       : {})
   })
 
@@ -180,7 +194,17 @@ const mapAutomationRunStartError = (
   fallbackCode: string,
   fallbackTechnicalMessage: string
 ): AutomationDiagnostic =>
-  error instanceof AutomationAdapterCapabilityError
+  error instanceof AutomationExecutionRootError
+    ? Object.freeze({
+        ...createDiagnostic(
+          error.code,
+          error.message
+        ),
+        executionRoot: error.executionRoot,
+        taskTitle: error.taskTitle,
+        userSafeReason: error.reason
+      })
+    : error instanceof AutomationAdapterCapabilityError
     ? mapAutomationAdapterCapabilityError(error, fallbackCode)
     : createDiagnostic(
         fallbackCode,
@@ -307,6 +331,12 @@ const assertOptionalProjectionRequest = (
   return Object.freeze({
     ...(request.filters !== undefined
       ? { filters: assertProjectionFilters(request.filters) }
+      : {}),
+    ...(typeof request.selectedTaskId === 'string'
+      ? { selectedTaskId: request.selectedTaskId }
+      : {}),
+    ...(typeof request.selectedTaskKey === 'string'
+      ? { selectedTaskKey: request.selectedTaskKey }
       : {}),
     ...(typeof request.workspaceRoot === 'string'
       ? { workspaceRoot: request.workspaceRoot }
@@ -469,6 +499,9 @@ const assertStartRunRequest = (value: unknown): AutomationStartRunInput => {
       : {}),
     ...(typeof command.taskDataSnapshotId === 'string'
       ? { taskDataSnapshotId: command.taskDataSnapshotId }
+      : {}),
+    ...(typeof command.taskKey === 'string'
+      ? { taskKey: command.taskKey }
       : {}),
     taskId: assertString(command.taskId, 'Task id')
   }
@@ -733,6 +766,7 @@ const mapTask = (task: AutomationProjectedTask) =>
         }
       : {}),
     engine: task.engine,
+    ...(task.executionRoot !== undefined ? { executionRoot: task.executionRoot } : {}),
     executorSnapshotId: task.executorSnapshotId,
     latestReportId: task.latestReportId,
     ...(task.primaryExecutor !== undefined
@@ -760,6 +794,7 @@ const mapTask = (task: AutomationProjectedTask) =>
     sourceType: task.sourceType,
     sourceUri: task.sourceUri,
     taskId: task.taskId,
+    taskKey: task.taskKey,
     taskDataId: task.taskDataId,
     taskDataSnapshotId: task.taskDataSnapshotId,
     title: task.title,
@@ -770,7 +805,8 @@ const mapRunSummary = (
   run: AutomationStoredRun,
   availableActions: readonly AutomationRunAction[] = Object.freeze([]),
   discoveryResult?: AutomationRunDiscoveryResultSummary,
-  processSteps: readonly AutomationRunProcessStep[] = Object.freeze([])
+  processSteps: readonly AutomationRunProcessStep[] = Object.freeze([]),
+  reportReference?: AutomationRunReportReference
 ): AutomationRunSummary =>
   Object.freeze({
     ...(run.adapterSessionId !== undefined
@@ -789,11 +825,15 @@ const mapRunSummary = (
     availableActions: Object.freeze([...availableActions]),
     ...(discoveryResult !== undefined ? { discoveryResult } : {}),
     engine: run.engine,
+    ...(run.executionRoot !== undefined
+      ? { executionRoot: run.executionRoot }
+      : {}),
     ...(run.executorId !== undefined ? { executorId: run.executorId } : {}),
     ...(run.executorSnapshotId !== undefined
       ? { executorSnapshotId: run.executorSnapshotId }
       : {}),
     processSteps: Object.freeze([...processSteps]),
+    ...(reportReference !== undefined ? { reportReference } : {}),
     runId: run.runId,
     runKind: run.runKind,
     ...(run.sourceItemId !== undefined ? { sourceItemId: run.sourceItemId } : {}),
@@ -804,6 +844,18 @@ const mapRunSummary = (
     startedAt: run.startedAt,
     state: run.state,
     taskId: run.taskId,
+    ...(run.sourceItemId !== undefined
+      ? {
+          taskKey: createAutomationTaskProjectionKey({
+            automationFlowId: run.automationFlowId,
+            automationFlowOwnerKey: run.automationFlowOwnerKey,
+            executionRoot: run.executionRoot,
+            sourceItemId: run.sourceItemId,
+            taskId: run.taskId,
+            workspaceId: run.workspaceRoot
+          })
+        }
+      : {}),
     ...(run.taskDataId !== undefined ? { taskDataId: run.taskDataId } : {}),
     ...(run.taskDataSnapshotId !== undefined
       ? { taskDataSnapshotId: run.taskDataSnapshotId }
@@ -812,6 +864,36 @@ const mapRunSummary = (
     updatedAt: run.updatedAt,
     ...(run.workspaceRoot !== undefined ? { workspaceId: run.workspaceRoot } : {})
   })
+
+const mapRunReportReference = (
+  report: AutomationReportSummary | undefined
+): AutomationRunReportReference | undefined =>
+  report === undefined
+    ? undefined
+    : Object.freeze({
+        completedAt: report.completedAt,
+        ...(report.evidencePath !== undefined
+          ? { evidencePath: report.evidencePath }
+          : {}),
+        outcome: report.outcome,
+        reportId: report.reportId,
+        ...(report.summary !== undefined ? { summary: report.summary } : {}),
+        title: report.title
+      })
+
+const mapLatestReportByRunId = (
+  reports: readonly AutomationReportSummary[]
+): ReadonlyMap<string, AutomationReportSummary> => {
+  const reportByRunId = new Map<string, AutomationReportSummary>()
+
+  for (const report of reports) {
+    if (report.runId !== undefined) {
+      reportByRunId.set(report.runId, report)
+    }
+  }
+
+  return reportByRunId
+}
 
 const resolveRunActionMap = async (
   runs: readonly AutomationStoredRun[],
@@ -851,6 +933,9 @@ const mapDiscoveryResultByRunId = (
       Object.freeze({
         ...(source.relativePath !== undefined
           ? { relativePath: source.relativePath }
+          : {}),
+        ...(source.executionRoot !== undefined
+          ? { executionRoot: source.executionRoot }
           : {}),
         sourceItemId: source.sourceItemId,
         ...(source.sourcePath !== undefined ? { sourcePath: source.sourcePath } : {}),
@@ -1186,7 +1271,15 @@ const sourceMatchesCandidate = (
   candidate: AutomationFlowTaskCandidate
 ): boolean =>
   source.automationFlowId === candidate.automationFlowId &&
-  source.sourceItemId === candidate.sourceItemId
+  source.sourceItemId === candidate.sourceItemId &&
+  (candidate.executionRoot === undefined ||
+    source.executionRoot === candidate.executionRoot) &&
+  (candidate.taskDataSnapshotId === undefined ||
+    source.taskDataSnapshotId === undefined ||
+    source.taskDataSnapshotId === candidate.taskDataSnapshotId) &&
+  (candidate.sourceSnapshotHash === undefined ||
+    source.sourceSnapshotHash === undefined ||
+    source.sourceSnapshotHash === candidate.sourceSnapshotHash)
 
 const findTaskSource = (
   sources: readonly AutomationDiscoveredTaskSource[],
@@ -1218,12 +1311,151 @@ const findTaskSourceForStart = (
   candidate: AutomationFlowTaskCandidate,
   command: AutomationStartRunInput
 ): AutomationDiscoveredTaskSource | undefined =>
-  findTaskSource(sources, candidate) ??
   sources.find(
     (source) =>
       source.taskDataId === command.taskDataId &&
       source.taskDataSnapshotId === command.taskDataSnapshotId
+  ) ?? findTaskSource(sources, candidate)
+
+const createCandidateTaskKey = (
+  candidate: AutomationFlowTaskCandidate
+): string =>
+  createAutomationTaskProjectionKey({
+    automationFlowId: candidate.automationFlowId,
+    automationFlowOwnerKey: candidate.automationFlowOwnerKey,
+    executionRoot: candidate.executionRoot,
+    sourceItemId: candidate.sourceItemId,
+    taskId: candidate.taskId,
+    workspaceId: candidate.workspaceId
+  })
+
+const hasControlCharacters = (value: string): boolean =>
+  Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+
+    return codePoint <= 0x1f || codePoint === 0x7f
+  })
+
+const hasUriScheme = (value: string): boolean =>
+  !win32.isAbsolute(value) && /^[a-z][a-z0-9+.-]*:/iu.test(value)
+
+const hasTraversalSegment = (value: string): boolean =>
+  value.split(/[\\/]+/u).includes('..')
+
+const isAbsoluteLocalPath = (value: string): boolean =>
+  isAbsolute(value) || win32.isAbsolute(value)
+
+const createInvalidExecutionRootDiagnostic = ({
+  candidate,
+  reason
+}: {
+  readonly candidate: AutomationFlowTaskCandidate
+  readonly reason: string
+}): AutomationFlowDiagnostic =>
+  Object.freeze({
+    code: 'automationRun.invalidExecutionRoot',
+    executionRoot: candidate.executionRoot,
+    messageKey: 'automation.diagnostics.automationRun.invalidExecutionRoot',
+    severity: 'error',
+    taskId: candidate.taskId,
+    taskTitle: candidate.title,
+    technicalMessage: `Task "${candidate.title}" requested executionRoot "${candidate.executionRoot}", but ${reason}.`,
+    userSafeReason: reason
+  })
+
+const validateCandidateExecutionRoot = async (
+  candidate: AutomationFlowTaskCandidate
+): Promise<AutomationFlowDiagnostic | undefined> => {
+  const executionRoot = candidate.executionRoot
+
+  if (executionRoot === undefined) {
+    return undefined
+  }
+
+  if (executionRoot.trim().length === 0 || executionRoot.trim() !== executionRoot) {
+    return createInvalidExecutionRootDiagnostic({
+      candidate,
+      reason: 'the path is empty or malformed'
+    })
+  }
+
+  if (
+    hasControlCharacters(executionRoot) ||
+    hasUriScheme(executionRoot) ||
+    hasTraversalSegment(executionRoot) ||
+    !isAbsoluteLocalPath(executionRoot)
+  ) {
+    return createInvalidExecutionRootDiagnostic({
+      candidate,
+      reason: 'the path is not a valid absolute local path'
+    })
+  }
+
+  const canonicalExecutionRoot = await realpath(executionRoot).catch(() => null)
+  const executionRootStats =
+    canonicalExecutionRoot === null
+      ? null
+      : await stat(canonicalExecutionRoot).catch(() => null)
+
+  return canonicalExecutionRoot === null ||
+    executionRootStats?.isDirectory() !== true
+    ? createInvalidExecutionRootDiagnostic({
+        candidate,
+        reason: 'the path is not an existing directory'
+      })
+    : undefined
+}
+
+const appendTaskBlockingDiagnostics = <Task extends AutomationProjectedTask>(
+  tasks: readonly Task[],
+  diagnosticsByTaskKey: ReadonlyMap<string, AutomationFlowDiagnostic>
+): readonly Task[] =>
+  Object.freeze(
+    tasks.map((task) => {
+      const diagnostic = diagnosticsByTaskKey.get(task.taskKey)
+
+      return diagnostic === undefined
+        ? task
+        : Object.freeze({
+            ...task,
+            blockingDiagnostics: Object.freeze([
+              ...(task.blockingDiagnostics ?? []),
+              diagnostic
+            ])
+          })
+    })
   )
+
+const applyExecutionRootBlockingDiagnostics = (
+  projection: ReturnType<typeof buildAutomationIndex>['projection'],
+  diagnosticsByTaskKey: ReadonlyMap<string, AutomationFlowDiagnostic>
+): ReturnType<typeof buildAutomationIndex>['projection'] => {
+  if (diagnosticsByTaskKey.size === 0) {
+    return projection
+  }
+
+  return Object.freeze({
+    buckets: Object.freeze({
+      done: appendTaskBlockingDiagnostics(
+        projection.buckets.done,
+        diagnosticsByTaskKey
+      ),
+      needsMe: appendTaskBlockingDiagnostics(
+        projection.buckets.needsMe,
+        diagnosticsByTaskKey
+      ),
+      ready: appendTaskBlockingDiagnostics(
+        projection.buckets.ready,
+        diagnosticsByTaskKey
+      ),
+      running: appendTaskBlockingDiagnostics(
+        projection.buckets.running,
+        diagnosticsByTaskKey
+      )
+    }),
+    tasks: appendTaskBlockingDiagnostics(projection.tasks, diagnosticsByTaskKey)
+  })
+}
 
 const findStartTask = (
   projection: AutomationProjection,
@@ -1231,6 +1463,7 @@ const findStartTask = (
 ) =>
   projection.tasks.find(
     (task) =>
+      (command.taskKey === undefined || task.taskKey === command.taskKey) &&
       task.taskId === command.taskId &&
       (command.taskDataId === undefined ||
         task.taskDataId === command.taskDataId) &&
@@ -1244,6 +1477,8 @@ const findStartCandidate = (
 ): AutomationFlowTaskCandidate | undefined =>
   candidates.find(
     (candidate) =>
+      (command.taskKey === undefined ||
+        createCandidateTaskKey(candidate) === command.taskKey) &&
       candidate.taskId === command.taskId &&
       (command.taskDataId === undefined ||
         candidate.taskDataId === command.taskDataId) &&
@@ -1342,12 +1577,27 @@ const createReportOverlays = (
       }
 
       const sourceSnapshot = run.taskSourceSnapshot
+      const scopedWorkspaceId =
+        sourceSnapshot?.workspaceId ??
+        (run.workspaceRoot !== undefined &&
+        (run.automationFlowOwnerKey === undefined ||
+          getWorkspaceIdFromOwnerKey(run.automationFlowOwnerKey) !== undefined)
+          ? run.workspaceRoot
+          : undefined)
 
       return [
         Object.freeze({
           automationFlowId: run.automationFlowId,
+          ...(run.automationFlowOwnerKey !== undefined
+            ? { automationFlowOwnerKey: run.automationFlowOwnerKey }
+            : {}),
           completedAt: report.completedAt,
           engine: sourceSnapshot?.engine ?? run.engine,
+          ...(sourceSnapshot?.executionRoot !== undefined
+            ? { executionRoot: sourceSnapshot.executionRoot }
+            : run.executionRoot !== undefined
+              ? { executionRoot: run.executionRoot }
+              : {}),
           ...(sourceSnapshot?.priority !== undefined
             ? { priority: sourceSnapshot.priority }
             : {}),
@@ -1368,9 +1618,15 @@ const createReportOverlays = (
             ? { sourceUri: sourceSnapshot.sourceUri }
             : {}),
           taskId: report.taskId,
+          ...(run.taskDataId !== undefined
+            ? { taskDataId: run.taskDataId }
+            : {}),
+          ...(run.taskDataSnapshotId !== undefined
+            ? { taskDataSnapshotId: run.taskDataSnapshotId }
+            : {}),
           title: report.title,
-          ...(sourceSnapshot?.workspaceId !== undefined
-            ? { workspaceId: sourceSnapshot.workspaceId }
+          ...(scopedWorkspaceId !== undefined
+            ? { workspaceId: scopedWorkspaceId }
             : {})
         })
       ]
@@ -1388,6 +1644,12 @@ const createRunOverlays = (
         : [
             Object.freeze({
               automationFlowId: run.automationFlowId,
+              ...(run.automationFlowOwnerKey !== undefined
+                ? { automationFlowOwnerKey: run.automationFlowOwnerKey }
+                : {}),
+              ...(run.executionRoot !== undefined
+                ? { executionRoot: run.executionRoot }
+                : {}),
               ...(run.executorId !== undefined
                 ? { executorId: run.executorId }
                 : {}),
@@ -1404,6 +1666,9 @@ const createRunOverlays = (
                 : {}),
               ...(run.taskDataSnapshotId !== undefined
                 ? { taskDataSnapshotId: run.taskDataSnapshotId }
+                : {}),
+              ...(run.workspaceRoot !== undefined
+                ? { workspaceId: run.workspaceRoot }
                 : {})
             })
           ]
@@ -1706,10 +1971,31 @@ export const registerAutomationHandlers = ({
       reports: createReportOverlays(reports, runs),
       runs: createRunOverlays(runs)
     })
+    const executionRootDiagnosticEntries = (
+      await Promise.all(
+        index.candidates.map(async (candidate) =>
+          [createCandidateTaskKey(candidate), await validateCandidateExecutionRoot(candidate)] as const
+        )
+      )
+    ).filter(
+      (entry): entry is readonly [string, AutomationFlowDiagnostic] =>
+        entry[1] !== undefined
+    )
+    const executionRootDiagnostics = executionRootDiagnosticEntries.map(
+      ([, diagnostic]) => diagnostic
+    )
+    const executionRootDiagnosticsByTaskKey = new Map(
+      executionRootDiagnosticEntries
+    )
+    const signalStackProjection = applyExecutionRootBlockingDiagnostics(
+      index.projection,
+      executionRootDiagnosticsByTaskKey
+    )
     const diagnostics = Object.freeze([
       ...library.diagnostics.map(mapFlowDiagnostic),
       ...appliedGlobalFlowRefs.diagnostics.map(mapFlowDiagnostic),
       ...discoveryDiagnostics,
+      ...executionRootDiagnostics.map(mapFlowDiagnostic),
       ...index.diagnostics.map(mapFlowDiagnostic)
     ])
     const flowRows = mapFlowRows(
@@ -1783,26 +2069,27 @@ export const registerAutomationHandlers = ({
       await store.saveFilterState(normalizedStoredFilters)
     }
     const filteredBuckets = Object.freeze({
-      done: applyTaskFilters(index.projection.buckets.done, projectionFilters, {
+      done: applyTaskFilters(signalStackProjection.buckets.done, projectionFilters, {
         includeBucket: false
       }),
       needsMe: applyTaskFilters(
-        index.projection.buckets.needsMe,
+        signalStackProjection.buckets.needsMe,
         projectionFilters,
         { includeBucket: false }
       ),
-      ready: applyTaskFilters(index.projection.buckets.ready, projectionFilters, {
+      ready: applyTaskFilters(signalStackProjection.buckets.ready, projectionFilters, {
         includeBucket: false
       }),
       running: applyTaskFilters(
-        index.projection.buckets.running,
+        signalStackProjection.buckets.running,
         projectionFilters,
         { includeBucket: false }
       )
     })
-    const filteredTasks = applyTaskFilters(index.projection.tasks, projectionFilters)
+    const filteredTasks = applyTaskFilters(signalStackProjection.tasks, projectionFilters)
     const runActionsById = await resolveRunActionMap(runs, runtime)
     const discoveryResultsByRunId = mapDiscoveryResultByRunId(taskDataSnapshots)
+    const latestReportByRunId = mapLatestReportByRunId(reports)
     const projection: AutomationProjection = Object.freeze({
       buckets: Object.freeze({
         done: Object.freeze(filteredBuckets.done.map(mapTask)),
@@ -1831,10 +2118,16 @@ export const registerAutomationHandlers = ({
             run,
             runActionsById.get(run.runId),
             discoveryResult,
-            createRunProcessSteps(run, discoveryResult)
+            createRunProcessSteps(run, discoveryResult),
+            mapRunReportReference(latestReportByRunId.get(run.runId))
           )
         })
       ),
+      ...(request?.selectedTaskKey !== undefined
+        ? { selectedTaskId: request.selectedTaskKey }
+        : request?.selectedTaskId !== undefined
+          ? { selectedTaskId: request.selectedTaskId }
+          : {}),
       tasks: Object.freeze(filteredTasks.map(mapTask)),
       ...(workspaceRoot !== undefined ? { workspaceRoot } : {})
     })

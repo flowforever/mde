@@ -1,4 +1,11 @@
-import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -15,6 +22,7 @@ import {
 import { createAutomationRuntime } from '../../src/main/services/automation/automationRuntime'
 import { createAutomationStore } from '../../src/main/services/automation/automationStore'
 import { createMdeRuntimeBridge } from '../../src/main/services/automation/mdeRuntimeBridge'
+import { createAutomationNotificationService } from '../../src/main/services/automation/automationNotificationService'
 import { AUTOMATION_NO_WORKSPACE_ID } from '../../src/main/services/automation/automationProjectionFilters'
 import {
   createAppliedGlobalFlowOwnerKey,
@@ -22,8 +30,8 @@ import {
   createWorkspaceFlowOwnerKey
 } from '../../src/main/services/automation/automationFlowOwnerIdentity'
 
-const createTempRoot = (prefix: string): Promise<string> =>
-  mkdtemp(join(tmpdir(), prefix))
+const createTempRoot = async (prefix: string): Promise<string> =>
+  realpath(await mkdtemp(join(tmpdir(), prefix)))
 
 const createHandlers = async (
   options: {
@@ -579,6 +587,570 @@ describe('automationHandlers integration', () => {
     ).resolves.toMatchObject({ accepted: true })
 
     expect(latestPrompt).toContain('Use Markdown executor runtime steps.')
+  })
+
+  it('starts the scoped task when logical task ids collide across execution roots', async () => {
+    let startedExecutionRoot: string | undefined
+    const firstExecutionRoot = await createTempRoot('mde-root-web-')
+    const secondExecutionRoot = await createTempRoot('mde-root-api-')
+    const { handlers, store, workspaceRoot } = await createHandlers({
+      startRunImplementation(input) {
+        startedExecutionRoot = input.candidate?.executionRoot
+
+        return Promise.resolve(Object.freeze({
+          adapterSessionId: input.preferredAdapterSessionId,
+          events: Object.freeze([
+            Object.freeze({
+              adapterSessionId: input.preferredAdapterSessionId,
+              type: 'session-started'
+            } satisfies AgentCliNormalizedEvent)
+          ])
+        }))
+      }
+    })
+
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'scoped-start-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+    await createWorkspaceExecutorDraft(handlers, 'scoped-start-flow')
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'scoped-start-flow',
+      workspaceId: workspaceRoot
+    })
+    await store.replaceDiscoveredTaskSources(
+      'scoped-start-flow',
+      [
+        {
+          automationFlowId: 'scoped-start-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          executionRoot: firstExecutionRoot,
+          sourceItemId: 'shared-source',
+          sourceSnapshotHash: 'shared-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Shared root task',
+          workspaceId: workspaceRoot
+        },
+        {
+          automationFlowId: 'scoped-start-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:01:00.000Z',
+          executionRoot: secondExecutionRoot,
+          sourceItemId: 'shared-source',
+          sourceSnapshotHash: 'shared-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Shared root task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    const projection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly tasks: readonly {
+          readonly executionRoot?: string
+          readonly primaryExecutor?: {
+            readonly executorId: string
+            readonly executorSnapshotId?: string
+          }
+          readonly taskDataId?: string
+          readonly taskDataSnapshotId?: string
+          readonly taskId: string
+          readonly taskKey?: string
+        }[]
+      }
+    }
+    const secondTask = projection.projection.tasks.find(
+      (task) => task.executionRoot === secondExecutionRoot
+    )
+
+    expect(projection.projection.tasks).toHaveLength(2)
+    expect(new Set(projection.projection.tasks.map((task) => task.taskKey)).size)
+      .toBe(2)
+    await expect(
+      handlers.get(AUTOMATION_CHANNELS.startRun)?.(
+        {},
+        {
+          executorId: secondTask?.primaryExecutor?.executorId,
+          executorSnapshotId: secondTask?.primaryExecutor?.executorSnapshotId,
+          taskDataId: secondTask?.taskDataId,
+          taskDataSnapshotId: secondTask?.taskDataSnapshotId,
+          taskId: secondTask?.taskId,
+          taskKey: secondTask?.taskKey
+        }
+      )
+    ).resolves.toMatchObject({ accepted: true })
+    expect(startedExecutionRoot).toBe(secondExecutionRoot)
+  })
+
+  it('preserves notification deep-link scoped selection through production projection', async () => {
+    const firstExecutionRoot = await createTempRoot('mde-root-web-')
+    const secondExecutionRoot = await createTempRoot('mde-root-api-')
+    const { handlers, store, workspaceRoot } = await createHandlers()
+
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'deep-link-selection-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+    await createWorkspaceExecutorDraft(handlers, 'deep-link-selection-flow')
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'deep-link-selection-flow',
+      workspaceId: workspaceRoot
+    })
+    await store.replaceDiscoveredTaskSources(
+      'deep-link-selection-flow',
+      [
+        {
+          automationFlowId: 'deep-link-selection-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          executionRoot: firstExecutionRoot,
+          sourceItemId: 'shared-source',
+          sourceSnapshotHash: 'shared-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Shared root task',
+          workspaceId: workspaceRoot
+        },
+        {
+          automationFlowId: 'deep-link-selection-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:01:00.000Z',
+          executionRoot: secondExecutionRoot,
+          sourceItemId: 'shared-source',
+          sourceSnapshotHash: 'shared-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Shared root task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    const initialProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly tasks: readonly {
+          readonly executionRoot?: string
+          readonly taskId: string
+          readonly taskKey?: string
+        }[]
+      }
+    }
+    const selectedTask = initialProjection.projection.tasks.find(
+      (task) => task.executionRoot === secondExecutionRoot
+    )
+    const notificationService = createAutomationNotificationService({
+      now: () => '2026-05-10T08:02:00.000Z'
+    })
+    const notification = notificationService.notifyDecisionRequired({
+      runId: 'run-deep-link',
+      taskId: selectedTask?.taskId ?? '',
+      taskKey: selectedTask?.taskKey,
+      title: 'READY Shared root task'
+    })
+    const deepLinkRequest = notificationService.resolveDeepLink(
+      notification?.deepLink
+    )
+
+    const selectedProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { ...deepLinkRequest, workspaceRoot })) as {
+      projection: {
+        readonly selectedTaskId?: string
+        readonly tasks: readonly {
+          readonly taskId: string
+          readonly taskKey?: string
+        }[]
+      }
+    }
+
+    expect(initialProjection.projection.tasks).toHaveLength(2)
+    expect(new Set(initialProjection.projection.tasks.map((task) => task.taskId)))
+      .toEqual(new Set([selectedTask?.taskId]))
+    expect(selectedTask?.taskKey).toBeDefined()
+    expect(selectedProjection.projection.selectedTaskId).toBe(
+      selectedTask?.taskKey
+    )
+  })
+
+  it('persists invalid execution-root diagnostics in projection and blocks start', async () => {
+    const missingExecutionRoot = join(
+      await createTempRoot('mde-root-parent-'),
+      'missing-repo'
+    )
+    const { handlers, store, workspaceRoot } = await createHandlers()
+
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'invalid-root-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+    await createWorkspaceExecutorDraft(handlers, 'invalid-root-flow')
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'invalid-root-flow',
+      workspaceId: workspaceRoot
+    })
+    await store.replaceDiscoveredTaskSources(
+      'invalid-root-flow',
+      [
+        {
+          automationFlowId: 'invalid-root-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          executionRoot: missingExecutionRoot,
+          sourceItemId: 'invalid-root-source',
+          sourceSnapshotHash: 'invalid-root-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Invalid root task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    const projection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly tasks: readonly {
+          readonly blockingDiagnostics?: readonly {
+            readonly code: string
+            readonly executionRoot?: string
+            readonly userSafeReason?: string
+          }[]
+          readonly primaryExecutor?: {
+            readonly executorId: string
+            readonly executorSnapshotId?: string
+          }
+          readonly taskDataId?: string
+          readonly taskDataSnapshotId?: string
+          readonly taskId: string
+          readonly taskKey?: string
+        }[]
+      }
+    }
+    const task = projection.projection.tasks[0]
+
+    expect(task?.blockingDiagnostics).toEqual([
+      expect.objectContaining({
+        code: 'automationRun.invalidExecutionRoot',
+        executionRoot: missingExecutionRoot,
+        userSafeReason: 'the path is not an existing directory'
+      })
+    ])
+    const startResult = (await handlers.get(AUTOMATION_CHANNELS.startRun)?.(
+      {},
+      {
+        executorId: task?.primaryExecutor?.executorId,
+        executorSnapshotId: task?.primaryExecutor?.executorSnapshotId,
+        taskDataId: task?.taskDataId,
+        taskDataSnapshotId: task?.taskDataSnapshotId,
+        taskId: task?.taskId,
+        taskKey: task?.taskKey
+      }
+    )) as {
+      readonly accepted: boolean
+      readonly diagnostic?: { readonly code: string }
+    }
+
+    expect(startResult.accepted).toBe(false)
+    expect(startResult.diagnostic?.code).toBe('automationRun.taskNotFound')
+  })
+
+  it('projects legacy persisted task runs with workspace root as the scoped task identity fallback', async () => {
+    const firstExecutionRoot = await createTempRoot('mde-root-web-')
+    const secondExecutionRoot = await createTempRoot('mde-root-api-')
+    const { handlers, store, workspaceRoot } = await createHandlers()
+
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'legacy-scoped-run-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+    await createWorkspaceExecutorDraft(handlers, 'legacy-scoped-run-flow')
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'legacy-scoped-run-flow',
+      workspaceId: workspaceRoot
+    })
+
+    await store.replaceDiscoveredTaskSources(
+      'legacy-scoped-run-flow',
+      [
+        {
+          automationFlowId: 'legacy-scoped-run-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          executionRoot: firstExecutionRoot,
+          sourceItemId: 'shared-source',
+          sourceSnapshotHash: 'shared-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Shared root task',
+          workspaceId: workspaceRoot
+        },
+        {
+          automationFlowId: 'legacy-scoped-run-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:01:00.000Z',
+          executionRoot: secondExecutionRoot,
+          sourceItemId: 'shared-source',
+          sourceSnapshotHash: 'shared-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Shared root task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    const firstProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly tasks: readonly {
+          readonly executionRoot?: string
+          readonly taskId: string
+        }[]
+      }
+    }
+    const secondTask = firstProjection.projection.tasks.find(
+      (task) => task.executionRoot === secondExecutionRoot
+    )
+
+    await store.createRun({
+      automationFlowId: 'legacy-scoped-run-flow',
+      automationFlowOwnerKey: ownerKey,
+      engine: 'codex',
+      runId: 'legacy-run-api',
+      runKind: 'task',
+      sourceItemId: 'shared-source',
+      state: 'running',
+      taskId: secondTask?.taskId ?? 'missing-task',
+      title: 'READY Shared root task',
+      workspaceRoot: secondExecutionRoot
+    })
+
+    const runningProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { filters: { bucket: 'running' }, workspaceRoot })) as {
+      projection: {
+        readonly buckets: {
+          readonly running: readonly {
+            readonly activeRunId?: string
+            readonly executionRoot?: string
+          }[]
+        }
+      }
+    }
+    const readyProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { filters: { bucket: 'ready' }, workspaceRoot })) as {
+      projection: {
+        readonly buckets: {
+          readonly ready: readonly {
+            readonly executionRoot?: string
+          }[]
+        }
+      }
+    }
+
+    expect(readyProjection.projection.buckets.ready).toEqual([
+      expect.objectContaining({
+        executionRoot: firstExecutionRoot
+      })
+    ])
+    expect(runningProjection.projection.buckets.running).toEqual([
+      expect.objectContaining({
+        activeRunId: 'legacy-run-api',
+        executionRoot: secondExecutionRoot
+      })
+    ])
+  })
+
+  it('keeps legacy completed report overlays scoped by run workspace root', async () => {
+    const firstExecutionRoot = await createTempRoot('mde-root-web-')
+    const secondExecutionRoot = await createTempRoot('mde-root-api-')
+    const { handlers, store, workspaceRoot } = await createHandlers()
+
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'legacy-report-root-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+    await createSkillBackedFlow({
+      flowId: 'legacy-report-root-flow',
+      skillRef: 'skill:execute-picked-task',
+      workspaceRoot: firstExecutionRoot
+    })
+    await createSkillBackedFlow({
+      flowId: 'legacy-report-root-flow',
+      skillRef: 'skill:execute-picked-task',
+      workspaceRoot: secondExecutionRoot
+    })
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'legacy-report-root-flow',
+      workspaceId: workspaceRoot
+    })
+
+    for (const [runId, root, reportId] of [
+      ['legacy-run-web', firstExecutionRoot, 'report-web'],
+      ['legacy-run-api', secondExecutionRoot, 'report-api']
+    ] as const) {
+      await store.createRun({
+        automationFlowId: 'legacy-report-root-flow',
+        automationFlowOwnerKey: ownerKey,
+        engine: 'codex',
+        runId,
+        runKind: 'task',
+        sourceItemId: 'shared-source',
+        state: 'done',
+        taskId: 'shared-task',
+        title: 'READY Shared root task',
+        workspaceRoot: root
+      })
+      await store.createReport({
+        outcome: 'succeeded',
+        reportId,
+        runId,
+        taskId: 'shared-task',
+        title: `Report ${reportId}`
+      })
+    }
+
+    const projection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.(
+        {},
+        {
+          filters: {
+            bucket: 'done',
+            scopeIds: [
+              `workspace:${firstExecutionRoot}`,
+              `workspace:${secondExecutionRoot}`
+            ]
+          },
+          workspaceRoot,
+          workspaceRoots: [firstExecutionRoot, secondExecutionRoot]
+        }
+      )) as {
+      projection: {
+        readonly buckets: {
+          readonly done: readonly {
+            readonly latestReportId?: string
+            readonly workspaceId?: string
+          }[]
+        }
+      }
+    }
+
+    expect(projection.projection.buckets.done).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          latestReportId: 'report-web',
+          workspaceId: firstExecutionRoot
+        }),
+        expect.objectContaining({
+          latestReportId: 'report-api',
+          workspaceId: secondExecutionRoot
+        })
+      ])
+    )
+    expect(projection.projection.buckets.done).toHaveLength(2)
+  })
+
+  it('maps each task run summary to its own final report reference', async () => {
+    const { handlers, store, workspaceRoot } = await createHandlers()
+
+    for (const sourceItemId of ['source-one', 'source-two']) {
+      const runId = `run-${sourceItemId}`
+      const taskId = `task-${sourceItemId}`
+
+      await store.createRun({
+        automationFlowId: 'report-link-flow',
+        engine: 'codex',
+        runId,
+        runKind: 'task',
+        sourceItemId,
+        state: 'done',
+        taskId,
+        title: `READY ${sourceItemId}`,
+        workspaceRoot
+      })
+      await store.createReport({
+        outcome: 'succeeded',
+        reportId: `report-${sourceItemId}`,
+        runId,
+        summary: `Summary for ${sourceItemId}`,
+        taskId,
+        title: `Report for ${sourceItemId}`
+      })
+    }
+
+    const completedProjection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly runs: readonly {
+          readonly reportReference?: {
+            readonly reportId: string
+            readonly summary?: string
+            readonly title: string
+          }
+          readonly runKind: string
+          readonly sourceItemId?: string
+        }[]
+      }
+    }
+    const runReports = completedProjection.projection.runs
+      .filter((run) => run.runKind === 'task')
+      .map((run) => [run.sourceItemId, run.reportReference] as const)
+
+    expect(runReports).toEqual(
+      expect.arrayContaining([
+        [
+          'source-one',
+          expect.objectContaining({
+            reportId: 'report-source-one',
+            summary: 'Summary for source-one',
+            title: 'Report for source-one'
+          })
+        ],
+        [
+          'source-two',
+          expect.objectContaining({
+            reportId: 'report-source-two',
+            summary: 'Summary for source-two',
+            title: 'Report for source-two'
+          })
+        ]
+      ])
+    )
   })
 
   it('starts safely owned legacy owner-less task sources with current owner executors', async () => {

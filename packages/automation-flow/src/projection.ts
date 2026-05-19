@@ -16,6 +16,7 @@ interface TaskOverlay {
   readonly latestReport?: AutomationReportOverlay
   readonly runs: readonly AutomationRunOverlay[]
   readonly taskId: string
+  readonly taskKey: string
 }
 
 const bucketOrder: Record<AutomationTaskBucket, number> = {
@@ -49,6 +50,90 @@ const pickLatestReport = (
   reports: readonly AutomationReportOverlay[]
 ): AutomationReportOverlay | undefined =>
   [...reports].sort(compareReportsDescending)[0]
+
+const encodeProjectionKeyPart = (value: string | undefined): string =>
+  encodeURIComponent(value?.trim() ?? '')
+
+export const createAutomationTaskProjectionKey = ({
+  automationFlowId,
+  automationFlowOwnerKey,
+  executionRoot,
+  sourceItemId,
+  taskId,
+  workspaceId
+}: {
+  readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
+  readonly executionRoot?: string
+  readonly sourceItemId: string
+  readonly taskId: string
+  readonly workspaceId?: string
+}): string =>
+  [
+    'automation-task-projection',
+    automationFlowOwnerKey ?? automationFlowId,
+    taskId,
+    sourceItemId,
+    executionRoot ?? workspaceId
+  ]
+    .map(encodeProjectionKeyPart)
+    .join(':')
+
+const getCandidateTaskKey = (
+  candidate: AutomationFlowTaskCandidate
+): string =>
+  createAutomationTaskProjectionKey({
+    automationFlowId: candidate.automationFlowId,
+    automationFlowOwnerKey: candidate.automationFlowOwnerKey,
+    executionRoot: candidate.executionRoot,
+    sourceItemId: candidate.sourceItemId,
+    taskId: candidate.taskId,
+    workspaceId: candidate.workspaceId
+  })
+
+const getReportTaskKey = (report: AutomationReportOverlay): string =>
+  createAutomationTaskProjectionKey({
+    automationFlowId: report.automationFlowId,
+    automationFlowOwnerKey: report.automationFlowOwnerKey,
+    executionRoot: report.executionRoot,
+    sourceItemId: report.sourceItemId,
+    taskId: report.taskId,
+    workspaceId: report.workspaceId
+  })
+
+const getRunTaskKey = (run: AutomationRunOverlay): string =>
+  createAutomationTaskProjectionKey({
+    automationFlowId: run.automationFlowId,
+    automationFlowOwnerKey: run.automationFlowOwnerKey,
+    executionRoot: run.executionRoot,
+    sourceItemId: run.sourceItemId,
+    taskId: run.taskId,
+    workspaceId: run.workspaceId
+  })
+
+const createTaskOverlayIdentityKey = ({
+  automationFlowId,
+  automationFlowOwnerKey,
+  sourceItemId,
+  taskDataSnapshotId,
+  taskId
+}: {
+  readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
+  readonly sourceItemId: string
+  readonly taskDataSnapshotId?: string
+  readonly taskId: string
+}): string | undefined =>
+  taskDataSnapshotId === undefined
+    ? undefined
+    : [
+        automationFlowOwnerKey ?? automationFlowId,
+        taskId,
+        sourceItemId,
+        taskDataSnapshotId
+      ]
+        .map(encodeProjectionKeyPart)
+        .join(':')
 
 const pickActiveRun = (
   runs: readonly AutomationRunOverlay[]
@@ -121,6 +206,7 @@ const getDoneTaskMetadata = (
 ): Pick<
   AutomationProjectedTask,
   | 'engine'
+  | 'executionRoot'
   | 'priority'
   | 'relativePath'
   | 'sourcePath'
@@ -133,6 +219,11 @@ const getDoneTaskMetadata = (
       ? { engine: overlay.candidate.engine }
       : overlay.latestReport?.engine !== undefined
         ? { engine: overlay.latestReport.engine }
+        : {}),
+    ...(overlay.candidate?.executionRoot !== undefined
+      ? { executionRoot: overlay.candidate.executionRoot }
+      : overlay.latestReport?.executionRoot !== undefined
+        ? { executionRoot: overlay.latestReport.executionRoot }
         : {}),
     ...(overlay.candidate?.priority !== undefined
       ? { priority: overlay.candidate.priority }
@@ -195,11 +286,15 @@ const createProjectedTask = (
       ? { taskDataId: activeRun.taskDataId }
       : overlay.candidate?.taskDataId !== undefined
         ? { taskDataId: overlay.candidate.taskDataId }
+        : overlay.latestReport?.taskDataId !== undefined
+          ? { taskDataId: overlay.latestReport.taskDataId }
         : {}),
     ...(activeRun?.taskDataSnapshotId !== undefined
       ? { taskDataSnapshotId: activeRun.taskDataSnapshotId }
       : overlay.candidate?.taskDataSnapshotId !== undefined
         ? { taskDataSnapshotId: overlay.candidate.taskDataSnapshotId }
+        : overlay.latestReport?.taskDataSnapshotId !== undefined
+          ? { taskDataSnapshotId: overlay.latestReport.taskDataSnapshotId }
         : {})
   })
 
@@ -207,11 +302,18 @@ const createProjectedTask = (
     return Object.freeze({
       activeRunId: activeRun.runId,
       automationFlowId: activeRun.automationFlowId,
-      ...(overlay.candidate?.automationFlowOwnerKey !== undefined
-        ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
+      ...(activeRun.automationFlowOwnerKey !== undefined
+        ? { automationFlowOwnerKey: activeRun.automationFlowOwnerKey }
+        : overlay.candidate?.automationFlowOwnerKey !== undefined
+          ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
         : {}),
       bucket: 'needs-me',
       engine: overlay.candidate?.engine,
+      ...(activeRun.executionRoot !== undefined
+        ? { executionRoot: activeRun.executionRoot }
+        : overlay.candidate?.executionRoot !== undefined
+          ? { executionRoot: overlay.candidate.executionRoot }
+          : {}),
       latestReportId: overlay.latestReport?.reportId,
       ...executorFields,
       ...(overlay.candidate?.priority !== undefined
@@ -229,6 +331,7 @@ const createProjectedTask = (
         ? { sourceUri: overlay.candidate.sourceUri }
         : {}),
       taskId: overlay.taskId,
+      taskKey: overlay.taskKey,
       ...taskDataFields,
       title: getProjectedTaskTitle(overlay),
       ...(overlay.candidate?.workspaceId !== undefined
@@ -241,11 +344,18 @@ const createProjectedTask = (
     return Object.freeze({
       activeRunId: activeRun.runId,
       automationFlowId: activeRun.automationFlowId,
-      ...(overlay.candidate?.automationFlowOwnerKey !== undefined
-        ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
+      ...(activeRun.automationFlowOwnerKey !== undefined
+        ? { automationFlowOwnerKey: activeRun.automationFlowOwnerKey }
+        : overlay.candidate?.automationFlowOwnerKey !== undefined
+          ? { automationFlowOwnerKey: overlay.candidate.automationFlowOwnerKey }
         : {}),
       bucket: 'running',
       engine: overlay.candidate?.engine,
+      ...(activeRun.executionRoot !== undefined
+        ? { executionRoot: activeRun.executionRoot }
+        : overlay.candidate?.executionRoot !== undefined
+          ? { executionRoot: overlay.candidate.executionRoot }
+          : {}),
       latestReportId: overlay.latestReport?.reportId,
       ...executorFields,
       ...(overlay.candidate?.priority !== undefined
@@ -263,6 +373,7 @@ const createProjectedTask = (
         ? { sourceUri: overlay.candidate.sourceUri }
         : {}),
       taskId: overlay.taskId,
+      taskKey: overlay.taskKey,
       ...taskDataFields,
       title: getProjectedTaskTitle(overlay),
       ...(overlay.candidate?.workspaceId !== undefined
@@ -283,6 +394,7 @@ const createProjectedTask = (
       latestReportId: overlay.latestReport.reportId,
       sourceItemId: overlay.latestReport.sourceItemId,
       taskId: overlay.taskId,
+      taskKey: overlay.taskKey,
       ...taskDataFields,
       title: getProjectedTaskTitle(overlay)
     })
@@ -296,6 +408,9 @@ const createProjectedTask = (
         : {}),
       bucket: 'ready',
       engine: overlay.candidate.engine,
+      ...(overlay.candidate.executionRoot !== undefined
+        ? { executionRoot: overlay.candidate.executionRoot }
+        : {}),
       ...executorFields,
       ...(overlay.candidate.priority !== undefined
         ? { priority: overlay.candidate.priority }
@@ -312,6 +427,7 @@ const createProjectedTask = (
         ? { sourceUri: overlay.candidate.sourceUri }
         : {}),
       taskId: overlay.taskId,
+      taskKey: overlay.taskKey,
       ...taskDataFields,
       title: overlay.candidate.title,
       ...(overlay.candidate.workspaceId !== undefined
@@ -324,9 +440,9 @@ const createProjectedTask = (
 }
 
 const compareProjectedTasks = (
-  candidateOrderByTaskId: ReadonlyMap<string, number>,
-  candidatePriorityByTaskId: ReadonlyMap<string, number>,
-  latestReportByTaskId: ReadonlyMap<string, AutomationReportOverlay>,
+  candidateOrderByTaskKey: ReadonlyMap<string, number>,
+  candidatePriorityByTaskKey: ReadonlyMap<string, number>,
+  latestReportByTaskKey: ReadonlyMap<string, AutomationReportOverlay>,
   left: AutomationProjectedTask,
   right: AutomationProjectedTask
 ): number => {
@@ -337,9 +453,9 @@ const compareProjectedTasks = (
   }
 
   const leftCandidateOrder =
-    candidateOrderByTaskId.get(left.taskId) ?? Number.POSITIVE_INFINITY
+    candidateOrderByTaskKey.get(left.taskKey) ?? Number.POSITIVE_INFINITY
   const rightCandidateOrder =
-    candidateOrderByTaskId.get(right.taskId) ?? Number.POSITIVE_INFINITY
+    candidateOrderByTaskKey.get(right.taskKey) ?? Number.POSITIVE_INFINITY
   const candidateOrderDelta = leftCandidateOrder - rightCandidateOrder
 
   if (candidateOrderDelta !== 0) {
@@ -347,16 +463,16 @@ const compareProjectedTasks = (
   }
 
   const priorityDelta =
-    (candidatePriorityByTaskId.get(right.taskId) ?? 0) -
-    (candidatePriorityByTaskId.get(left.taskId) ?? 0)
+    (candidatePriorityByTaskKey.get(right.taskKey) ?? 0) -
+    (candidatePriorityByTaskKey.get(left.taskKey) ?? 0)
 
   if (priorityDelta !== 0) {
     return priorityDelta
   }
 
   if (left.bucket === 'done' && right.bucket === 'done') {
-    const leftReport = latestReportByTaskId.get(left.taskId)
-    const rightReport = latestReportByTaskId.get(right.taskId)
+    const leftReport = latestReportByTaskKey.get(left.taskKey)
+    const rightReport = latestReportByTaskKey.get(right.taskKey)
 
     if (leftReport !== undefined && rightReport !== undefined) {
       const reportDelta = compareReportsDescending(leftReport, rightReport)
@@ -367,7 +483,7 @@ const compareProjectedTasks = (
     }
   }
 
-  return left.taskId.localeCompare(right.taskId)
+  return left.taskKey.localeCompare(right.taskKey)
 }
 
 export const projectAutomationFlowSignalStack = ({
@@ -381,67 +497,117 @@ export const projectAutomationFlowSignalStack = ({
   readonly reports: readonly AutomationReportOverlay[]
   readonly runs: readonly AutomationRunOverlay[]
 }): AutomationSignalStackProjection => {
-  const taskIds = new Set<string>()
-  const candidateByTaskId = new Map<string, AutomationFlowTaskCandidate>()
-  const candidateOrderByTaskId = new Map<string, number>()
-  const candidatePriorityByTaskId = new Map<string, number>()
-  const reportsByTaskId = new Map<string, AutomationReportOverlay[]>()
-  const runsByTaskId = new Map<string, AutomationRunOverlay[]>()
+  const taskKeys = new Set<string>()
+  const taskIdByTaskKey = new Map<string, string>()
+  const candidateByTaskKey = new Map<string, AutomationFlowTaskCandidate>()
+  const candidateOrderByTaskKey = new Map<string, number>()
+  const candidatePriorityByTaskKey = new Map<string, number>()
+  const candidateTaskKeyByIdentity = new Map<string, string | null>()
+  const reportsByTaskKey = new Map<string, AutomationReportOverlay[]>()
+  const runsByTaskKey = new Map<string, AutomationRunOverlay[]>()
 
   for (const [index, candidate] of candidates.entries()) {
-    taskIds.add(candidate.taskId)
-    candidateByTaskId.set(candidate.taskId, candidate)
-    if (!candidateOrderByTaskId.has(candidate.taskId)) {
-      candidateOrderByTaskId.set(candidate.taskId, index)
+    const taskKey = getCandidateTaskKey(candidate)
+    const identityKey = createTaskOverlayIdentityKey(candidate)
+
+    taskKeys.add(taskKey)
+    taskIdByTaskKey.set(taskKey, candidate.taskId)
+    if (!candidateByTaskKey.has(taskKey)) {
+      candidateByTaskKey.set(taskKey, candidate)
     }
-    candidatePriorityByTaskId.set(candidate.taskId, candidate.priority ?? 0)
+    if (!candidateOrderByTaskKey.has(taskKey)) {
+      candidateOrderByTaskKey.set(taskKey, index)
+    }
+    candidatePriorityByTaskKey.set(taskKey, candidate.priority ?? 0)
+    if (identityKey !== undefined) {
+      const existingTaskKey = candidateTaskKeyByIdentity.get(identityKey)
+
+      candidateTaskKeyByIdentity.set(
+        identityKey,
+        existingTaskKey === undefined || existingTaskKey === taskKey
+          ? taskKey
+          : null
+      )
+    }
   }
 
   for (const report of reports) {
-    taskIds.add(report.taskId)
-    reportsByTaskId.set(report.taskId, [
-      ...(reportsByTaskId.get(report.taskId) ?? []),
+    const exactTaskKey = getReportTaskKey(report)
+    const identityKey = createTaskOverlayIdentityKey(report)
+    const candidateTaskKey =
+      identityKey === undefined
+        ? undefined
+        : candidateTaskKeyByIdentity.get(identityKey)
+    const taskKey =
+      !taskKeys.has(exactTaskKey) &&
+      candidateTaskKey !== undefined &&
+      candidateTaskKey !== null
+        ? candidateTaskKey
+        : exactTaskKey
+
+    taskKeys.add(taskKey)
+    taskIdByTaskKey.set(taskKey, report.taskId)
+    reportsByTaskKey.set(taskKey, [
+      ...(reportsByTaskKey.get(taskKey) ?? []),
       report
     ])
   }
 
   for (const run of runs) {
-    taskIds.add(run.taskId)
-    runsByTaskId.set(run.taskId, [
-      ...(runsByTaskId.get(run.taskId) ?? []),
+    const exactTaskKey = getRunTaskKey(run)
+    const identityKey = createTaskOverlayIdentityKey(run)
+    const candidateTaskKey =
+      identityKey === undefined
+        ? undefined
+        : candidateTaskKeyByIdentity.get(identityKey)
+    const taskKey =
+      !taskKeys.has(exactTaskKey) &&
+      candidateTaskKey !== undefined &&
+      candidateTaskKey !== null
+        ? candidateTaskKey
+        : exactTaskKey
+
+    taskKeys.add(taskKey)
+    taskIdByTaskKey.set(taskKey, run.taskId)
+    runsByTaskKey.set(taskKey, [
+      ...(runsByTaskKey.get(taskKey) ?? []),
       run
     ])
   }
 
-  const latestReportByTaskId = new Map(
-    [...taskIds].flatMap((taskId) => {
-      const latestReport = pickLatestReport(reportsByTaskId.get(taskId) ?? [])
+  const latestReportByTaskKey = new Map(
+    [...taskKeys].flatMap((taskKey) => {
+      const latestReport = pickLatestReport(reportsByTaskKey.get(taskKey) ?? [])
 
-      return latestReport === undefined ? [] : [[taskId, latestReport]]
+      return latestReport === undefined ? [] : [[taskKey, latestReport]]
     })
   )
 
-  const tasks = [...taskIds]
-    .map((taskId) =>
-      createProjectedTask({
-        candidate: candidateByTaskId.get(taskId),
+  const tasks = [...taskKeys]
+    .map((taskKey) => {
+      const candidate = candidateByTaskKey.get(taskKey)
+      const taskId = taskIdByTaskKey.get(taskKey) ?? taskKey
+
+      return createProjectedTask({
+        candidate,
         eligibleExecutors:
           executorsByOwnerKey.get(
-            candidateByTaskId.get(taskId)?.automationFlowOwnerKey ??
-              candidateByTaskId.get(taskId)?.automationFlowId ??
+            candidate?.automationFlowOwnerKey ??
+              candidate?.automationFlowId ??
               ''
           ) ?? [],
-        latestReport: latestReportByTaskId.get(taskId),
-        runs: runsByTaskId.get(taskId) ?? [],
-        taskId
+        latestReport: latestReportByTaskKey.get(taskKey),
+        runs: runsByTaskKey.get(taskKey) ?? [],
+        taskId,
+        taskKey
       })
-    )
+    })
     .filter((task): task is AutomationProjectedTask => task !== null)
     .sort((left, right) =>
       compareProjectedTasks(
-        candidateOrderByTaskId,
-        candidatePriorityByTaskId,
-        latestReportByTaskId,
+        candidateOrderByTaskKey,
+        candidatePriorityByTaskKey,
+        latestReportByTaskKey,
         left,
         right
       )

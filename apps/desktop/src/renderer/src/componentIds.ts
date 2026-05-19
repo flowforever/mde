@@ -252,6 +252,21 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "automation.editorSaveButton",
     standardName: "Automation Editor Save Button",
   },
+  automationExecutionRecordRow: {
+    componentId: "automation.execution-record-row",
+    constantPath: "automation.executionRecordRow",
+    standardName: "Automation Execution Record Row",
+  },
+  automationExecutionRecordsPanel: {
+    componentId: "automation.execution-records-panel",
+    constantPath: "automation.executionRecordsPanel",
+    standardName: "Automation Execution Records Panel",
+  },
+  automationExecutionRootLabel: {
+    componentId: "automation.execution-root-label",
+    constantPath: "automation.executionRootLabel",
+    standardName: "Automation Execution Root Label",
+  },
   automationExecutorSelector: {
     componentId: "automation.executor-selector",
     constantPath: "automation.executorSelector",
@@ -1047,6 +1062,12 @@ export const COMPONENT_IDS = {
       COMPONENT_NAME_ID_MAP.automationEditorSaveButton.componentId,
     executorSelector:
       COMPONENT_NAME_ID_MAP.automationExecutorSelector.componentId,
+    executionRecordRow:
+      COMPONENT_NAME_ID_MAP.automationExecutionRecordRow.componentId,
+    executionRecordsPanel:
+      COMPONENT_NAME_ID_MAP.automationExecutionRecordsPanel.componentId,
+    executionRootLabel:
+      COMPONENT_NAME_ID_MAP.automationExecutionRootLabel.componentId,
     flowEnabledSection:
       COMPONENT_NAME_ID_MAP.automationFlowEnabledSection.componentId,
     flowFilterToggle:

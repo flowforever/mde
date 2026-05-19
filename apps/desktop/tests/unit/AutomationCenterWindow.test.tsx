@@ -70,6 +70,7 @@ const projection: AutomationProjection = {
         },
         sourceItemId: 'source-a',
         taskId: 'task-a',
+        taskKey: 'task-key-a',
         taskDataId: 'task-data-a',
         taskDataSnapshotId: 'task-data-snapshot-a',
         title: 'READY Implement UI'
@@ -124,6 +125,7 @@ const projection: AutomationProjection = {
       },
       sourceItemId: 'source-a',
       taskId: 'task-a',
+      taskKey: 'task-key-a',
       taskDataId: 'task-data-a',
       taskDataSnapshotId: 'task-data-snapshot-a',
       title: 'READY Implement UI'
@@ -142,6 +144,7 @@ const needsMeProjection: AutomationProjection = {
         bucket: 'needs-me',
         sourceItemId: 'source-a',
         taskId: 'task-a',
+        taskKey: 'task-key-a',
         title: 'READY Implement UI'
       }
     ],
@@ -172,6 +175,7 @@ const needsMeProjection: AutomationProjection = {
       startedAt: '2026-05-10T08:00:00.000Z',
       state: 'needs-me',
       taskId: 'task-a',
+      taskKey: 'task-key-a',
       updatedAt: '2026-05-10T08:01:00.000Z'
     }
   ],
@@ -182,6 +186,7 @@ const needsMeProjection: AutomationProjection = {
       bucket: 'needs-me',
       sourceItemId: 'source-a',
       taskId: 'task-a',
+      taskKey: 'task-key-a',
       title: 'READY Implement UI'
     }
   ]
@@ -386,6 +391,93 @@ describe('AutomationCenterWindow', () => {
         runId: 'run-a'
       })
     })
+  })
+
+  it('shows custom execution roots and code-review execution records on task surfaces', async () => {
+    const executionRootProjection: AutomationProjection = {
+      ...projection,
+      buckets: {
+        ...projection.buckets,
+        ready: [
+          {
+            ...projection.buckets.ready[0],
+            executionRoot: '/repos/web'
+          }
+        ]
+      },
+      runs: [
+        {
+          automationFlowId: 'flow-a',
+          engine: 'codex',
+          executionRoot: '/repos/web',
+          executorId: 'code-review',
+          reportReference: {
+            completedAt: '2026-05-10T08:03:00.000Z',
+            evidencePath: '/repos/web/.mde/reports/web-40106.md',
+            outcome: 'succeeded',
+            reportId: 'report-review',
+            summary: 'Reviewed web/web!40106 at abc1234.',
+            title: 'Code review report for web/web!40106'
+          },
+          runId: 'run-review',
+          runKind: 'task',
+          sourceItemId: 'web/web!40106@abc1234',
+          startedAt: '2026-05-10T08:00:00.000Z',
+          state: 'done',
+          taskId: 'task-a',
+          title: 'Review web/web!40106',
+          updatedAt: '2026-05-10T08:03:00.000Z'
+        }
+      ],
+      tasks: [
+        {
+          ...projection.tasks[0],
+          executionRoot: '/repos/web'
+        }
+      ]
+    }
+    const automationApi = {
+      getProjection: vi.fn(() =>
+        Promise.resolve({ projection: executionRootProjection })
+      )
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    expect(
+      await screen.findAllByText('Execution root: /repos/web')
+    ).not.toHaveLength(0)
+    const flowline = screen.getByRole('region', { name: 'Flowline' })
+
+    expect(within(flowline).getByText('Execution root')).toBeInTheDocument()
+    expect(
+      within(flowline).getByRole('region', { name: 'Execution records' })
+    ).toHaveAttribute(
+      'data-component-id',
+      COMPONENT_IDS.automation.executionRecordsPanel
+    )
+    expect(within(flowline).getByText('Review web/web!40106')).toBeInTheDocument()
+    expect(within(flowline).getByText(/code-review/u)).toBeInTheDocument()
+    expect(
+      within(flowline).getByText(
+        'Report: Code review report for web/web!40106 (report-review)'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(flowline).getByText(
+        'Report summary: Reviewed web/web!40106 at abc1234.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(flowline).getByText(
+        'Report reference: /repos/web/.mde/reports/web-40106.md'
+      )
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector(
+        `[data-component-id="${COMPONENT_IDS.automation.executionRecordRow}"]`
+      )
+    ).toBeInstanceOf(HTMLElement)
   })
 
   it('does not expose native session action when a run record cannot open it', async () => {
@@ -728,9 +820,122 @@ describe('AutomationCenterWindow', () => {
     )
     expect(alert).not.toHaveTextContent('/Users/private/secret')
     expect(alert).not.toHaveTextContent('token=abc123')
+    expect(automationApi.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-a',
+        taskKey: 'task-key-a'
+      })
+    )
     await waitFor(() => {
       expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('shows invalid execution-root diagnostics with safe task and root detail', async () => {
+    const automationApi = {
+      getProjection: vi.fn(() => Promise.resolve({ projection })),
+      startRun: vi.fn(() =>
+        Promise.resolve({
+          accepted: false,
+          diagnostic: {
+            code: 'automationRun.invalidExecutionRoot',
+            diagnosticId: 'automation:automationRun.invalidExecutionRoot',
+            executionRoot: '/missing/repo',
+            message:
+              'Task "READY Implement UI" requested executionRoot "/missing/repo", but the path is not an existing directory.',
+            messageKey:
+              'automation.diagnostics.automationRun.invalidExecutionRoot',
+            severity: 'error',
+            taskTitle: 'READY Implement UI',
+            technicalMessage:
+              'Task "READY Implement UI" requested executionRoot "/missing/repo", but private token=abc123.',
+            userSafeReason: 'the path is not an existing directory'
+          }
+        })
+      )
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start with selected executor' })
+    )
+
+    const alert = await screen.findByRole('alert')
+
+    expect(alert).toHaveTextContent(
+      'Task "READY Implement UI" requested execution root "/missing/repo", but the path is not an existing directory.'
+    )
+    expect(alert).not.toHaveTextContent('token=abc123')
+    await waitFor(() => {
+      expect(automationApi.getProjection).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('keeps invalid execution-root task blocked from projection diagnostics', async () => {
+    const invalidRootProjection: AutomationProjection = {
+      ...projection,
+      buckets: {
+        ...projection.buckets,
+        ready: [
+          {
+            ...projection.buckets.ready[0],
+            blockingDiagnostics: [
+              {
+                code: 'automationRun.invalidExecutionRoot',
+                executionRoot: '/missing/repo',
+                messageKey:
+                  'automation.diagnostics.automationRun.invalidExecutionRoot',
+                severity: 'error',
+                taskTitle: 'READY Implement UI',
+                userSafeReason: 'the path is not an existing directory'
+              }
+            ],
+            executionRoot: '/missing/repo'
+          }
+        ]
+      },
+      tasks: [
+        {
+          ...projection.tasks[0],
+          blockingDiagnostics: [
+            {
+              code: 'automationRun.invalidExecutionRoot',
+              executionRoot: '/missing/repo',
+              messageKey:
+                'automation.diagnostics.automationRun.invalidExecutionRoot',
+              severity: 'error',
+              taskTitle: 'READY Implement UI',
+              userSafeReason: 'the path is not an existing directory'
+            }
+          ],
+          executionRoot: '/missing/repo'
+        }
+      ]
+    }
+    const automationApi = {
+      getProjection: vi.fn(() =>
+        Promise.resolve({ projection: invalidRootProjection })
+      ),
+      startRun: vi.fn()
+    } as unknown as AutomationApi
+
+    render(<AutomationCenterWindow automationApi={automationApi} />)
+
+    expect(
+      await screen.findByText(
+        'Task "READY Implement UI" requested execution root "/missing/repo", but the path is not an existing directory.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Start with selected executor' })
+    ).toBeDisabled()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start with selected executor' })
+    )
+
+    expect(automationApi.startRun).not.toHaveBeenCalled()
   })
 
   it('surfaces thrown startRun failures through the safe fallback text', async () => {

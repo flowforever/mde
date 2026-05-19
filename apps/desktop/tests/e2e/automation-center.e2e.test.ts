@@ -195,6 +195,7 @@ const emit = (event) => {
 
 const createWorkspaceMarkdownSource = ({ relativePath, sourceItemId, title }) => {
   const sourcePath = join(workspaceRoot, relativePath)
+  const executionRoot = process.env.MDE_FAKE_AUTOMATION_EXECUTION_ROOT
 
   return {
     automationFlowId: process.env.MDE_AUTOMATION_FLOW_ID,
@@ -202,6 +203,7 @@ const createWorkspaceMarkdownSource = ({ relativePath, sourceItemId, title }) =>
     discoveredAt: '2026-05-10T08:00:00.000Z',
     provider: 'fake-cli',
     relativePath,
+    ...(executionRoot ? { executionRoot } : {}),
     sourceItemId,
     sourcePath,
     sourceSnapshotHash: 'fake-hash-' + sourceItemId,
@@ -217,7 +219,8 @@ if (logPath) {
     prompt,
     runKind,
     sessionId,
-    taskSourcePath: process.env.MDE_AUTOMATION_TASK_SOURCE_PATH
+    taskSourcePath: process.env.MDE_AUTOMATION_TASK_SOURCE_PATH,
+    workspaceRoot
   }) + '\\n')
 }
 
@@ -266,6 +269,20 @@ if (runKind === 'discovery') {
           relativePath: '.mde/docs/tasks/done.md',
           sourceItemId: 'matrix-done',
           title: 'READY Matrix done task'
+        })
+      ]
+    })
+    process.exit(0)
+  }
+
+  if (process.env.MDE_FAKE_AUTOMATION_SOURCE_MODE === 'execution-root-report') {
+    emit({
+      type: 'discovered-task-sources',
+      sources: [
+        createWorkspaceMarkdownSource({
+          relativePath: '.mde/docs/tasks/ready.md',
+          sourceItemId: 'execution-root-ready',
+          title: 'READY Execution root report task'
         })
       ]
     })
@@ -323,10 +340,17 @@ if (runKind === 'discovery') {
   })
   emit({
     type: 'final-report',
+    ...(process.env.MDE_FAKE_AUTOMATION_SOURCE_MODE === 'execution-root-report'
+      ? { evidencePath: join(workspaceRoot, '.mde', 'reports', 'automation-e2e.md') }
+      : {}),
     outcome: 'succeeded',
-    summary: 'Fake CLI completed the task.',
+    summary: process.env.MDE_FAKE_AUTOMATION_SOURCE_MODE === 'execution-root-report'
+      ? 'Fake CLI completed the task from its execution root.'
+      : 'Fake CLI completed the task.',
     title: taskSourcePath.includes('done.md')
       ? 'READY Matrix done task'
+      : process.env.MDE_FAKE_AUTOMATION_SOURCE_MODE === 'execution-root-report'
+        ? 'Execution root report'
       : 'READY Implement automation E2E'
   })
 }
@@ -1839,6 +1863,110 @@ test('runs discovery and task execution through a fake CLI executable', async ()
         discoveryRunsAtLeastInitial: true,
         taskPrompt: expect.stringContaining('Verify the Automation Center path.')
       })
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('shows task execution root and report reference from Automation Center', async () => {
+  const workspacePath = await createAutomationWorkspace()
+  const executionRoot = await createFixtureWorkspace()
+  const resolvedExecutionRoot = await realpath(executionRoot)
+  const evidencePath = join(
+    resolvedExecutionRoot,
+    '.mde',
+    'reports',
+    'automation-e2e.md'
+  )
+  const fakeCli = await createAutomationFakeCli(workspacePath)
+
+  await createSeedAutomationFlow({
+    flowId: 'execution-root-flow',
+    name: 'Execution Root Flow',
+    rootPath: workspacePath
+  })
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [workspacePath],
+    env: {
+      MDE_E2E_AUTOMATION_JSONL_ADAPTER: fakeCli.commandPath,
+      MDE_FAKE_AUTOMATION_EXECUTION_ROOT: resolvedExecutionRoot,
+      MDE_FAKE_AUTOMATION_LOG: fakeCli.logPath,
+      MDE_FAKE_AUTOMATION_SOURCE_MODE: 'execution-root-report'
+    }
+  })
+
+  try {
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+
+    const automationWindow = await openAutomationCenter(app, window)
+
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Execution root report task'
+    )
+    await selectReadyTaskForFlow(automationWindow, 'execution-root-flow')
+    await expect(
+      automationWindow.getByRole('region', { name: 'Signal Stack' })
+    ).toContainText(`Execution root: ${resolvedExecutionRoot}`)
+    await expect(
+      automationWindow.getByRole('region', { name: 'Flowline' })
+    ).toContainText(resolvedExecutionRoot)
+
+    await automationWindow
+      .getByRole('button', { name: 'Start with selected executor' })
+      .click()
+    await selectTaskStackBucket(automationWindow, 'Done')
+    await selectTaskByTitle(
+      automationWindow,
+      'READY Execution root report task'
+    )
+
+    const flowline = automationWindow.getByRole('region', { name: 'Flowline' })
+
+    await expect(
+      flowline.getByRole('region', { name: 'Execution records' })
+    ).toBeVisible()
+    await expect(flowline).toContainText('Execution root report')
+    await expect(flowline).toContainText(
+      'Fake CLI completed the task from its execution root.'
+    )
+    await expect(flowline).toContainText(`Report reference: ${evidencePath}`)
+
+    const taskRow = automationWindow
+      .locator(`[data-component-id="${COMPONENT_IDS.automation.runHistoryRow}"]`)
+      .filter({ hasText: 'READY Execution root report task' })
+      .first()
+
+    await taskRow
+      .getByRole('button', { name: /View run details for run/i })
+      .click()
+    const detailDialog = automationWindow.getByRole('dialog', {
+      name: 'Run details'
+    })
+
+    await expect(detailDialog).toContainText(
+      `Execution root: ${resolvedExecutionRoot}`
+    )
+    await detailDialog.getByRole('button', { name: 'Close run details' }).click()
+
+    await expect
+      .poll(async () => {
+        const log = await readFile(fakeCli.logPath, 'utf8')
+        const entries = log
+          .trim()
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as {
+            readonly runKind: string
+            readonly workspaceRoot?: string
+          })
+
+        return entries.find((entry) => entry.runKind === 'task')?.workspaceRoot
+      }, { timeout: E2E_UI_READY_TIMEOUT_MS })
+      .toBe(resolvedExecutionRoot)
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()

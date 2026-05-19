@@ -8,6 +8,7 @@ export interface AutomationNotificationDeepLink {
   readonly route: 'automation-center'
   readonly runId: string
   readonly selectedTaskId: string
+  readonly selectedTaskKey?: string
 }
 
 export interface AutomationNotificationPayload {
@@ -28,6 +29,7 @@ interface CreateAutomationNotificationServiceOptions {
 interface NotifyDecisionRequiredInput {
   readonly runId: string
   readonly taskId: string
+  readonly taskKey?: string
   readonly title: string
 }
 
@@ -36,11 +38,13 @@ interface NotifyTerminalRunInput {
   readonly runId: string
   readonly status: 'cancelled' | 'failed' | 'succeeded'
   readonly taskId: string
+  readonly taskKey?: string
   readonly title: string
 }
 
 interface ResolvedAutomationDeepLink {
   readonly selectedTaskId: string
+  readonly selectedTaskKey?: string
   readonly windowMode: MdeWindowMode
 }
 
@@ -101,7 +105,7 @@ export const createAutomationNotificationService = ({
     listNotifications() {
       return Object.freeze([...notifications])
     },
-    notifyDecisionRequired({ runId, taskId, title }) {
+    notifyDecisionRequired({ runId, taskId, taskKey, title }) {
       return pushNotification({
         bodyArgs: Object.freeze({
           taskTitle: sanitizeTaskTitle(title)
@@ -110,13 +114,14 @@ export const createAutomationNotificationService = ({
         deepLink: Object.freeze({
           route: 'automation-center',
           runId,
-          selectedTaskId: taskId
+          selectedTaskId: taskId,
+          ...(taskKey !== undefined ? { selectedTaskKey: taskKey } : {})
         }),
         titleKey: 'automation.notifications.decisionRequired.title',
         type: 'run.decision_required'
       })
     },
-    notifyTerminalRun({ runId, status, taskId, title }) {
+    notifyTerminalRun({ runId, status, taskId, taskKey, title }) {
       return pushNotification({
         bodyArgs: Object.freeze({
           outcome: status,
@@ -126,7 +131,8 @@ export const createAutomationNotificationService = ({
         deepLink: Object.freeze({
           route: 'automation-center',
           runId,
-          selectedTaskId: taskId
+          selectedTaskId: taskId,
+          ...(taskKey !== undefined ? { selectedTaskKey: taskKey } : {})
         }),
         titleKey: 'automation.notifications.terminalRun.title',
         type: 'run.terminal'
@@ -139,6 +145,9 @@ export const createAutomationNotificationService = ({
 
       return Object.freeze({
         selectedTaskId: deepLink.selectedTaskId,
+        ...(deepLink.selectedTaskKey !== undefined
+          ? { selectedTaskKey: deepLink.selectedTaskKey }
+          : {}),
         windowMode: 'automation-center'
       })
     }

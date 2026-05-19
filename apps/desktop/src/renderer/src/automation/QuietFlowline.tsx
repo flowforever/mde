@@ -4,6 +4,7 @@ import { COMPONENT_IDS } from '../componentIds'
 import type { AppText } from '../i18n/appLanguage'
 import type { AutomationCenterViewModel, AutomationFlowlinePhaseStatus } from './automationViewModel'
 import type {
+  AutomationRunSummary,
   AutomationTaskCard,
   AutomationTaskExecutorSummary
 } from '../../../shared/automation'
@@ -11,7 +12,7 @@ import type {
 interface QuietFlowlineProps {
   readonly onClearSelection?: () => void
   readonly onStartTask?: (
-    taskId: string,
+    task: AutomationTaskCard,
     executor: AutomationTaskExecutorSummary
   ) => void
   readonly onSubmitDecision?: (decisionId: string, response: string) => void
@@ -41,6 +42,26 @@ const getPhaseStatusLabel = (
 ): string =>
   status === 'pending' ? text('automation.pending') : getBucketLabel(status, text)
 
+const getRunStateLabel = (
+  state: AutomationRunSummary['state'],
+  text: AppText
+): string => {
+  switch (state) {
+    case 'cancelled':
+      return text('automation.runStateCancelled')
+    case 'done':
+      return text('automation.done')
+    case 'failed':
+      return text('automation.runStateFailed')
+    case 'needs-me':
+      return text('automation.needsMe')
+    case 'running':
+      return text('automation.running')
+    case 'starting':
+      return text('automation.runStateStarting')
+  }
+}
+
 const getTaskSourceSummary = (
   task: AutomationTaskCard,
   viewModel: AutomationCenterViewModel,
@@ -67,6 +88,67 @@ const getExecutorLabel = (
   text: AppText
 ): string => executor?.displayName ?? text('automation.noSelectedExecutor')
 
+const hasCustomExecutionRoot = (task: AutomationTaskCard): task is
+  AutomationTaskCard & { readonly executionRoot: string } => {
+  const normalizeComparableRoot = (value: string | undefined): string | undefined => {
+    if (value === undefined) {
+      return undefined
+    }
+
+    const normalized = value.trim().replace(/\\/gu, '/').replace(/\/+$/u, '')
+
+    return normalized.length === 0 ? '/' : normalized
+  }
+
+  return (
+    task.executionRoot !== undefined &&
+    normalizeComparableRoot(task.executionRoot) !==
+      normalizeComparableRoot(task.workspaceId)
+  )
+}
+
+const getExecutionRecordRoot = (
+  run: AutomationRunSummary,
+  text: AppText
+): string => run.executionRoot ?? run.workspaceId ?? text('automation.noWorkspace')
+
+const getExecutionRootReasonText = (
+  reason: string | undefined,
+  text: AppText
+): string => {
+  switch (reason) {
+    case 'the path is empty or malformed':
+      return text('automation.executionRootReasonMalformed')
+    case 'the path is not a valid absolute local path':
+      return text('automation.executionRootReasonInvalidAbsolutePath')
+    case 'the path is not an existing directory':
+      return text('automation.executionRootReasonMissingDirectory')
+    default:
+      return text('automation.executionRootReasonInvalidAbsolutePath')
+  }
+}
+
+const getBlockingDiagnosticText = (
+  diagnostic: NonNullable<AutomationTaskCard['blockingDiagnostics']>[number],
+  selectedTask: AutomationTaskCard,
+  text: AppText
+): string => {
+  if (
+    diagnostic.code === 'automationRun.invalidExecutionRoot' &&
+    diagnostic.executionRoot !== undefined
+  ) {
+    return text('automation.executionRootDiagnosticDetail', {
+      reason: getExecutionRootReasonText(diagnostic.userSafeReason, text),
+      root: diagnostic.executionRoot,
+      task: diagnostic.taskTitle ?? selectedTask.title
+    })
+  }
+
+  return text('automation.diagnosticUnavailable')
+}
+
+const getTaskKey = (task: AutomationTaskCard): string => task.taskKey ?? task.taskId
+
 export const QuietFlowline = ({
   onClearSelection,
   onStartTask,
@@ -77,12 +159,13 @@ export const QuietFlowline = ({
   const selectedTask = viewModel.selectedTask
   const [executorSelection, setExecutorSelection] = useState<{
     readonly executorId?: string
-    readonly taskId?: string
+    readonly taskKey?: string
   }>({})
 
   const eligibleExecutors = selectedTask?.eligibleExecutors ?? []
   const selectedExecutorId =
-    executorSelection.taskId === selectedTask?.taskId
+    executorSelection.taskKey ===
+      (selectedTask === undefined ? undefined : getTaskKey(selectedTask))
       ? executorSelection.executorId ?? selectedTask?.primaryExecutor?.executorId
       : selectedTask?.primaryExecutor?.executorId
   const selectedExecutor =
@@ -90,6 +173,7 @@ export const QuietFlowline = ({
     selectedTask?.primaryExecutor
   const blockingDiagnostics = selectedTask?.blockingDiagnostics ?? []
   const startBlocked = blockingDiagnostics.length > 0 || selectedExecutor === undefined
+  const selectedTaskRuns = viewModel.selectedTaskRuns ?? []
 
   return (
     <section
@@ -147,6 +231,12 @@ export const QuietFlowline = ({
               <dt>{text('automation.engine')}</dt>
               <dd>{getTaskEngine(selectedTask, viewModel)}</dd>
             </div>
+            {hasCustomExecutionRoot(selectedTask) ? (
+              <div data-component-id={COMPONENT_IDS.automation.executionRootLabel}>
+                <dt>{text('automation.executionRoot')}</dt>
+                <dd>{selectedTask.executionRoot}</dd>
+              </div>
+            ) : null}
           </dl>
           {eligibleExecutors.length > 1 ? (
             <label className="automation-executor-selector">
@@ -156,7 +246,7 @@ export const QuietFlowline = ({
                 onChange={(event) => {
                   setExecutorSelection({
                     executorId: event.currentTarget.value,
-                    taskId: selectedTask.taskId
+                    taskKey: getTaskKey(selectedTask)
                   })
                 }}
                 value={selectedExecutor?.executorId}
@@ -181,7 +271,7 @@ export const QuietFlowline = ({
                   data-component-id={COMPONENT_IDS.automation.blockedStartDiagnosticRow}
                   key={diagnostic.code}
                 >
-                  {text('automation.diagnosticUnavailable')}
+                  {getBlockingDiagnosticText(diagnostic, selectedTask, text)}
                 </p>
               ))}
             </section>
@@ -217,6 +307,56 @@ export const QuietFlowline = ({
               <p>{viewModel.selectedDecision.prompt}</p>
             </section>
           ) : null}
+          {selectedTaskRuns.length > 0 ? (
+            <section
+              aria-label={text('automation.executionRecords')}
+              className="automation-execution-records"
+              data-component-id={COMPONENT_IDS.automation.executionRecordsPanel}
+            >
+              <h3>{text('automation.executionRecords')}</h3>
+              <ul>
+                {selectedTaskRuns.map((run) => (
+                  <li
+                    data-component-id={COMPONENT_IDS.automation.executionRecordRow}
+                    key={run.runId}
+                  >
+                    <strong>{run.title ?? run.runId}</strong>
+                    <span>
+                      {text('automation.executionRecordSummary', {
+                        executor: run.executorId ?? text('automation.noSelectedExecutor'),
+                        root: getExecutionRecordRoot(run, text),
+                        state: getRunStateLabel(run.state, text)
+                      })}
+                    </span>
+                    {run.reportReference !== undefined ? (
+                      <>
+                        <span>
+                          {text('automation.executionRecordReport', {
+                            reportId: run.reportReference.reportId,
+                            title: run.reportReference.title
+                          })}
+                        </span>
+                        {run.reportReference.summary !== undefined ? (
+                          <span>
+                            {text('automation.executionRecordReportSummary', {
+                              summary: run.reportReference.summary
+                            })}
+                          </span>
+                        ) : null}
+                        {run.reportReference.evidencePath !== undefined ? (
+                          <span>
+                            {text('automation.executionRecordReportReference', {
+                              reference: run.reportReference.evidencePath
+                            })}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {selectedTask.bucket === 'ready' || viewModel.selectedDecision !== undefined ? (
             <div className="automation-flowline-actions">
               {selectedTask.bucket === 'ready' ? (
@@ -226,7 +366,7 @@ export const QuietFlowline = ({
                   disabled={startBlocked}
                   onClick={() => {
                     if (selectedExecutor !== undefined) {
-                      onStartTask?.(selectedTask.taskId, selectedExecutor)
+                      onStartTask?.(selectedTask, selectedExecutor)
                     }
                   }}
                   type="button"

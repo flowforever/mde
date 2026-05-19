@@ -175,6 +175,9 @@ export const createAutomationFlowTaskCandidate = (
   return Object.freeze({
     automationFlowId: automationFlow.id,
     engine,
+    ...(sourceItem.executionRoot !== undefined
+      ? { executionRoot: sourceItem.executionRoot }
+      : {}),
     priority: sourceItem.priority,
     relativePath: sourceItem.relativePath,
     sourceItemId: sourceItem.sourceItemId,

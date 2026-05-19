@@ -1,5 +1,8 @@
 import type { AutomationDiagnostic } from '../../../shared/automation'
-import { assertAutomationEvidencePath } from './automationPathSafety'
+import {
+  assertAutomationEvidencePath,
+  assertAutomationRunWorkspacePath
+} from './automationPathSafety'
 
 type RuntimeToolName =
   | 'apply_source_patch'
@@ -162,15 +165,27 @@ export const createMdeRuntimeBridge = ({
         return authorization
       }
 
-      if (
-        call.toolName === 'apply_source_patch' &&
-        call.targetPath !== authorization.run.sourcePath
-      ) {
-        return rejectCall(
-          call,
-          'source-path-mismatch',
-          call.patch ?? 'Source patch target mismatch.'
-        )
+      if (call.toolName === 'apply_source_patch') {
+        if (call.targetPath === undefined) {
+          return rejectCall(
+            call,
+            'missing-target-path',
+            call.patch ?? 'Source patch target is missing.'
+          )
+        }
+
+        try {
+          await assertAutomationRunWorkspacePath(
+            authorization.run.workspaceRoot,
+            call.targetPath
+          )
+        } catch {
+          return rejectCall(
+            call,
+            'unsafe-target-path',
+            call.patch ?? 'Source patch target is outside the run workspace.'
+          )
+        }
       }
 
       if (call.toolName === 'report_phase_update') {

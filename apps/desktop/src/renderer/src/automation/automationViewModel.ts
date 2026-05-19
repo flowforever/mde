@@ -3,6 +3,7 @@ import type {
   AutomationDiagnostic,
   AutomationFlowRow,
   AutomationProjection,
+  AutomationRunSummary,
   AutomationTaskCard
 } from '../../../shared/automation'
 import type { AppTextKey } from '../i18n/appLanguage'
@@ -35,6 +36,7 @@ export interface AutomationCenterViewModel {
   readonly runningTasks: readonly AutomationTaskCard[]
   readonly selectedDecision?: AutomationDecision
   readonly selectedTask?: AutomationTaskCard
+  readonly selectedTaskRuns?: readonly AutomationRunSummary[]
   readonly tasks: readonly AutomationTaskCard[]
   readonly visibleTasks?: readonly AutomationTaskCard[]
 }
@@ -97,13 +99,15 @@ const getVerifyPhaseStatus = (
   task: AutomationTaskCard
 ): AutomationFlowlinePhaseStatus => (task.bucket === 'done' ? 'done' : 'pending')
 
+const getTaskKey = (task: AutomationTaskCard): string => task.taskKey ?? task.taskId
+
 const createFlowlinePhases = (
   task: AutomationTaskCard
 ): readonly AutomationFlowlinePhase[] =>
   Object.freeze([
     Object.freeze({
       descriptionKey: getReviewSourceDescriptionKey(task),
-      phaseId: `${task.taskId}:review-source`,
+      phaseId: `${getTaskKey(task)}:review-source`,
       status: 'done',
       titleKey:
         task.sourceType === 'workspace-markdown'
@@ -112,13 +116,13 @@ const createFlowlinePhases = (
     }),
     Object.freeze({
       descriptionKey: 'automation.readyPhaseRunFlowDescription',
-      phaseId: `${task.taskId}:run-flow`,
+      phaseId: `${getTaskKey(task)}:run-flow`,
       status: getRunPhaseStatus(task),
       titleKey: 'automation.readyPhaseRunFlow'
     }),
     Object.freeze({
       descriptionKey: getVerifyResultDescriptionKey(task),
-      phaseId: `${task.taskId}:verify-result`,
+      phaseId: `${getTaskKey(task)}:verify-result`,
       status: getVerifyPhaseStatus(task),
       titleKey:
         task.engine === undefined
@@ -144,17 +148,19 @@ const getVisibleTasks = (
 
 export const createAutomationCenterViewModel = (
   projection: AutomationProjection,
-  selectedTaskId?: string | null
+  selectedTaskKey?: string | null
 ): AutomationCenterViewModel => {
-  const projectionSelectedTaskId = selectedTaskId ?? projection.selectedTaskId
+  const projectionSelectedTaskKey = selectedTaskKey ?? projection.selectedTaskId
   const visibleTasks = getVisibleTasks(projection)
   const selectedTask =
-    selectedTaskId === null
+    selectedTaskKey === null
       ? undefined
-      : projectionSelectedTaskId === undefined
+      : projectionSelectedTaskKey === undefined
       ? visibleTasks[0]
       : visibleTasks.find(
-          (task) => task.taskId === projectionSelectedTaskId
+          (task) =>
+            getTaskKey(task) === projectionSelectedTaskKey ||
+            task.taskId === projectionSelectedTaskKey
         ) ?? visibleTasks[0]
 
   const phases =
@@ -166,8 +172,18 @@ export const createAutomationCenterViewModel = (
       ? undefined
       : projection.decisions.find(
           (decision) =>
-            decision.taskId === selectedTask.taskId &&
+            (selectedTask.activeRunId === undefined
+              ? decision.taskId === selectedTask.taskId
+              : decision.runId === selectedTask.activeRunId) &&
             decision.status === 'pending'
+        )
+  const selectedTaskRuns =
+    selectedTask === undefined
+      ? []
+      : projection.runs.filter((run) =>
+          run.taskKey === undefined
+            ? run.taskId === selectedTask.taskId
+            : run.taskKey === getTaskKey(selectedTask)
         )
   const readyPreview =
     selectedTask?.bucket === 'ready'
@@ -189,6 +205,7 @@ export const createAutomationCenterViewModel = (
     runningTasks: projection.buckets.running,
     ...(selectedDecision !== undefined ? { selectedDecision } : {}),
     ...(selectedTask !== undefined ? { selectedTask } : {}),
+    selectedTaskRuns: Object.freeze(selectedTaskRuns),
     tasks: projection.tasks,
     visibleTasks
   })

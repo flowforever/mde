@@ -58,6 +58,7 @@ describe('automation-flow discovery', () => {
         },
         {
           externalId: '123',
+          executionRoot: '/workspace/repos/issue-123',
           provider: 'github',
           sourceItemId: 'issue-123',
           sourceType: 'remote-issue',
@@ -75,6 +76,7 @@ describe('automation-flow discovery', () => {
       },
       {
         externalId: '123',
+        executionRoot: '/workspace/repos/issue-123',
         provider: 'github',
         sourceType: 'remote-issue'
       }
@@ -117,6 +119,111 @@ describe('automation-flow discovery', () => {
     ).toBeNull()
   })
 
+  it('preserves task-level execution roots through discovered source candidates', () => {
+    const [source] = normalizeAutomationDiscoveredTaskSources({
+      automationFlow: flow,
+      discoveredAt: '2026-05-10T08:00:00.000Z',
+      sources: [
+        {
+          executionRoot: '/Users/example/work/web',
+          requiredExecutorRef: 'skill:code-review',
+          sourceItemId: 'web/web!40106@abc1234',
+          sourceSnapshotHash: 'abc1234',
+          sourceType: 'remote-mr',
+          sourceUri: 'https://git.ringcentral.com/web/web/-/merge_requests/40106',
+          taskType: 'code-review',
+          title: 'Review web/web!40106'
+        }
+      ]
+    })
+
+    const candidate = createAutomationTaskCandidateFromDiscoveredSource(
+      flow,
+      source
+    )
+
+    expect(source).toMatchObject({
+      executionRoot: '/Users/example/work/web',
+      sourceItemId: 'web/web!40106@abc1234'
+    })
+    expect(candidate).toMatchObject({
+      executionRoot: '/Users/example/work/web',
+      requiredExecutorRef: 'skill:code-review',
+      taskType: 'code-review'
+    })
+  })
+
+  it('normalizes task-level execution roots before snapshot and candidate creation', () => {
+    const [source] = normalizeAutomationDiscoveredTaskSources({
+      automationFlow: flow,
+      discoveredAt: '2026-05-10T08:00:00.000Z',
+      sources: [
+        {
+          executionRoot: '/Users/example/work/web/',
+          sourceItemId: 'web/web!40106@abc1234',
+          sourceSnapshotHash: 'abc1234',
+          sourceType: 'remote-mr',
+          title: 'Review web/web!40106'
+        }
+      ]
+    })
+
+    const candidate = createAutomationTaskCandidateFromDiscoveredSource(
+      flow,
+      source
+    )
+
+    expect(source?.executionRoot).toBe('/Users/example/work/web')
+    expect(candidate?.executionRoot).toBe('/Users/example/work/web')
+  })
+
+  it('preserves Windows root execution roots while trimming non-root trailing separators', () => {
+    const sources = normalizeAutomationDiscoveredTaskSources({
+      automationFlow: flow,
+      discoveredAt: '2026-05-10T08:00:00.000Z',
+      sources: [
+        {
+          executionRoot: 'C:\\',
+          sourceItemId: 'drive-root-backslash',
+          sourceType: 'remote-mr',
+          title: 'READY Drive root backslash'
+        },
+        {
+          executionRoot: 'D:/',
+          sourceItemId: 'drive-root-forward-slash',
+          sourceType: 'remote-mr',
+          title: 'READY Drive root forward slash'
+        },
+        {
+          executionRoot: '\\\\server\\share\\',
+          sourceItemId: 'unc-share-root',
+          sourceType: 'remote-mr',
+          title: 'READY UNC share root'
+        },
+        {
+          executionRoot: 'C:\\repo\\',
+          sourceItemId: 'windows-repo',
+          sourceType: 'remote-mr',
+          title: 'READY Windows repo'
+        },
+        {
+          executionRoot: '/Users/example/work/web/',
+          sourceItemId: 'posix-repo',
+          sourceType: 'remote-mr',
+          title: 'READY POSIX repo'
+        }
+      ]
+    })
+
+    expect(sources.map((source) => source.executionRoot)).toEqual([
+      'C:\\',
+      'D:\\',
+      '\\\\server\\share\\',
+      'C:\\repo',
+      '/Users/example/work/web'
+    ])
+  })
+
   it('rejects unsafe discovery source metadata before normalization', () => {
     const sources = normalizeAutomationDiscoveredTaskSources({
       automationFlow: flow,
@@ -153,6 +260,18 @@ describe('automation-flow discovery', () => {
           sourcePath: 'https://example.com/raw-path',
           sourceType: 'local-file',
           title: 'READY Unsafe source path'
+        },
+        {
+          executionRoot: 'relative/repo',
+          sourceItemId: 'relative-execution-root',
+          sourceType: 'remote-mr',
+          title: 'READY Relative execution root'
+        },
+        {
+          executionRoot: 'file:///workspace/repo',
+          sourceItemId: 'uri-execution-root',
+          sourceType: 'remote-mr',
+          title: 'READY URI execution root'
         },
         {
           sourceItemId: 'unknown-source-type',

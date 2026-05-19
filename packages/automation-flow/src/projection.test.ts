@@ -75,6 +75,168 @@ describe('projectAutomationFlowSignalStack', () => {
     expect(result.tasks[0]?.primaryExecutor?.executorId).toBe('implementation')
   })
 
+  test('projects task-level execution root from candidates and active runs', () => {
+    const result = projectAutomationFlowSignalStack({
+      candidates: [
+        {
+          ...candidate,
+          executionRoot: '/workspace/repos/web'
+        }
+      ],
+      reports: [],
+      runs: [
+        {
+          automationFlowId: 'flow',
+          executionRoot: '/workspace/repos/web',
+          runId: 'run-a',
+          sourceItemId: candidate.sourceItemId,
+          state: 'running',
+          taskId: candidate.taskId
+        }
+      ]
+    })
+
+    expect(result.buckets.running[0]).toMatchObject({
+      bucket: 'running',
+      executionRoot: '/workspace/repos/web'
+    })
+  })
+
+  test('keeps same logical task id distinct across execution roots', () => {
+    const webCandidate = {
+      ...candidate,
+      executionRoot: '/workspace/repos/web',
+      taskDataId: 'task-data-web',
+      taskDataSnapshotId: 'task-data-snapshot-web'
+    }
+    const apiCandidate = {
+      ...candidate,
+      executionRoot: '/workspace/repos/api',
+      taskDataId: 'task-data-api',
+      taskDataSnapshotId: 'task-data-snapshot-api'
+    }
+    const result = projectAutomationFlowSignalStack({
+      candidates: [webCandidate, apiCandidate],
+      reports: [],
+      runs: [
+        {
+          automationFlowId: 'flow',
+          executionRoot: '/workspace/repos/api',
+          runId: 'run-api',
+          sourceItemId: candidate.sourceItemId,
+          state: 'running',
+          taskId: candidate.taskId,
+          taskDataId: 'task-data-api',
+          taskDataSnapshotId: 'task-data-snapshot-api'
+        }
+      ]
+    })
+
+    expect(result.tasks).toHaveLength(2)
+    expect(result.tasks.map((task) => task.taskId)).toEqual([
+      candidate.taskId,
+      candidate.taskId
+    ])
+    expect(new Set(result.tasks.map((task) => task.taskKey)).size).toBe(2)
+    expect(result.buckets.ready).toEqual([
+      expect.objectContaining({
+        bucket: 'ready',
+        executionRoot: '/workspace/repos/web',
+        taskDataSnapshotId: 'task-data-snapshot-web'
+      })
+    ])
+    expect(result.buckets.running).toEqual([
+      expect.objectContaining({
+        activeRunId: 'run-api',
+        bucket: 'running',
+        executionRoot: '/workspace/repos/api',
+        taskDataSnapshotId: 'task-data-snapshot-api'
+      })
+    ])
+  })
+
+  test('attaches canonicalized runs to candidates discovered through an alias root', () => {
+    const aliasRootCandidate = {
+      ...candidate,
+      executionRoot: '/workspace-link/repos/web',
+      taskDataId: 'task-data-web',
+      taskDataSnapshotId: 'task-data-snapshot-web'
+    }
+    const result = projectAutomationFlowSignalStack({
+      candidates: [aliasRootCandidate],
+      reports: [],
+      runs: [
+        {
+          automationFlowId: 'flow',
+          executionRoot: '/workspace-real/repos/web',
+          runId: 'run-web',
+          sourceItemId: candidate.sourceItemId,
+          state: 'running',
+          taskDataId: 'task-data-web',
+          taskDataSnapshotId: 'task-data-snapshot-web',
+          taskId: candidate.taskId
+        }
+      ]
+    })
+
+    expect(result.tasks).toHaveLength(1)
+    expect(result.buckets.ready).toEqual([])
+    expect(result.buckets.running).toEqual([
+      expect.objectContaining({
+        activeRunId: 'run-web',
+        bucket: 'running',
+        executionRoot: '/workspace-real/repos/web',
+        taskDataSnapshotId: 'task-data-snapshot-web'
+      })
+    ])
+  })
+
+  test('uses persisted run workspace root as the projection key fallback for legacy task runs', () => {
+    const webCandidate = {
+      ...candidate,
+      executionRoot: '/workspace/repos/web',
+      taskDataId: 'task-data-web',
+      taskDataSnapshotId: 'task-data-snapshot-web'
+    }
+    const apiCandidate = {
+      ...candidate,
+      executionRoot: '/workspace/repos/api',
+      taskDataId: 'task-data-api',
+      taskDataSnapshotId: 'task-data-snapshot-api'
+    }
+    const result = projectAutomationFlowSignalStack({
+      candidates: [webCandidate, apiCandidate],
+      reports: [],
+      runs: [
+        {
+          automationFlowId: 'flow',
+          runId: 'legacy-run-api',
+          sourceItemId: candidate.sourceItemId,
+          state: 'running',
+          taskId: candidate.taskId,
+          workspaceId: '/workspace/repos/api'
+        }
+      ]
+    })
+
+    expect(result.tasks).toHaveLength(2)
+    expect(result.buckets.ready).toEqual([
+      expect.objectContaining({
+        bucket: 'ready',
+        executionRoot: '/workspace/repos/web',
+        taskDataSnapshotId: 'task-data-snapshot-web'
+      })
+    ])
+    expect(result.buckets.running).toEqual([
+      expect.objectContaining({
+        activeRunId: 'legacy-run-api',
+        bucket: 'running',
+        executionRoot: '/workspace/repos/api',
+        taskDataSnapshotId: 'task-data-snapshot-api'
+      })
+    ])
+  })
+
   test('required executor id and ref override handle matching and disabled required executors block start', () => {
     const skillExecutor = Object.freeze({
       ...reviewExecutor,
@@ -253,6 +415,7 @@ describe('projectAutomationFlowSignalStack', () => {
         {
           automationFlowId: 'flow',
           completedAt: '2026-05-10T08:00:00.000Z',
+          executionRoot: '/workspace',
           reportId: 'report-1',
           sourceItemId: candidate.sourceItemId,
           taskId: candidate.taskId,
@@ -282,6 +445,7 @@ describe('projectAutomationFlowSignalStack', () => {
         {
           automationFlowId: 'flow',
           completedAt: '2026-05-10T08:00:00.000Z',
+          executionRoot: '/workspace/repos/web',
           reportId: 'report-1',
           relativePath: '.mde/docs/tasks/ready.md',
           sourceItemId: candidate.sourceItemId,
@@ -299,6 +463,7 @@ describe('projectAutomationFlowSignalStack', () => {
     expect(result.buckets.done).toEqual([
       expect.objectContaining({
         bucket: 'done',
+        executionRoot: '/workspace/repos/web',
         relativePath: '.mde/docs/tasks/ready.md',
         sourcePath: '/workspace/.mde/docs/tasks/ready.md',
         sourceType: 'workspace-markdown',
@@ -306,6 +471,47 @@ describe('projectAutomationFlowSignalStack', () => {
         workspaceId: '/workspace'
       })
     ])
+  })
+
+  test('keeps legacy completed reports distinct by workspace root fallback', () => {
+    const result = projectAutomationFlowSignalStack({
+      candidates: [],
+      reports: [
+        {
+          automationFlowId: 'flow',
+          completedAt: '2026-05-10T08:00:00.000Z',
+          reportId: 'report-web',
+          sourceItemId: candidate.sourceItemId,
+          taskId: candidate.taskId,
+          title: 'Web report',
+          workspaceId: '/workspace/repos/web'
+        },
+        {
+          automationFlowId: 'flow',
+          completedAt: '2026-05-10T08:01:00.000Z',
+          reportId: 'report-api',
+          sourceItemId: candidate.sourceItemId,
+          taskId: candidate.taskId,
+          title: 'API report',
+          workspaceId: '/workspace/repos/api'
+        }
+      ],
+      runs: []
+    })
+
+    expect(result.buckets.done).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          latestReportId: 'report-api',
+          workspaceId: '/workspace/repos/api'
+        }),
+        expect.objectContaining({
+          latestReportId: 'report-web',
+          workspaceId: '/workspace/repos/web'
+        })
+      ])
+    )
+    expect(result.buckets.done).toHaveLength(2)
   })
 
   test('does not attach one flow owner report to another flow owner for the same source', () => {

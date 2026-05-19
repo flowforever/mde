@@ -103,6 +103,8 @@ const EN_MESSAGES = {
   "automation.decisionAction": "Approve and resume",
   "automation.diagnostics.automationRun.decisionUnavailable":
     "This decision is no longer available. Refresh and try again.",
+  "automation.diagnostics.automationRun.invalidExecutionRoot":
+    "Automation cannot start because the task execution root is not an existing local directory.",
   "automation.diagnostics.automationRun.resumeFailed":
     "Automation run could not be resumed. Check the task status and try again.",
   "automation.diagnostics.automationAdapter.authenticationRequired":
@@ -135,6 +137,21 @@ const EN_MESSAGES = {
     "Automation-flow editor does not attach image assets.",
   "automation.emptyTasks": "No automation tasks yet.",
   "automation.engine": "Engine",
+  "automation.executionRecordReport": "Report: {title} ({reportId})",
+  "automation.executionRecordReportReference": "Report reference: {reference}",
+  "automation.executionRecordReportSummary": "Report summary: {summary}",
+  "automation.executionRecordSummary":
+    "{state} · {executor} · {root}",
+  "automation.executionRecords": "Execution records",
+  "automation.executionRoot": "Execution root",
+  "automation.executionRootDiagnosticDetail":
+    'Task "{task}" requested execution root "{root}", but {reason}.',
+  "automation.executionRootHint": "Execution root: {root}",
+  "automation.executionRootReasonInvalidAbsolutePath":
+    "the path is not a valid absolute local path",
+  "automation.executionRootReasonMalformed": "the path is empty or malformed",
+  "automation.executionRootReasonMissingDirectory":
+    "the path is not an existing directory",
   "automation.flowActions": "Flow actions",
   "automation.flowEditor": "Automation-flow editor",
   "automation.flowId": "Flow id",
@@ -773,6 +790,8 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
   "automation.decisionAction": "批准并继续",
   "automation.diagnostics.automationRun.decisionUnavailable":
     "这个决策已不可用，请刷新后重试。",
+  "automation.diagnostics.automationRun.invalidExecutionRoot":
+    "无法启动自动化任务，因为任务执行根目录不是可用的本地目录。",
   "automation.diagnostics.automationRun.resumeFailed":
     "无法继续自动化运行，请检查任务状态后重试。",
   "automation.diagnostics.automationAdapter.authenticationRequired":
@@ -805,6 +824,20 @@ const ZH_MESSAGES: Record<AppTextKey, string> = {
     "自动化流程编辑器不附加图片资产。",
   "automation.emptyTasks": "暂无自动化任务。",
   "automation.engine": "引擎",
+  "automation.executionRecordReport": "报告：{title}（{reportId}）",
+  "automation.executionRecordReportReference": "报告引用：{reference}",
+  "automation.executionRecordReportSummary": "报告摘要：{summary}",
+  "automation.executionRecordSummary":
+    "{state} · {executor} · {root}",
+  "automation.executionRecords": "执行记录",
+  "automation.executionRoot": "执行根目录",
+  "automation.executionRootDiagnosticDetail":
+    "任务“{task}”请求执行根目录“{root}”，但{reason}。",
+  "automation.executionRootHint": "执行根目录：{root}",
+  "automation.executionRootReasonInvalidAbsolutePath":
+    "该路径不是有效的本地绝对路径",
+  "automation.executionRootReasonMalformed": "该路径为空或格式不正确",
+  "automation.executionRootReasonMissingDirectory": "该路径不是已存在的目录",
   "automation.flowActions": "流程操作",
   "automation.flowEditor": "自动化流程编辑器",
   "automation.flowId": "流程 ID",

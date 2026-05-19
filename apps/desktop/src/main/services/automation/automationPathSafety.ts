@@ -217,6 +217,15 @@ export const assertAutomationStoragePath = async (
     message: 'Automation storage path is outside app automation storage'
   })
 
+export const assertAutomationRunWorkspacePath = async (
+  workspaceRoot: string,
+  targetPath: string
+): Promise<string> =>
+  assertNoSymlinkPathComponents(workspaceRoot, targetPath, {
+    allowMissing: true,
+    message: 'Runtime target path is outside the run workspace'
+  })
+
 export const assertAutomationEvidencePath = async ({
   appDataPath,
   targetPath,

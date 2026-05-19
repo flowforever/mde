@@ -217,6 +217,23 @@ describe('matchesAutomationFlowSourceItem', () => {
     })
   })
 
+  test('preserves task-level execution root from matched source items', () => {
+    const flow = makeWorkspaceFlow(['.mde/docs/tasks/**/*.md'])
+    const candidate = createAutomationFlowTaskCandidate(flow, {
+      automationStatus: 'ready',
+      executionRoot: '/workspace/repos/web',
+      relativePath: '.mde/docs/tasks/review.md',
+      sourceItemId: 'workspace:.mde/docs/tasks/review.md',
+      sourceType: 'workspace-markdown',
+      title: 'READY Review task'
+    })
+
+    expect(candidate).toMatchObject({
+      executionRoot: '/workspace/repos/web',
+      sourceItemId: 'workspace:.mde/docs/tasks/review.md'
+    })
+  })
+
   test('uses the shared task id strategy for scanned and discovered candidates', () => {
     const flow = makeWorkspaceFlow(['.mde/docs/tasks/**/*.md'])
     const sourceItemId =

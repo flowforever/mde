@@ -62,10 +62,14 @@ export interface AutomationFlowDiagnostic {
   readonly code: string
   readonly messageKey: string
   readonly severity: AutomationFlowDiagnosticSeverity
+  readonly executionRoot?: string
   readonly missingField?: string
   readonly sectionName?: string
   readonly sourceFile?: string
+  readonly taskId?: string
+  readonly taskTitle?: string
   readonly technicalMessage?: string
+  readonly userSafeReason?: string
 }
 
 export interface AutomationFlowExecutorHandles {
@@ -152,6 +156,7 @@ export interface AutomationFlowTemplateRenderInputs {
 export interface AutomationFlowSourceItem {
   readonly automationStatus?: AutomationSourceStatus
   readonly engine?: AgentEngineId
+  readonly executionRoot?: string
   readonly priority?: number
   readonly relativePath?: string
   readonly sourceItemId: string
@@ -176,6 +181,7 @@ export interface AutomationDiscoveredTaskSource {
   readonly contentSnapshot?: string
   readonly discoveredAt: string
   readonly engine?: AgentEngineId
+  readonly executionRoot?: string
   readonly externalId?: string
   readonly priority?: number
   readonly provider?: string
@@ -200,6 +206,7 @@ export interface AutomationFlowTaskCandidate {
   readonly automationFlowOwnerKey?: string
   readonly authDiagnostic?: AutomationSourceAuthDiagnostic
   readonly engine: AgentEngineId
+  readonly executionRoot?: string
   readonly externalId?: string
   readonly priority?: number
   readonly provider?: string
@@ -231,6 +238,8 @@ export interface AutomationFlowOwnershipResult {
 
 export interface AutomationRunOverlay {
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
+  readonly executionRoot?: string
   readonly executorId?: string
   readonly executorSnapshotId?: string
   readonly runKind?: AutomationRunKind
@@ -240,12 +249,15 @@ export interface AutomationRunOverlay {
   readonly taskId: string
   readonly taskDataId?: string
   readonly taskDataSnapshotId?: string
+  readonly workspaceId?: string
 }
 
 export interface AutomationReportOverlay {
   readonly automationFlowId: string
+  readonly automationFlowOwnerKey?: string
   readonly completedAt: string
   readonly engine?: AgentEngineId
+  readonly executionRoot?: string
   readonly priority?: number
   readonly relativePath?: string
   readonly reportId: string
@@ -254,6 +266,8 @@ export interface AutomationReportOverlay {
   readonly sourceType?: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly taskId: string
+  readonly taskDataId?: string
+  readonly taskDataSnapshotId?: string
   readonly title?: string
   readonly workspaceId?: string
 }
@@ -266,6 +280,7 @@ export interface AutomationProjectedTask {
   readonly bucket: AutomationTaskBucket
   readonly eligibleExecutors?: readonly AutomationFlowExecutorRef[]
   readonly engine?: AgentEngineId
+  readonly executionRoot?: string
   readonly executorSnapshotId?: string
   readonly latestReportId?: string
   readonly primaryExecutor?: AutomationFlowExecutorRef
@@ -276,6 +291,7 @@ export interface AutomationProjectedTask {
   readonly sourceType?: AutomationFlowSourceType
   readonly sourceUri?: string
   readonly taskId: string
+  readonly taskKey: string
   readonly taskDataId?: string
   readonly taskDataSnapshotId?: string
   readonly title: string

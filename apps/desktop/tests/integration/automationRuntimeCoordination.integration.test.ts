@@ -262,4 +262,77 @@ describe('automation runtime coordination integration', () => {
     expect(newerTaskDataRun.runId).not.toBe(firstRun.runId)
     await expect(store.listRuns()).resolves.toHaveLength(3)
   })
+
+  it('scopes active task locks by task executionRoot', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const firstExecutionRoot = await createTempRoot('mde-execution-root-a-')
+    const secondExecutionRoot = await createTempRoot('mde-execution-root-b-')
+    const store = createAutomationStore({ appDataPath })
+    let idCounter = 0
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([
+        createFakeAgentCliAdapter({
+          commandPath: '/fake/bin/codex',
+          engine: 'codex'
+        })
+      ]),
+      createId: (prefix) => `${prefix}-${(idCounter += 1)}`,
+      profileId: appDataPath,
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    const firstRun = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot, {
+        executionRoot: firstExecutionRoot,
+        sourceItemId: 'web/web!40106@abc1234',
+        taskDataSnapshotId: 'abc1234',
+        taskId: 'task:web/web!40106@abc1234',
+        taskType: 'code-review'
+      }),
+      executorSnapshot: createExecutor({
+        executorId: 'code-review',
+        skillRef: 'skill:code-review'
+      }),
+      workspaceRoot
+    })
+    const duplicateRun = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot, {
+        executionRoot: firstExecutionRoot,
+        sourceItemId: 'web/web!40106@abc1234',
+        taskDataSnapshotId: 'abc1234',
+        taskId: 'task:web/web!40106@abc1234',
+        taskType: 'code-review'
+      }),
+      executorSnapshot: createExecutor({
+        executorId: 'code-review',
+        skillRef: 'skill:code-review'
+      }),
+      workspaceRoot
+    })
+    const differentRootRun = await runtime.startRun({
+      automationFlow: createFlow(),
+      candidate: createCandidate(workspaceRoot, {
+        executionRoot: secondExecutionRoot,
+        sourceItemId: 'web/web!40106@abc1234',
+        taskDataSnapshotId: 'abc1234',
+        taskId: 'task:web/web!40106@abc1234',
+        taskType: 'code-review'
+      }),
+      executorSnapshot: createExecutor({
+        executorId: 'code-review',
+        skillRef: 'skill:code-review'
+      }),
+      workspaceRoot
+    })
+
+    expect(duplicateRun.runId).toBe(firstRun.runId)
+    expect(differentRootRun.runId).not.toBe(firstRun.runId)
+    await expect(store.listRuns()).resolves.toHaveLength(2)
+  })
 })

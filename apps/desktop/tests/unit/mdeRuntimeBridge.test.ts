@@ -91,17 +91,19 @@ describe('mdeRuntimeBridge', () => {
     ).toMatchObject({ accepted: false, reason: 'expired-token' })
   })
 
-  it('rejects unsafe source, evidence, and report paths without exposing secrets', async () => {
+  it('requires source patch targets to stay under the canonical run root', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
     const workspaceRoot = await createTempRoot('mde-workspace-')
     const outsideRoot = await createTempRoot('mde-outside-')
-    const sourcePath = join(workspaceRoot, '.mde', 'docs', 'tasks', 'ready.md')
+    const sourcePath = join(outsideRoot, 'ready.md')
+    const workspaceTargetPath = join(workspaceRoot, '.mde', 'docs', 'tasks', 'ready.md')
     const bridge = createMdeRuntimeBridge({ appDataPath })
     const pathSafetyToken = ['path', 'runtime', 'value'].join('-')
     const sensitiveFixtureValue = ['sensitive', 'fixture', 'value'].join('-')
 
     await mkdir(join(workspaceRoot, '.mde', 'docs', 'tasks'), { recursive: true })
-    await writeFile(sourcePath, '# READY Task')
+    await writeFile(workspaceTargetPath, '# READY Task')
+    await writeFile(sourcePath, '# External Evidence')
     bridge.registerRun({
       automationFlowSnapshotId: 'snapshot-1',
       runId: 'run-1',
@@ -118,12 +120,24 @@ describe('mdeRuntimeBridge', () => {
         patch: `password=${sensitiveFixtureValue}`,
         runId: 'run-1',
         sourceItemId: 'source-1',
-        targetPath: join(outsideRoot, 'ready.md'),
+        targetPath: sourcePath,
         taskId: 'task-1',
         token: pathSafetyToken,
         toolName: 'apply_source_patch'
       })
-    ).toMatchObject({ accepted: false, reason: 'source-path-mismatch' })
+    ).toMatchObject({ accepted: false, reason: 'unsafe-target-path' })
+    await expect(
+      bridge.handleRuntimeToolCall({
+        automationFlowSnapshotId: 'snapshot-1',
+        patch: 'diff --git a/ready.md b/ready.md',
+        runId: 'run-1',
+        sourceItemId: 'source-1',
+        targetPath: workspaceTargetPath,
+        taskId: 'task-1',
+        token: pathSafetyToken,
+        toolName: 'apply_source_patch'
+      })
+    ).resolves.toMatchObject({ accepted: true })
     expect(
       await bridge.handleRuntimeToolCall({
         automationFlowSnapshotId: 'snapshot-1',

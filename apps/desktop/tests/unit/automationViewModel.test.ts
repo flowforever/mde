@@ -98,4 +98,67 @@ describe('createAutomationCenterViewModel', () => {
     expect(viewModel.visibleTasks).toHaveLength(1)
     expect(viewModel.selectedTask?.taskId).toBe('ready-task')
   })
+
+  it('selects and scopes runs by taskKey when logical task ids collide', () => {
+    const webTask = {
+      automationFlowId: 'flow-a',
+      bucket: 'ready' as const,
+      executionRoot: '/repos/web',
+      sourceItemId: 'source-a',
+      taskId: 'same-task',
+      taskKey: 'same-task:web',
+      title: 'READY Web'
+    }
+    const apiTask = {
+      automationFlowId: 'flow-a',
+      bucket: 'ready' as const,
+      executionRoot: '/repos/api',
+      sourceItemId: 'source-a',
+      taskId: 'same-task',
+      taskKey: 'same-task:api',
+      title: 'READY API'
+    }
+    const projection = {
+      ...createProjection(),
+      buckets: {
+        done: [],
+        needsMe: [],
+        ready: [webTask, apiTask],
+        running: []
+      },
+      runs: [
+        {
+          automationFlowId: 'flow-a',
+          engine: 'codex' as const,
+          executionRoot: '/repos/web',
+          runId: 'run-web',
+          runKind: 'task' as const,
+          startedAt: '2026-05-14T08:00:00.000Z',
+          state: 'done' as const,
+          taskId: 'same-task',
+          taskKey: 'same-task:web',
+          updatedAt: '2026-05-14T08:01:00.000Z'
+        },
+        {
+          automationFlowId: 'flow-a',
+          engine: 'codex' as const,
+          executionRoot: '/repos/api',
+          runId: 'run-api',
+          runKind: 'task' as const,
+          startedAt: '2026-05-14T08:00:00.000Z',
+          state: 'done' as const,
+          taskId: 'same-task',
+          taskKey: 'same-task:api',
+          updatedAt: '2026-05-14T08:01:00.000Z'
+        }
+      ],
+      tasks: [webTask, apiTask]
+    } satisfies AutomationProjection
+    const viewModel = createAutomationCenterViewModel(projection, 'same-task:api')
+
+    expect(viewModel.selectedTask?.executionRoot).toBe('/repos/api')
+    expect(viewModel.selectedTaskRuns?.map((run) => run.runId)).toEqual([
+      'run-api'
+    ])
+  })
 })

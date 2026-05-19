@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, realpath, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,19 +7,22 @@ import type {
   AutomationFlowExecutorRef,
   AutomationFlowTaskCandidate
 } from '@mde/automation-flow'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createAutomationAdapterRegistry } from '../../src/main/services/automation/automationAdapterRegistry'
 import {
   createFakeAgentCliAdapter,
   type AgentCliAdapter
 } from '../../src/main/services/automation/agentCliAdapters'
-import { createAutomationRuntime } from '../../src/main/services/automation/automationRuntime'
+import {
+  AutomationExecutionRootError,
+  createAutomationRuntime
+} from '../../src/main/services/automation/automationRuntime'
 import { createAutomationStore } from '../../src/main/services/automation/automationStore'
 import { createMdeRuntimeBridge } from '../../src/main/services/automation/mdeRuntimeBridge'
 
-const createTempRoot = (prefix: string): Promise<string> =>
-  mkdtemp(join(tmpdir(), prefix))
+const createTempRoot = async (prefix: string): Promise<string> =>
+  realpath(await mkdtemp(join(tmpdir(), prefix)))
 
 const createFlow = (
   overrides: Partial<AutomationFlow> = {}
@@ -89,6 +92,254 @@ const executorSnapshot: AutomationFlowExecutorRef = Object.freeze({
 })
 
 describe('automationRuntime', () => {
+  it('uses task-level executionRoot for probes, adapter start, prompt metadata, and stored run metadata', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const executionRoot = await createTempRoot('mde-execution-root-')
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const probe = vi.fn(fakeAdapter.probe)
+    const startRun = vi.fn(fakeAdapter.startRun)
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      probe,
+      startRun
+    })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      createId: (prefix) => `${prefix}-execution-root`,
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    await runtime.startRun({
+      automationFlow: createFlow(),
+      executorSnapshot,
+      candidate: createCandidate(workspaceRoot, {
+        executionRoot
+      }),
+      workspaceRoot
+    })
+
+    expect(probe).toHaveBeenCalledWith({ workspaceRoot: executionRoot })
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: executionRoot
+      })
+    )
+    expect(startRun.mock.calls[0]?.[0].promptBundle).toContain(
+      `"executionRoot": "${executionRoot}"`
+    )
+    await expect(store.listRuns()).resolves.toMatchObject([
+      {
+        executionRoot,
+        sourcePath: join(workspaceRoot, '.mde', 'docs', 'tasks', 'ready.md'),
+        workspaceRoot: executionRoot
+      }
+    ])
+  })
+
+  it('canonicalizes equivalent execution roots before lock lookup and adapter start', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const executionRoot = await createTempRoot('mde-execution-root-')
+    const executionRootAlias = `${executionRoot}-alias`
+
+    await symlink(executionRoot, executionRootAlias, 'dir')
+
+    const canonicalExecutionRoot = await realpath(executionRoot)
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const startRun = vi.fn(fakeAdapter.startRun)
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      startRun
+    })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      createId: (prefix) => `${prefix}-canonical-root`,
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    const first = await runtime.startRun({
+      automationFlow: createFlow(),
+      executorSnapshot,
+      candidate: createCandidate(workspaceRoot, {
+        executionRoot: `${executionRootAlias}/`
+      }),
+      workspaceRoot
+    })
+    const second = await runtime.startRun({
+      automationFlow: createFlow(),
+      executorSnapshot,
+      candidate: createCandidate(workspaceRoot, {
+        executionRoot
+      }),
+      workspaceRoot
+    })
+
+    expect(second).toMatchObject({
+      created: false,
+      runId: first.runId
+    })
+    expect(startRun).toHaveBeenCalledTimes(1)
+    expect(startRun.mock.calls[0]?.[0].candidate?.executionRoot).toBe(
+      canonicalExecutionRoot
+    )
+    expect(startRun.mock.calls[0]?.[0].workspaceRoot).toBe(canonicalExecutionRoot)
+    await expect(store.listRuns()).resolves.toMatchObject([
+      {
+        executionRoot: canonicalExecutionRoot,
+        workspaceRoot: canonicalExecutionRoot
+      }
+    ])
+  })
+
+  it('uses the active workspace root when a task has no executionRoot', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const sourceWorkspaceRoot = await createTempRoot('mde-source-workspace-')
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const startRun = vi.fn(fakeAdapter.startRun)
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      startRun
+    })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    await runtime.startRun({
+      automationFlow: createFlow(),
+      executorSnapshot,
+      candidate: createCandidate(sourceWorkspaceRoot),
+      workspaceRoot
+    })
+
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot
+      })
+    )
+    await expect(store.listRuns()).resolves.toMatchObject([
+      {
+        sourcePath: join(
+          sourceWorkspaceRoot,
+          '.mde',
+          'docs',
+          'tasks',
+          'ready.md'
+        ),
+        workspaceRoot
+      }
+    ])
+  })
+
+  it('does not use sourcePath as an execution root when no workspace root is provided', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const sourceWorkspaceRoot = await createTempRoot('mde-source-workspace-')
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const startRun = vi.fn(fakeAdapter.startRun)
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      startRun
+    })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    await runtime.startRun({
+      automationFlow: createFlow(),
+      executorSnapshot,
+      candidate: createCandidate(sourceWorkspaceRoot, {
+        automationFlowOwnerKey: 'owner-a'
+      })
+    })
+
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: undefined
+      })
+    )
+    await expect(store.listRuns()).resolves.toMatchObject([
+      {
+        sourcePath: join(
+          sourceWorkspaceRoot,
+          '.mde',
+          'docs',
+          'tasks',
+          'ready.md'
+        )
+      }
+    ])
+    expect((await store.listRuns())[0]?.workspaceRoot).toBeUndefined()
+  })
+
+  it('rejects invalid task-level executionRoot before adapter start', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const workspaceRoot = await createTempRoot('mde-workspace-')
+    const store = createAutomationStore({ appDataPath })
+    const fakeAdapter = createFakeAgentCliAdapter({
+      commandPath: '/fake/bin/codex',
+      engine: 'codex'
+    })
+    const probe = vi.fn(fakeAdapter.probe)
+    const startRun = vi.fn(fakeAdapter.startRun)
+    const adapter: AgentCliAdapter = Object.freeze({
+      ...fakeAdapter,
+      probe,
+      startRun
+    })
+    const runtime = createAutomationRuntime({
+      adapterRegistry: createAutomationAdapterRegistry([adapter]),
+      runtimeBridge: createMdeRuntimeBridge({ appDataPath }),
+      store
+    })
+
+    await store.initialize()
+
+    await expect(
+      runtime.startRun({
+        automationFlow: createFlow(),
+        executorSnapshot,
+        candidate: createCandidate(workspaceRoot, {
+          executionRoot: join(workspaceRoot, 'missing-repo')
+        }),
+        workspaceRoot
+      })
+    ).rejects.toBeInstanceOf(AutomationExecutionRootError)
+    expect(probe).not.toHaveBeenCalled()
+    expect(startRun).not.toHaveBeenCalled()
+    await expect(store.listRuns()).resolves.toEqual([])
+  })
+
   it('creates runs with automation-flow snapshots and registers runtime authorization without persisting tokens', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
     const workspaceRoot = await createTempRoot('mde-workspace-')
@@ -201,6 +452,7 @@ describe('automationRuntime', () => {
   it('persists final reports emitted by a resumed adapter turn', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
     const workspaceRoot = await createTempRoot('mde-workspace-')
+    const evidencePath = join(workspaceRoot, '.mde', 'reports', 'ship.md')
     const store = createAutomationStore({ appDataPath })
     const runtime = createAutomationRuntime({
       adapterRegistry: createAutomationAdapterRegistry([
@@ -209,6 +461,7 @@ describe('automationRuntime', () => {
           engine: 'codex',
           resumeRunEvents: [
             {
+              evidencePath,
               outcome: 'succeeded',
               summary: 'Finished after approval',
               title: 'READY Ship task',
@@ -255,6 +508,7 @@ describe('automationRuntime', () => {
     await expect(store.listReports()).resolves.toMatchObject([
       {
         outcome: 'succeeded',
+        evidencePath,
         reportId: 'report-resume',
         runId: 'run-resume',
         summary: 'Finished after approval',

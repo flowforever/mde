@@ -11,6 +11,7 @@ describe('automationNotificationService', () => {
     const notification = service.notifyDecisionRequired({
       runId: 'run-1',
       taskId: 'task-1',
+      taskKey: 'task-key-root-a',
       title: 'READY Ship task'
     })
 
@@ -22,13 +23,15 @@ describe('automationNotificationService', () => {
       deepLink: {
         route: 'automation-center',
         runId: 'run-1',
-        selectedTaskId: 'task-1'
+        selectedTaskId: 'task-1',
+        selectedTaskKey: 'task-key-root-a'
       },
       titleKey: 'automation.notifications.decisionRequired.title',
       type: 'run.decision_required'
     })
     expect(service.resolveDeepLink(notification?.deepLink)).toEqual({
       selectedTaskId: 'task-1',
+      selectedTaskKey: 'task-key-root-a',
       windowMode: 'automation-center'
     })
   })
@@ -43,6 +46,7 @@ describe('automationNotificationService', () => {
       runId: 'run-1',
       status: 'failed',
       taskId: 'task-1',
+      taskKey: 'task-key-root-b',
       title: '/Users/trump.wang/private/task.md'
     })
 
@@ -52,6 +56,10 @@ describe('automationNotificationService', () => {
         taskTitle: 'task.md'
       },
       bodyKey: 'automation.notifications.terminalRun.body',
+      deepLink: {
+        selectedTaskId: 'task-1',
+        selectedTaskKey: 'task-key-root-b'
+      },
       titleKey: 'automation.notifications.terminalRun.title',
       type: 'run.terminal'
     })

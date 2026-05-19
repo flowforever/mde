@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, normalize, parse, win32 } from 'node:path'
 
 import type {
   AgentEngineId,
@@ -31,6 +31,7 @@ interface CreateRunInput {
   readonly automationFlowSnapshot?: unknown
   readonly automationFlowSnapshotId?: string
   readonly engine: AgentEngineId
+  readonly executionRoot?: string
   readonly promptBundleMetadata?: AutomationPromptBundleMetadata
   readonly runId: string
   readonly runKind: AutomationRunKind
@@ -61,6 +62,7 @@ export interface AutomationPromptBundleMetadata {
   readonly automationFlowSnapshotId: string
   readonly bundleId: string
   readonly createdAt: string
+  readonly executionRoot?: string
   readonly runKind: AutomationRunKind
   readonly sourceSnapshotHash?: string
 }
@@ -91,6 +93,7 @@ export interface AutomationStoredRun {
   readonly automationFlowSnapshot?: unknown
   readonly automationFlowSnapshotId?: string
   readonly engine: AgentEngineId
+  readonly executionRoot?: string
   readonly interruptedAt?: string
   readonly promptBundleMetadata?: AutomationPromptBundleMetadata
   readonly recoverable: boolean
@@ -384,6 +387,124 @@ const isTerminalReportOutcome = (
   outcome: AutomationReportSummary['outcome']
 ): boolean => outcome === 'cancelled' || outcome === 'failed' || outcome === 'succeeded'
 
+const stripTrailingSeparatorsUnlessRoot = (
+  normalized: string,
+  root: string
+): string => {
+  if (normalized === root) {
+    return normalized
+  }
+
+  const withoutTrailingSeparator = normalized.replace(/[\\/]+$/u, '')
+
+  return withoutTrailingSeparator.length === 0 ? normalized : withoutTrailingSeparator
+}
+
+const normalizeStoredExecutionRoot = (
+  value: string | undefined
+): string | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value.startsWith('\\\\') || /^[A-Za-z]:[\\/]/u.test(value)) {
+    const normalized = win32.normalize(value)
+
+    return stripTrailingSeparatorsUnlessRoot(
+      normalized,
+      win32.parse(normalized).root
+    )
+  }
+
+  const normalized = normalize(value)
+
+  return stripTrailingSeparatorsUnlessRoot(normalized, parse(normalized).root)
+}
+
+const normalizeStoredTaskSource = (
+  source: AutomationDiscoveredTaskSource
+): AutomationDiscoveredTaskSource => {
+  const executionRoot = normalizeStoredExecutionRoot(source.executionRoot)
+
+  return Object.freeze({
+    ...source,
+    ...(executionRoot !== undefined ? { executionRoot } : {})
+  })
+}
+
+const normalizeStoredExecutionRootOnRead = (
+  value: string | undefined
+): string | undefined => {
+  if (value !== undefined && /^[A-Za-z]:$/u.test(value)) {
+    return `${value}\\`
+  }
+
+  return normalizeStoredExecutionRoot(value)
+}
+
+const normalizePersistedTaskSourceOnRead = (
+  source: AutomationDiscoveredTaskSource
+): AutomationDiscoveredTaskSource => {
+  const executionRoot = normalizeStoredExecutionRootOnRead(source.executionRoot)
+
+  return Object.freeze({
+    ...source,
+    ...(executionRoot !== undefined ? { executionRoot } : {})
+  })
+}
+
+const normalizePersistedTaskDataSnapshotOnRead = (
+  snapshot: AutomationTaskDataSnapshotRecord
+): AutomationTaskDataSnapshotRecord =>
+  Object.freeze({
+    ...snapshot,
+    taskSourceSnapshot: normalizePersistedTaskSourceOnRead(
+      snapshot.taskSourceSnapshot
+    )
+  })
+
+const normalizePersistedPromptBundleMetadataOnRead = (
+  metadata: AutomationPromptBundleMetadata
+): AutomationPromptBundleMetadata => {
+  const executionRoot = normalizeStoredExecutionRootOnRead(metadata.executionRoot)
+
+  return Object.freeze({
+    ...metadata,
+    ...(executionRoot !== undefined ? { executionRoot } : {})
+  })
+}
+
+const normalizePersistedRunOnRead = (
+  run: AutomationStoredRun
+): AutomationStoredRun => {
+  const executionRoot = normalizeStoredExecutionRootOnRead(run.executionRoot)
+  const workspaceRoot = normalizeStoredExecutionRootOnRead(run.workspaceRoot)
+  const promptBundleMetadata =
+    run.promptBundleMetadata === undefined
+      ? undefined
+      : normalizePersistedPromptBundleMetadataOnRead(run.promptBundleMetadata)
+  const taskSourceSnapshot =
+    run.taskSourceSnapshot === undefined
+      ? undefined
+      : normalizePersistedTaskSourceOnRead(run.taskSourceSnapshot)
+
+  return Object.freeze({
+    ...run,
+    ...(executionRoot !== undefined ? { executionRoot } : {}),
+    ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
+    ...(promptBundleMetadata !== undefined ? { promptBundleMetadata } : {}),
+    ...(taskSourceSnapshot !== undefined ? { taskSourceSnapshot } : {})
+  })
+}
+
+const normalizePersistedRunFileOnRead = (
+  runFile: StoredRunFile
+): StoredRunFile =>
+  Object.freeze({
+    ...runFile,
+    run: normalizePersistedRunOnRead(runFile.run)
+  })
+
 const resetResumingDecision = (
   decision: AutomationStoredDecision
 ): AutomationStoredDecision =>
@@ -433,8 +554,11 @@ export const createAutomationStore = ({
     await writeFile(join(paths.automationRoot, '.initialized'), 'v1\n', 'utf8')
   }
 
+  const readRunFile = async (filePath: string): Promise<StoredRunFile> =>
+    normalizePersistedRunFileOnRead(await readJsonFile<StoredRunFile>(filePath))
+
   const loadRunFile = async (runId: string): Promise<StoredRunFile> =>
-    readJsonFile<StoredRunFile>(runPath(runId))
+    readRunFile(runPath(runId))
 
   const saveRunFile = async (runFile: StoredRunFile): Promise<void> => {
     await writeJsonFile(runPath(runFile.run.runId), runFile)
@@ -455,7 +579,7 @@ export const createAutomationStore = ({
       }
 
       const filePath = join(paths.runsRoot, entry.name)
-      const runFile = await readJsonFile<StoredRunFile>(filePath)
+      const runFile = await readRunFile(filePath)
       const decisionIndex = runFile.decisions.findIndex(
         (decision) => decision.decisionId === decisionId
       )
@@ -620,6 +744,9 @@ export const createAutomationStore = ({
           ? { automationFlowSnapshotId: run.automationFlowSnapshotId }
           : {}),
         engine: run.engine,
+        ...(run.executionRoot !== undefined
+          ? { executionRoot: run.executionRoot }
+          : {}),
         ...(run.promptBundleMetadata !== undefined
           ? { promptBundleMetadata: run.promptBundleMetadata }
           : {}),
@@ -675,7 +802,7 @@ export const createAutomationStore = ({
         entries
           .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
           .map((entry) =>
-            readJsonFile<StoredRunFile>(join(paths.runsRoot, entry.name))
+            readRunFile(join(paths.runsRoot, entry.name))
           )
       )
 
@@ -705,6 +832,7 @@ export const createAutomationStore = ({
       return Object.freeze(
         sourceGroups
           .flatMap((sources) => sources)
+          .map(normalizePersistedTaskSourceOnRead)
           .sort((left, right) =>
             left.discoveredAt.localeCompare(right.discoveredAt) ||
             left.automationFlowId.localeCompare(right.automationFlowId) ||
@@ -730,6 +858,7 @@ export const createAutomationStore = ({
         return Object.freeze(
           snapshotGroups
             .flatMap((snapshots) => snapshots)
+            .map(normalizePersistedTaskDataSnapshotOnRead)
             .sort((left, right) =>
               left.taskDataId.localeCompare(right.taskDataId) ||
               left.taskDataSnapshotId.localeCompare(right.taskDataSnapshotId)
@@ -762,7 +891,7 @@ export const createAutomationStore = ({
         entries
           .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
           .map((entry) =>
-            readJsonFile<StoredRunFile>(join(paths.runsRoot, entry.name))
+            readRunFile(join(paths.runsRoot, entry.name))
           )
       )
 
@@ -848,7 +977,7 @@ export const createAutomationStore = ({
           .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
           .map(async (entry) => {
             const filePath = join(paths.runsRoot, entry.name)
-            const runFile = await readJsonFile<StoredRunFile>(filePath)
+            const runFile = await readRunFile(filePath)
             const interrupted = runStatesInFlight.has(runFile.run.state)
             const retryableResumingDecisionFound =
               !isTerminalRunState(runFile.run.state) &&
@@ -946,13 +1075,15 @@ export const createAutomationStore = ({
     },
     async replaceDiscoveredTaskSources(automationFlowId, sources, ownerKey) {
       const normalizedSources = Object.freeze(
-        sources.filter(isValidAutomationDiscoverySourceInput).map((source) =>
-          Object.freeze({
-            ...source,
-            automationFlowId,
-            ...(ownerKey !== undefined ? { automationFlowOwnerKey: ownerKey } : {})
-          })
-        )
+        sources
+          .filter(isValidAutomationDiscoverySourceInput)
+          .map((source) =>
+            normalizeStoredTaskSource({
+              ...source,
+              automationFlowId,
+              ...(ownerKey !== undefined ? { automationFlowOwnerKey: ownerKey } : {})
+            })
+          )
       )
 
       await writeJsonFile(
@@ -969,6 +1100,7 @@ export const createAutomationStore = ({
       >(taskDataSnapshotsPath(ownerKey)).catch(() => [])
       const validSources = sources
         .filter(isValidAutomationDiscoverySourceInput)
+        .map(normalizeStoredTaskSource)
         .filter(
           (source) =>
             source.taskDataId !== undefined &&

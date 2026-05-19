@@ -556,6 +556,413 @@ describe('automationStore', () => {
     ])
   })
 
+  it('preserves Windows root execution roots while trimming non-root trailing separators before persistence', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({ appDataPath })
+
+    await store.initialize()
+    await store.replaceDiscoveredTaskSources('workspace-flow', [
+      {
+        automationFlowId: 'workspace-flow',
+        discoveredAt: '2026-05-10T08:00:00.000Z',
+        executionRoot: 'C:\\',
+        sourceItemId: 'drive-root-backslash',
+        sourceSnapshotHash: 'drive-root-backslash-hash',
+        sourceType: 'remote-mr',
+        title: 'READY Drive root backslash'
+      },
+      {
+        automationFlowId: 'workspace-flow',
+        discoveredAt: '2026-05-10T08:00:00.000Z',
+        executionRoot: 'D:/',
+        sourceItemId: 'drive-root-forward-slash',
+        sourceSnapshotHash: 'drive-root-forward-slash-hash',
+        sourceType: 'remote-mr',
+        title: 'READY Drive root forward slash'
+      },
+      {
+        automationFlowId: 'workspace-flow',
+        discoveredAt: '2026-05-10T08:00:00.000Z',
+        executionRoot: '\\\\server\\share\\',
+        sourceItemId: 'unc-share-root',
+        sourceSnapshotHash: 'unc-share-root-hash',
+        sourceType: 'remote-mr',
+        title: 'READY UNC share root'
+      },
+      {
+        automationFlowId: 'workspace-flow',
+        discoveredAt: '2026-05-10T08:00:00.000Z',
+        executionRoot: 'C:\\repo\\',
+        sourceItemId: 'windows-repo',
+        sourceSnapshotHash: 'windows-repo-hash',
+        sourceType: 'remote-mr',
+        title: 'READY Windows repo'
+      }
+    ])
+
+    await expect(store.listDiscoveredTaskSources()).resolves.toEqual([
+      expect.objectContaining({
+        executionRoot: 'C:\\',
+        sourceItemId: 'drive-root-backslash'
+      }),
+      expect.objectContaining({
+        executionRoot: 'D:\\',
+        sourceItemId: 'drive-root-forward-slash'
+      }),
+      expect.objectContaining({
+        executionRoot: '\\\\server\\share\\',
+        sourceItemId: 'unc-share-root'
+      }),
+      expect.objectContaining({
+        executionRoot: 'C:\\repo',
+        sourceItemId: 'windows-repo'
+      })
+    ])
+  })
+
+  it('self-heals legacy persisted discovered task source Windows drive designator roots on read', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({ appDataPath })
+    const paths = getAutomationStorePaths(appDataPath)
+
+    await store.initialize()
+    await writeFile(
+      join(paths.discoveredSourcesRoot, 'legacy-flow.json'),
+      `${JSON.stringify(
+        [
+          {
+            automationFlowId: 'legacy-flow',
+            discoveredAt: '2026-05-10T08:00:00.000Z',
+            executionRoot: 'C:',
+            sourceItemId: 'legacy-drive-root',
+            sourceSnapshotHash: 'legacy-drive-root-hash',
+            sourceType: 'remote-mr',
+            title: 'READY Legacy drive root'
+          }
+        ],
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+
+    await expect(store.listDiscoveredTaskSources()).resolves.toEqual([
+      expect.objectContaining({
+        executionRoot: 'C:\\',
+        sourceItemId: 'legacy-drive-root'
+      })
+    ])
+  })
+
+  it('self-heals legacy persisted task data snapshot Windows drive designator roots on read', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({ appDataPath })
+    const paths = getAutomationStorePaths(appDataPath)
+
+    await store.initialize()
+    await writeFile(
+      join(paths.taskDataSnapshotsRoot, 'legacy-snapshots.json'),
+      `${JSON.stringify(
+        [
+          {
+            automationFlowId: 'legacy-flow',
+            discoveredAt: '2026-05-10T08:00:00.000Z',
+            lastSeenDiscoveryRunId: 'discovery-1',
+            sourceItemId: 'legacy-drive-root',
+            sourceSnapshotHash: 'legacy-drive-root-hash',
+            sourceType: 'remote-mr',
+            taskDataId: 'task-data-legacy-drive-root',
+            taskDataSnapshotId: 'task-data-snapshot-legacy-drive-root',
+            taskSourceSnapshot: {
+              automationFlowId: 'legacy-flow',
+              discoveredAt: '2026-05-10T08:00:00.000Z',
+              executionRoot: 'C:',
+              sourceItemId: 'legacy-drive-root',
+              sourceSnapshotHash: 'legacy-drive-root-hash',
+              sourceType: 'remote-mr',
+              title: 'READY Legacy drive root'
+            }
+          }
+        ],
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+
+    const snapshots = await store.listTaskDataSnapshots()
+
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0]?.taskDataSnapshotId).toBe(
+      'task-data-snapshot-legacy-drive-root'
+    )
+    expect(snapshots[0]?.taskSourceSnapshot).toMatchObject({
+      executionRoot: 'C:\\',
+      sourceItemId: 'legacy-drive-root'
+    })
+  })
+
+  it('self-heals legacy persisted run Windows drive designator roots on read and recovery', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({
+      appDataPath,
+      now: () => '2026-05-10T08:15:00.000Z'
+    })
+    const paths = getAutomationStorePaths(appDataPath)
+
+    await store.initialize()
+    await writeFile(
+      join(paths.runsRoot, 'run-legacy-drive-root.json'),
+      `${JSON.stringify(
+        {
+          decisions: [],
+          events: [],
+          run: {
+            automationFlowId: 'legacy-flow',
+            engine: 'codex',
+            executionRoot: 'C:',
+            promptBundleMetadata: {
+              automationFlowSnapshotId: 'flow-snapshot-1',
+              bundleId: 'bundle-1',
+              createdAt: '2026-05-10T08:00:00.000Z',
+              executionRoot: 'C:',
+              runKind: 'task'
+            },
+            recoverable: false,
+            runId: 'run-legacy-drive-root',
+            runKind: 'task',
+            startedAt: '2026-05-10T08:00:00.000Z',
+            state: 'running',
+            taskId: 'task-legacy-drive-root',
+            taskSourceSnapshot: {
+              automationFlowId: 'legacy-flow',
+              discoveredAt: '2026-05-10T08:00:00.000Z',
+              executionRoot: 'C:',
+              sourceItemId: 'legacy-drive-root',
+              sourceSnapshotHash: 'legacy-drive-root-hash',
+              sourceType: 'remote-mr',
+              title: 'READY Legacy drive root'
+            },
+            updatedAt: '2026-05-10T08:00:00.000Z',
+            workspaceRoot: 'C:'
+          }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+
+    const run = await store.getRun('run-legacy-drive-root')
+
+    expect(run).toMatchObject({
+      executionRoot: 'C:\\',
+      workspaceRoot: 'C:\\'
+    })
+    expect(run?.promptBundleMetadata).toMatchObject({
+      executionRoot: 'C:\\'
+    })
+    expect(run?.taskSourceSnapshot).toMatchObject({
+      executionRoot: 'C:\\'
+    })
+
+    const runsBeforeRecovery = await store.listRuns()
+
+    expect(runsBeforeRecovery).toHaveLength(1)
+    expect(runsBeforeRecovery[0]).toMatchObject({
+      executionRoot: 'C:\\',
+      runId: 'run-legacy-drive-root',
+      workspaceRoot: 'C:\\'
+    })
+    expect(runsBeforeRecovery[0]?.promptBundleMetadata).toMatchObject({
+      executionRoot: 'C:\\'
+    })
+    expect(runsBeforeRecovery[0]?.taskSourceSnapshot).toMatchObject({
+      executionRoot: 'C:\\'
+    })
+
+    await store.recoverInterruptedRuns()
+
+    const runsAfterRecovery = await store.listRuns()
+
+    expect(runsAfterRecovery).toHaveLength(1)
+    expect(runsAfterRecovery[0]).toMatchObject({
+      executionRoot: 'C:\\',
+      interruptedAt: '2026-05-10T08:15:00.000Z',
+      recoverable: true,
+      runId: 'run-legacy-drive-root',
+      state: 'failed',
+      workspaceRoot: 'C:\\'
+    })
+    expect(runsAfterRecovery[0]?.promptBundleMetadata).toMatchObject({
+      executionRoot: 'C:\\'
+    })
+    expect(runsAfterRecovery[0]?.taskSourceSnapshot).toMatchObject({
+      executionRoot: 'C:\\'
+    })
+  })
+
+  it('keeps already normalized persisted execution roots unchanged on read', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({ appDataPath })
+    const paths = getAutomationStorePaths(appDataPath)
+
+    await store.initialize()
+    await writeFile(
+      join(paths.discoveredSourcesRoot, 'normalized-flow.json'),
+      `${JSON.stringify(
+        [
+          {
+            automationFlowId: 'normalized-flow',
+            discoveredAt: '2026-05-10T08:00:00.000Z',
+            executionRoot: '/Users/test/repo',
+            sourceItemId: 'posix-repo',
+            sourceSnapshotHash: 'posix-repo-hash',
+            sourceType: 'remote-mr',
+            title: 'READY POSIX repo'
+          },
+          {
+            automationFlowId: 'normalized-flow',
+            discoveredAt: '2026-05-10T08:01:00.000Z',
+            executionRoot: 'D:\\',
+            sourceItemId: 'windows-drive-root',
+            sourceSnapshotHash: 'windows-drive-root-hash',
+            sourceType: 'remote-mr',
+            title: 'READY Windows drive root'
+          },
+          {
+            automationFlowId: 'normalized-flow',
+            discoveredAt: '2026-05-10T08:02:00.000Z',
+            executionRoot: '\\\\server\\share\\',
+            sourceItemId: 'unc-share-root',
+            sourceSnapshotHash: 'unc-share-root-hash',
+            sourceType: 'remote-mr',
+            title: 'READY UNC share root'
+          }
+        ],
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+    await writeFile(
+      join(paths.taskDataSnapshotsRoot, 'normalized-snapshots.json'),
+      `${JSON.stringify(
+        [
+          {
+            automationFlowId: 'normalized-flow',
+            discoveredAt: '2026-05-10T08:00:00.000Z',
+            lastSeenDiscoveryRunId: 'discovery-1',
+            sourceItemId: 'windows-repo',
+            sourceSnapshotHash: 'windows-repo-hash',
+            sourceType: 'remote-mr',
+            taskDataId: 'task-data-windows-repo',
+            taskDataSnapshotId: 'task-data-snapshot-windows-repo',
+            taskSourceSnapshot: {
+              automationFlowId: 'normalized-flow',
+              discoveredAt: '2026-05-10T08:00:00.000Z',
+              executionRoot: 'C:\\repo',
+              sourceItemId: 'windows-repo',
+              sourceSnapshotHash: 'windows-repo-hash',
+              sourceType: 'remote-mr',
+              title: 'READY Windows repo'
+            }
+          }
+        ],
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+
+    await expect(store.listDiscoveredTaskSources()).resolves.toEqual([
+      expect.objectContaining({
+        executionRoot: '/Users/test/repo',
+        sourceItemId: 'posix-repo'
+      }),
+      expect.objectContaining({
+        executionRoot: 'D:\\',
+        sourceItemId: 'windows-drive-root'
+      }),
+      expect.objectContaining({
+        executionRoot: '\\\\server\\share\\',
+        sourceItemId: 'unc-share-root'
+      })
+    ])
+    const snapshots = await store.listTaskDataSnapshots()
+
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0]?.taskDataSnapshotId).toBe(
+      'task-data-snapshot-windows-repo'
+    )
+    expect(snapshots[0]?.taskSourceSnapshot).toMatchObject({
+      executionRoot: 'C:\\repo',
+      sourceItemId: 'windows-repo'
+    })
+  })
+
+  it('keeps already normalized persisted run roots unchanged on read', async () => {
+    const appDataPath = await createTempRoot('mde-app-data-')
+    const store = createAutomationStore({ appDataPath })
+    const paths = getAutomationStorePaths(appDataPath)
+
+    await store.initialize()
+    await writeFile(
+      join(paths.runsRoot, 'run-normalized-roots.json'),
+      `${JSON.stringify(
+        {
+          decisions: [],
+          events: [],
+          run: {
+            automationFlowId: 'normalized-flow',
+            engine: 'codex',
+            executionRoot: '/Users/test/repo',
+            promptBundleMetadata: {
+              automationFlowSnapshotId: 'flow-snapshot-1',
+              bundleId: 'bundle-1',
+              createdAt: '2026-05-10T08:00:00.000Z',
+              executionRoot: '\\\\server\\share\\',
+              runKind: 'task'
+            },
+            recoverable: false,
+            runId: 'run-normalized-roots',
+            runKind: 'task',
+            startedAt: '2026-05-10T08:00:00.000Z',
+            state: 'done',
+            taskId: 'task-normalized-roots',
+            taskSourceSnapshot: {
+              automationFlowId: 'normalized-flow',
+              discoveredAt: '2026-05-10T08:00:00.000Z',
+              executionRoot: 'C:\\repo',
+              sourceItemId: 'windows-repo',
+              sourceSnapshotHash: 'windows-repo-hash',
+              sourceType: 'remote-mr',
+              title: 'READY Windows repo'
+            },
+            updatedAt: '2026-05-10T08:00:00.000Z',
+            workspaceRoot: 'D:\\'
+          }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+
+    const run = await store.getRun('run-normalized-roots')
+
+    expect(run).toMatchObject({
+      executionRoot: '/Users/test/repo',
+      workspaceRoot: 'D:\\'
+    })
+    expect(run?.promptBundleMetadata).toMatchObject({
+      executionRoot: '\\\\server\\share\\'
+    })
+    expect(run?.taskSourceSnapshot).toMatchObject({
+      executionRoot: 'C:\\repo'
+    })
+  })
+
   it('persists task data snapshots and marks missing rediscovery snapshots removed', async () => {
     const appDataPath = await createTempRoot('mde-app-data-')
     const store = createAutomationStore({

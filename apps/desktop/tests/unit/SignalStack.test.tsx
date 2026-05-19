@@ -188,7 +188,7 @@ describe('SignalStack', () => {
     render(
       <SignalStack
         onOpenDiagnosticsTarget={onOpenDiagnosticsTarget}
-        selectedTaskId="needs-me-task"
+        selectedTaskKey="needs-me-task"
         text={text}
         viewModel={createViewModel()}
       />

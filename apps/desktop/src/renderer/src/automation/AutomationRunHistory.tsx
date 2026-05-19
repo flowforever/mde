@@ -262,6 +262,13 @@ export const AutomationRunHistory = ({
               <span>{selectedRun.runId}</span>
               <span>{selectedRun.engine}</span>
               <span>{text(getRunStateLabelKey(selectedRun.state))}</span>
+              {selectedRun.executionRoot !== undefined ? (
+                <span data-component-id={COMPONENT_IDS.automation.executionRootLabel}>
+                  {text('automation.executionRootHint', {
+                    root: selectedRun.executionRoot
+                  })}
+                </span>
+              ) : null}
             </div>
             <section className="automation-run-history-detail__section">
               <h3>{text('automation.parseResult')}</h3>

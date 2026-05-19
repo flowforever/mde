@@ -9,7 +9,7 @@ import type { AutomationTaskCard } from '../../../shared/automation'
 interface SignalStackProps {
   readonly onOpenDiagnosticsTarget?: () => void
   readonly onSelectTask?: (task: AutomationTaskCard) => void
-  readonly selectedTaskId?: string
+  readonly selectedTaskKey?: string
   readonly text: AppText
   readonly viewModel: AutomationCenterViewModel
 }
@@ -142,6 +142,25 @@ const getDiagnosticsSummary = (
 const hasTaskWorkspace = (task: AutomationTaskCard): boolean =>
   task.workspaceId !== undefined && task.workspaceId !== AUTOMATION_NO_WORKSPACE_ID
 
+const hasCustomExecutionRoot = (task: AutomationTaskCard): task is
+  AutomationTaskCard & { readonly executionRoot: string } => {
+  const normalizeComparableRoot = (value: string | undefined): string | undefined => {
+    if (value === undefined) {
+      return undefined
+    }
+
+    const normalized = value.trim().replace(/\\/gu, '/').replace(/\/+$/u, '')
+
+    return normalized.length === 0 ? '/' : normalized
+  }
+
+  return (
+    task.executionRoot !== undefined &&
+    normalizeComparableRoot(task.executionRoot) !==
+      normalizeComparableRoot(task.workspaceId)
+  )
+}
+
 const hasControlCharacters = (value: string): boolean =>
   Array.from(value).some((character) => {
     const codePoint = character.codePointAt(0) ?? 0
@@ -194,10 +213,12 @@ const getTaskDescription = (
     getPrimaryExecutorName(task, text)
   ].join(' · ')
 
+const getTaskKey = (task: AutomationTaskCard): string => task.taskKey ?? task.taskId
+
 export const SignalStack = ({
   onOpenDiagnosticsTarget,
   onSelectTask,
-  selectedTaskId,
+  selectedTaskKey,
   text,
   viewModel
 }: SignalStackProps): JSX.Element => (
@@ -223,7 +244,11 @@ export const SignalStack = ({
       {(viewModel.visibleTasks ?? viewModel.tasks).map((task) => {
         const bucketLabel = getBucketLabel(task.bucket, text)
         const selected =
-          task.taskId === (selectedTaskId ?? viewModel.selectedTask?.taskId)
+          getTaskKey(task) ===
+          (selectedTaskKey ??
+            (viewModel.selectedTask === undefined
+              ? undefined
+              : getTaskKey(viewModel.selectedTask)))
 
         return (
           <button
@@ -232,7 +257,7 @@ export const SignalStack = ({
               selected ? ' automation-task-card--selected' : ''
             }`}
             data-component-id={COMPONENT_IDS.automation.signalTaskRow}
-            key={task.taskId}
+            key={getTaskKey(task)}
             onClick={() => {
               onSelectTask?.(task)
             }}
@@ -260,6 +285,16 @@ export const SignalStack = ({
               >
                 {getPrimaryExecutorName(task, text)}
               </span>
+              {hasCustomExecutionRoot(task) ? (
+                <span
+                  className="automation-task-badge"
+                  data-component-id={COMPONENT_IDS.automation.executionRootLabel}
+                >
+                  {text('automation.executionRootHint', {
+                    root: task.executionRoot
+                  })}
+                </span>
+              ) : null}
             </span>
             <span className="automation-task-card__footer">
               <span className="automation-task-card__source">

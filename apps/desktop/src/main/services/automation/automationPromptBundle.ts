@@ -12,6 +12,7 @@ export interface AutomationPromptBundleInput {
   readonly runId: string
   readonly runKind: AutomationRunKind
   readonly taskSource?: AutomationDiscoveredTaskSource
+  readonly executionRoot?: string
   readonly workspaceRoot?: string
 }
 
@@ -21,6 +22,7 @@ export interface AutomationPromptBundle {
     readonly automationFlowSnapshotId: string
     readonly bundleId: string
     readonly createdAt: string
+    readonly executionRoot?: string
     readonly runId: string
     readonly runKind: AutomationRunKind
     readonly sourceSnapshotHash?: string
@@ -59,6 +61,7 @@ const createStructuredOutputContract = (
             discoveredTaskSources: [
               {
                 contentSnapshot: 'Optional exact source content.',
+                executionRoot: 'Optional absolute local path for task execution.',
                 relativePath: '.mde/docs/tasks/ready.md',
                 sourceItemId: 'workspace:.mde/docs/tasks/ready.md',
                 sourceSnapshotHash: 'Optional stable hash or version.',
@@ -114,6 +117,7 @@ export const createAutomationPromptBundle = ({
   runId,
   runKind,
   taskSource,
+  executionRoot,
   workspaceRoot
 }: AutomationPromptBundleInput): AutomationPromptBundle => {
   const createdAt = new Date().toISOString()
@@ -122,6 +126,7 @@ export const createAutomationPromptBundle = ({
     automationFlowSnapshotId,
     bundleId: `${runId}:prompt-bundle`,
     createdAt,
+    ...(executionRoot !== undefined ? { executionRoot } : {}),
     runId,
     runKind,
     ...(taskSource !== undefined
