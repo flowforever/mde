@@ -75,6 +75,10 @@ import {
   getUserAutomationFlowRoot,
   getWorkspaceAutomationFlowRoot
 } from '../services/automation/automationPathSafety'
+import {
+  filterValidDiscoveredSourcesForCurrentOwners,
+  isDiscoveredSourceOwnedByCurrentFlow
+} from '../services/automation/automationDiscoveredSourceValidation'
 import { createAutomationSkillCatalogProvider } from '../services/automation/automationSkillCatalog'
 import {
   AUTOMATION_NO_WORKSPACE_ID,
@@ -1154,118 +1158,6 @@ const resolveFlowWorkspaceId = ({
       ? AUTOMATION_NO_WORKSPACE_ID
       : (workspaceRoot ?? AUTOMATION_NO_WORKSPACE_ID)
 
-const getFlowsById = (
-  automationFlows: readonly ParsedAutomationFlow[]
-): ReadonlyMap<string, readonly ParsedAutomationFlow[]> => {
-  const flowsById = new Map<string, ParsedAutomationFlow[]>()
-
-  for (const automationFlow of automationFlows) {
-    flowsById.set(automationFlow.id, [
-      ...(flowsById.get(automationFlow.id) ?? []),
-      automationFlow
-    ])
-  }
-
-  return flowsById
-}
-
-const isLegacySourceSafelyOwnedByFlow = ({
-  automationFlow,
-  source,
-  workspaceRoot
-}: {
-  readonly automationFlow: ParsedAutomationFlow
-  readonly source: AutomationDiscoveredTaskSource
-  readonly workspaceRoot?: string
-}): boolean => {
-  if (
-    source.automationFlowOwnerKey !== undefined ||
-    source.automationFlowId !== automationFlow.id ||
-    (source.sourceType !== 'adapter-discovered' &&
-      !automationFlow.sourceTypes.includes(source.sourceType))
-  ) {
-    return false
-  }
-
-  if (automationFlow.scope === 'user') {
-    return (
-      source.workspaceId === undefined ||
-      source.workspaceId === AUTOMATION_NO_WORKSPACE_ID
-    )
-  }
-
-  return workspaceRoot !== undefined && source.workspaceId === workspaceRoot
-}
-
-const getLegacyCompatibleOwnerKeys = ({
-  flowsById,
-  ownerKeyByFlow,
-  source,
-  workspaceRoot
-}: {
-  readonly flowsById: ReadonlyMap<string, readonly ParsedAutomationFlow[]>
-  readonly ownerKeyByFlow: ReadonlyMap<ParsedAutomationFlow, string>
-  readonly source: AutomationDiscoveredTaskSource
-  readonly workspaceRoot?: string
-}): readonly string[] =>
-  Object.freeze(
-    (flowsById.get(source.automationFlowId) ?? [])
-      .filter((automationFlow) =>
-        isLegacySourceSafelyOwnedByFlow({
-          automationFlow,
-          source,
-          workspaceRoot
-        })
-      )
-      .map((automationFlow) =>
-        getCurrentFlowOwnerKey(ownerKeyByFlow, automationFlow)
-      )
-  )
-
-const filterDiscoveredSourcesForCurrentOwners = ({
-  automationFlows,
-  ownerKeyByFlow,
-  sources,
-  workspaceRoot
-}: {
-  readonly automationFlows: readonly ParsedAutomationFlow[]
-  readonly ownerKeyByFlow: ReadonlyMap<ParsedAutomationFlow, string>
-  readonly sources: readonly AutomationDiscoveredTaskSource[]
-  readonly workspaceRoot?: string
-}): readonly AutomationDiscoveredTaskSource[] => {
-  const flowsById = getFlowsById(automationFlows)
-  const currentOwnerKeys = new Set(ownerKeyByFlow.values())
-  const exactOwnerKeysWithSources = new Set(
-    sources
-      .map((source) => source.automationFlowOwnerKey)
-      .filter((ownerKey): ownerKey is string =>
-        ownerKey !== undefined && currentOwnerKeys.has(ownerKey)
-      )
-  )
-
-  return Object.freeze(
-    sources.filter((source) => {
-      if (source.automationFlowOwnerKey !== undefined) {
-        return currentOwnerKeys.has(source.automationFlowOwnerKey)
-      }
-
-      const compatibleOwnerKeys = getLegacyCompatibleOwnerKeys({
-        flowsById,
-        ownerKeyByFlow,
-        source,
-        workspaceRoot
-      })
-
-      return (
-        compatibleOwnerKeys.length > 0 &&
-        compatibleOwnerKeys.some(
-          (ownerKey) => !exactOwnerKeysWithSources.has(ownerKey)
-        )
-      )
-    })
-  )
-}
-
 const sourceMatchesCandidate = (
   source: AutomationDiscoveredTaskSource,
   candidate: AutomationFlowTaskCandidate
@@ -1844,7 +1736,7 @@ export const registerAutomationHandlers = ({
         )
       }
     }
-    let discoveredSources = filterDiscoveredSourcesForCurrentOwners({
+    let discoveredSources = await filterValidDiscoveredSourcesForCurrentOwners({
       automationFlows,
       ownerKeyByFlow,
       sources: await store.listDiscoveredTaskSources(),
@@ -1855,8 +1747,9 @@ export const registerAutomationHandlers = ({
 
       return discoveredSources.some((source) =>
         source.automationFlowOwnerKey === undefined
-          ? isLegacySourceSafelyOwnedByFlow({
+          ? isDiscoveredSourceOwnedByCurrentFlow({
               automationFlow,
+              ownerKeyByFlow,
               source,
               workspaceRoot
             })
@@ -1880,6 +1773,7 @@ export const registerAutomationHandlers = ({
       )
     }
     const discoveryDiagnostics: AutomationDiagnostic[] = []
+    let discoveryMayHaveWrittenSources = false
 
     if (options.startDiscovery !== false) {
       for (const automationFlow of automationFlows) {
@@ -1892,7 +1786,7 @@ export const registerAutomationHandlers = ({
         }
 
         try {
-          await runtime.startDiscoveryRun({
+          const discoveryRun = await runtime.startDiscoveryRun({
             automationFlow,
             automationFlowOwnerKey: getCurrentFlowOwnerKey(
               ownerKeyByFlow,
@@ -1900,6 +1794,8 @@ export const registerAutomationHandlers = ({
             ),
             workspaceRoot
           })
+          discoveryMayHaveWrittenSources =
+            discoveryMayHaveWrittenSources || discoveryRun.created
         } catch (error) {
           discoveryDiagnostics.push(
             mapAutomationRunStartError(
@@ -1913,12 +1809,14 @@ export const registerAutomationHandlers = ({
     }
 
     runs = await store.listRuns()
-    discoveredSources = filterDiscoveredSourcesForCurrentOwners({
-      automationFlows,
-      ownerKeyByFlow,
-      sources: await store.listDiscoveredTaskSources(),
-      workspaceRoot
-    })
+    if (discoveryMayHaveWrittenSources) {
+      discoveredSources = await filterValidDiscoveredSourcesForCurrentOwners({
+        automationFlows,
+        ownerKeyByFlow,
+        sources: await store.listDiscoveredTaskSources(),
+        workspaceRoot
+      })
+    }
     const decisions = await store.listDecisions()
     const reports = await store.listReports()
     const taskDataSnapshots = await store.listTaskDataSnapshots()

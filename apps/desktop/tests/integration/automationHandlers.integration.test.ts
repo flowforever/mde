@@ -427,6 +427,132 @@ describe('automationHandlers integration', () => {
     expect(openNativeSession).toEqual({ accepted: true, runId: 'run-ipc' })
   })
 
+  it('starts discovery when only cached local discovered sources are stale', async () => {
+    const { handlers, store, workspaceRoot } = await createHandlers()
+    const taskRoot = join(workspaceRoot, '.mde', 'docs', 'tasks')
+
+    await mkdir(taskRoot, { recursive: true })
+    await writeFile(
+      join(taskRoot, 'ready.md'),
+      '# READY Fresh discovery task\n',
+      'utf8'
+    )
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'stale-cache-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'stale-cache-flow',
+      workspaceId: workspaceRoot
+    })
+    await store.replaceDiscoveredTaskSources(
+      'stale-cache-flow',
+      [
+        {
+          automationFlowId: 'stale-cache-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          relativePath: '.mde/docs/tasks/missing.md',
+          sourceItemId: 'stale-source',
+          sourcePath: join(taskRoot, 'missing.md'),
+          sourceSnapshotHash: 'stale-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Missing cached task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    const projection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly runs: readonly { readonly runKind: string; readonly title?: string }[]
+        readonly tasks: readonly { readonly title: string }[]
+      }
+    }
+    const runs = await store.listRuns()
+
+    expect(runs.filter((run) => run.runKind === 'discovery')).toHaveLength(1)
+    expect(projection.projection.runs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runKind: 'discovery',
+          title: 'Local Dev Task Automation Flow discovery'
+        })
+      ])
+    )
+    expect(projection.projection.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: 'READY Fresh discovery task' })
+      ])
+    )
+  })
+
+  it('keeps a valid cached local discovered source from starting duplicate discovery', async () => {
+    const { handlers, store, workspaceRoot } = await createHandlers()
+    const taskRoot = join(workspaceRoot, '.mde', 'docs', 'tasks')
+    const sourcePath = join(taskRoot, 'ready.md')
+
+    await mkdir(taskRoot, { recursive: true })
+    await writeFile(sourcePath, '# READY Cached discovery task\n', 'utf8')
+    await handlers.get(AUTOMATION_CHANNELS.createFlowFromTemplate)?.(
+      {},
+      {
+        defaultEngine: 'codex',
+        flowId: 'valid-cache-flow',
+        scope: 'workspace',
+        templateId: 'local-dev-task'
+      }
+    )
+
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'valid-cache-flow',
+      workspaceId: workspaceRoot
+    })
+    await store.replaceDiscoveredTaskSources(
+      'valid-cache-flow',
+      [
+        {
+          automationFlowId: 'valid-cache-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          relativePath: '.mde/docs/tasks/ready.md',
+          sourceItemId: 'valid-source',
+          sourcePath,
+          sourceSnapshotHash: 'valid-source-hash',
+          sourceType: 'workspace-markdown',
+          title: 'READY Cached discovery task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    const projection = (await handlers
+      .get(AUTOMATION_CHANNELS.getProjection)
+      ?.({}, { workspaceRoot })) as {
+      projection: {
+        readonly tasks: readonly { readonly title: string }[]
+      }
+    }
+    const runs = await store.listRuns()
+
+    expect(runs.filter((run) => run.runKind === 'discovery')).toHaveLength(0)
+    expect(projection.projection.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: 'READY Cached discovery task' })
+      ])
+    )
+  })
+
   it('omits native-session run action when the adapter cannot open one', async () => {
     const { handlers, workspaceRoot } = await createHandlers({
       capabilities: {

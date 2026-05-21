@@ -23,6 +23,8 @@ import {
 
 import { buildElectronApp, launchElectronApp } from './support/electronApp'
 import { createFixtureWorkspace } from './support/fixtureWorkspace'
+import { createAutomationStore } from '../../src/main/services/automation/automationStore'
+import { createWorkspaceFlowOwnerKey } from '../../src/main/services/automation/automationFlowOwnerIdentity'
 import { COMPONENT_IDS } from '../../src/renderer/src/componentIds'
 
 const E2E_TEST_TIMEOUT_MS = 120_000
@@ -30,6 +32,11 @@ const E2E_BUILD_TIMEOUT_MS = 900_000
 const E2E_UI_READY_TIMEOUT_MS = 20_000
 const REAL_CODEX_E2E_TIMEOUT_MS = 300_000
 const isRealCodexE2eEnabled = process.env.MDE_E2E_REAL_CODEX === '1'
+const matrixTaskPathGlobs = Object.freeze([
+  '.mde/docs/bugs/**/*.md',
+  '.mde/docs/requirements/**/*.md',
+  '.mde/docs/tasks/**/*.md'
+] as const)
 
 test.setTimeout(E2E_TEST_TIMEOUT_MS)
 
@@ -43,12 +50,14 @@ const createFlowMarkdown = ({
   flowId,
   lifecycle,
   name,
-  scope = 'workspace'
+  scope = 'workspace',
+  taskPathGlobs
 }: {
   readonly flowId: string
   readonly lifecycle: 'archived' | 'enabled'
   readonly name: string
   readonly scope?: 'user' | 'workspace'
+  readonly taskPathGlobs?: readonly string[]
 }): string =>
   renderAutomationFlowTemplate(
     getBuiltInAutomationFlowTemplate(
@@ -58,7 +67,8 @@ const createFlowMarkdown = ({
       defaultEngine: 'codex',
       flowId,
       name,
-      scope
+      scope,
+      ...(taskPathGlobs !== undefined ? { taskPathGlobs } : {})
     }
   )
     .replace('lifecycle: enabled', `lifecycle: ${lifecycle}`)
@@ -83,7 +93,8 @@ const createSeedAutomationFlow = async ({
   lifecycle = 'enabled',
   name,
   rootPath,
-  scope = 'workspace'
+  scope = 'workspace',
+  taskPathGlobs
 }: {
   readonly executorIds?: readonly string[]
   readonly flowId: string
@@ -91,6 +102,7 @@ const createSeedAutomationFlow = async ({
   readonly name: string
   readonly rootPath: string
   readonly scope?: 'user' | 'workspace'
+  readonly taskPathGlobs?: readonly string[]
 }): Promise<void> => {
   const flowRoot = join(rootPath, '.mde', 'automation-flows')
   const executorRoot = join(flowRoot, flowId)
@@ -102,7 +114,8 @@ const createSeedAutomationFlow = async ({
       flowId,
       lifecycle,
       name,
-      scope
+      scope,
+      taskPathGlobs
     }),
     'utf8'
   )
@@ -1869,8 +1882,97 @@ test('runs discovery and task execution through a fake CLI executable', async ()
   }
 })
 
+test('opening Automation Center ignores stale local discovery cache and records a fresh discovery run', async () => {
+  const workspacePath = await createAutomationWorkspace()
+  const workspaceRoot = await realpath(workspacePath)
+  const fakeCli = await createAutomationFakeCli(workspaceRoot)
+
+  await createSeedAutomationFlow({
+    flowId: 'continuous-flow',
+    name: 'Continuous Flow',
+    rootPath: workspaceRoot
+  })
+
+  const { app, e2eUserDataPath, startupDiagnostics, window } =
+    await launchElectronApp({
+      args: [workspaceRoot],
+      env: {
+        MDE_E2E_AUTOMATION_JSONL_ADAPTER: fakeCli.commandPath,
+        MDE_FAKE_AUTOMATION_LOG: fakeCli.logPath
+      }
+    })
+
+  try {
+    const staleStore = createAutomationStore({ appDataPath: e2eUserDataPath })
+    const ownerKey = createWorkspaceFlowOwnerKey({
+      flowId: 'continuous-flow',
+      workspaceId: workspaceRoot
+    })
+
+    await staleStore.initialize()
+    await staleStore.replaceDiscoveredTaskSources(
+      'continuous-flow',
+      [
+        {
+          automationFlowId: 'continuous-flow',
+          automationFlowOwnerKey: ownerKey,
+          discoveredAt: '2026-05-10T08:00:00.000Z',
+          relativePath: '.mde/docs/tasks/missing.md',
+          sourceItemId: 'stale-e2e-source',
+          sourcePath: join(workspaceRoot, '.mde', 'docs', 'tasks', 'missing.md'),
+          sourceSnapshotHash: 'stale-e2e-source-hash',
+          sourceType: 'workspace-markdown',
+          sourceUri:
+            'file://' + join(workspaceRoot, '.mde', 'docs', 'tasks', 'missing.md'),
+          title: 'READY Missing E2E cached task',
+          workspaceId: workspaceRoot
+        }
+      ],
+      ownerKey
+    )
+
+    await expect(
+      window.getByRole('button', { name: /README\.md Markdown file/i })
+    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
+
+    const automationWindow = await openAutomationCenter(app, window)
+    const runHistory = automationWindow.getByRole('region', {
+      name: 'Run history'
+    })
+
+    await expect(runHistory).toContainText('Continuous Flow discovery', {
+      timeout: E2E_UI_READY_TIMEOUT_MS
+    })
+    await expectSignalStackToContainTask(
+      automationWindow,
+      'READY Implement automation E2E'
+    )
+    await expect
+      .poll(async () => {
+        const log = await readFile(fakeCli.logPath, 'utf8')
+
+        return log
+          .trim()
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { readonly runKind?: string })
+          .filter((entry) => entry.runKind === 'discovery').length
+      }, { timeout: E2E_UI_READY_TIMEOUT_MS })
+      .toBeGreaterThanOrEqual(1)
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('shows task execution root and report reference from Automation Center', async () => {
   const workspacePath = await createAutomationWorkspace()
+  await writeAutomationSourceMarkdown({
+    body: 'Verify the Automation Center execution root report path.',
+    relativePath: '.mde/docs/tasks/ready.md',
+    title: 'READY Execution root report task',
+    workspacePath
+  })
   const executionRoot = await createFixtureWorkspace()
   const resolvedExecutionRoot = await realpath(executionRoot)
   const evidencePath = join(
@@ -2005,7 +2107,8 @@ test('covers a valid automation-flow across lifecycle, task buckets, and Flowlin
   await createSeedAutomationFlow({
     flowId: 'matrix-flow',
     name: 'Matrix Flow',
-    rootPath: workspacePath
+    rootPath: workspacePath,
+    taskPathGlobs: matrixTaskPathGlobs
   })
   const fakeCli = await createAutomationFakeCli(workspacePath)
   const resolvedWorkspacePath = await realpath(workspacePath)

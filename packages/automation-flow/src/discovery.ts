@@ -42,6 +42,11 @@ interface NormalizeAutomationDiscoveredTaskSourcesInput {
   readonly sources: readonly AutomationDiscoverySourceInput[]
 }
 
+export interface AutomationDiscoverySourceSnapshotHashInput {
+  readonly automationFlow: AutomationFlow
+  readonly source: AutomationDiscoverySourceInput
+}
+
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map(stableStringify).join(',')}]`
@@ -174,6 +179,30 @@ const isSafeExecutionRoot = (value: string | undefined): boolean =>
 const isSafeDiscoveryString = (value: string): boolean =>
   value.trim().length > 0 && !hasControlCharacters(value)
 
+export const createAutomationDiscoverySourceSnapshotHash = ({
+  automationFlow,
+  source
+}: AutomationDiscoverySourceSnapshotHashInput): string =>
+  createStableHash({
+    automationFlowId: automationFlow.id,
+    automationFlowOwnerKey: source.automationFlowOwnerKey,
+    contentSnapshot: source.contentSnapshot,
+    executionRoot: normalizeExecutionRoot(source.executionRoot),
+    externalId: source.externalId,
+    provider: source.provider,
+    relativePath: source.relativePath,
+    requiredExecutorId: source.requiredExecutorId,
+    requiredExecutorRef: source.requiredExecutorRef,
+    sourceItemId: source.sourceItemId,
+    sourcePath: source.sourcePath,
+    sourceType: source.sourceType,
+    sourceUri: source.sourceUri,
+    tags: source.tags,
+    taskType: source.taskType,
+    title: source.title,
+    workspaceId: source.workspaceId
+  })
+
 export const isValidAutomationDiscoverySourceInput = (
   source: AutomationDiscoverySourceInput
 ): boolean =>
@@ -200,34 +229,20 @@ export const normalizeAutomationDiscoveredTaskSources = ({
       }
 
       const executionRoot = normalizeExecutionRoot(source.executionRoot)
-      const hashInput = {
-        automationFlowId: automationFlow.id,
-        automationFlowOwnerKey: source.automationFlowOwnerKey,
-        contentSnapshot: source.contentSnapshot,
-        executionRoot,
-        externalId: source.externalId,
-        provider: source.provider,
-        relativePath: source.relativePath,
-        requiredExecutorId: source.requiredExecutorId,
-        requiredExecutorRef: source.requiredExecutorRef,
-        sourceItemId: source.sourceItemId,
-        sourcePath: source.sourcePath,
-        sourceType: source.sourceType,
-        sourceUri: source.sourceUri,
-        tags: source.tags,
-        taskType: source.taskType,
-        title: source.title,
-        workspaceId: source.workspaceId
-      }
+      const normalizedTaskPayloadHash =
+        createAutomationDiscoverySourceSnapshotHash({
+          automationFlow,
+          source
+        })
       const ownerKey = source.automationFlowOwnerKey ?? automationFlow.id
       const taskDataId = createAutomationTaskDataId({
         ownerKey,
         sourceItemId: source.sourceItemId
       })
       const sourceSnapshotHash =
-        source.sourceSnapshotHash ?? createStableHash(hashInput)
+        source.sourceSnapshotHash ?? normalizedTaskPayloadHash
       const taskDataSnapshotId = createAutomationTaskDataSnapshotId({
-        normalizedTaskPayloadHash: createStableHash(hashInput),
+        normalizedTaskPayloadHash,
         sourceSnapshotHash,
         taskDataId
       })

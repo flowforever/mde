@@ -26,6 +26,13 @@ export interface AutomationSourceScanResult {
   readonly sourceItems: readonly AutomationFlowSourceItem[]
 }
 
+export interface ParsedAutomationSourceMarkdown {
+  readonly automationStatus?: AutomationSourceStatus
+  readonly diagnostics: readonly AutomationDiagnostic[]
+  readonly tags?: readonly string[]
+  readonly title: string
+}
+
 const workspaceTaskKinds = Object.freeze([
   'bugs',
   'requirements',
@@ -113,15 +120,10 @@ const parseTags = (markdown: string): readonly string[] | undefined => {
   )
 }
 
-const parseSourceMarkdown = (
+export const parseAutomationSourceMarkdown = (
   markdown: string,
   sourceFile: string
-): {
-  readonly automationStatus?: AutomationSourceStatus
-  readonly diagnostics: readonly AutomationDiagnostic[]
-  readonly tags?: readonly string[]
-  readonly title: string
-} => {
+): ParsedAutomationSourceMarkdown => {
   const lines = markdown.split(/\r?\n/u)
   const title = getFirstHeading(markdown, sourceFile)
 
@@ -178,7 +180,7 @@ export const scanWorkspaceMarkdownSources = async ({
   const parsed = await Promise.all(
     files.map(async (filePath) => {
       const markdown = await readFile(filePath, 'utf8')
-      const source = parseSourceMarkdown(markdown, filePath)
+      const source = parseAutomationSourceMarkdown(markdown, filePath)
       const relativePath = normalizePath(relative(workspaceRoot, filePath))
 
       return Object.freeze({
@@ -220,7 +222,7 @@ export const scanUserPromptSources = async ({
   const parsed = await Promise.all(
     files.map(async (filePath) => {
       const markdown = await readFile(filePath, 'utf8')
-      const source = parseSourceMarkdown(markdown, filePath)
+      const source = parseAutomationSourceMarkdown(markdown, filePath)
       const relativePath = normalizePath(relative(userPromptRoot, filePath))
 
       return Object.freeze({
