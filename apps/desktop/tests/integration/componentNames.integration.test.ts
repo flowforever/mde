@@ -117,25 +117,10 @@ describe("component naming reference", () => {
     }
   });
 
-  it("keeps automation component manual code locations on their owning source files", async () => {
-    const manual = await readFile(MANUAL_PATH, "utf8");
-    const manualRows = parseManualComponentRows(manual);
-
-    expect(manualRows).toContainEqual({
-      codePath: "apps/desktop/src/renderer/src/automation/SignalStack.tsx",
-      componentId: "automation.diagnostic-list",
-      standardName: "Automation Diagnostic List",
-    });
-    expect(manualRows).toContainEqual({
-      codePath: "apps/desktop/src/renderer/src/automation/SignalStack.tsx",
-      componentId: "automation.signal-stack",
-      standardName: "Automation Signal Stack",
-    });
-    expect(manualRows).toContainEqual({
-      codePath: "apps/desktop/src/renderer/src/automation/QuietFlowline.tsx",
-      componentId: "automation.flowline",
-      standardName: "Automation Flowline",
-    });
+  it("has no retired automation component entries", () => {
+    const entries = Object.values(COMPONENT_NAME_ID_MAP);
+    expect(entries.some((entry) => entry.componentId.startsWith("automation."))).toBe(false);
+    expect(entries.some((entry) => /explorer\..*(?:automation|global-flow)/u.test(entry.componentId))).toBe(false);
   });
 
   it("binds every concrete component id to a renderer data-component-id constant reference", async () => {

@@ -20,25 +20,11 @@ import {
   registerWorkspaceHandlers,
   type WorkspaceHandlerSession
 } from './ipc/registerWorkspaceHandlers'
-import { WORKSPACE_CHANNELS } from './ipc/channels'
 import { getLaunchPathFromArgv } from './launchArgs'
 import { registerAiHandlers } from './ipc/registerAiHandlers'
 import { registerAgentChatHandlers } from './ipc/registerAgentChatHandlers'
-import { registerAutomationHandlers } from './ipc/registerAutomationHandlers'
 import { registerFileHandlers } from './ipc/registerFileHandlers'
 import { createAiService } from './services/aiService'
-import { createAutomationAdapterRegistry } from './services/automation/automationAdapterRegistry'
-import {
-  createFakeAgentCliAdapter,
-  createJsonlAgentCliAdapter
-} from './services/automation/agentCliAdapters'
-import { createAgentChatAutomationAdapter } from './services/automation/agentChatAutomationAdapter'
-import { createAutomationRuntime } from './services/automation/automationRuntime'
-import { createAutomationRuntimeCoordinator } from './services/automation/automationRuntimeCoordinator'
-import { createAutomationRuntimeOwner } from './services/automation/automationRuntimeOwner'
-import { linkBuiltInAutomationToolSkills } from './services/automation/automationToolSkillLinker'
-import { createAutomationStore } from './services/automation/automationStore'
-import { createMdeRuntimeBridge } from './services/automation/mdeRuntimeBridge'
 import { registerMdeCliInBackground } from './services/cliRegistrationService'
 import { createMarkdownFileService } from './services/markdownFileService'
 import { createWorkspaceService } from './services/workspaceService'
@@ -46,16 +32,13 @@ import {
   APP_PRODUCT_NAME,
   CAPTURE_STARTUP_DIAGNOSTICS_ENV,
   DISABLE_SINGLE_INSTANCE_ENV,
-  E2E_HOME_PATH_ENV,
   E2E_USER_DATA_PATH_ENV,
   STARTUP_DIAGNOSTICS_GLOBAL_KEY
 } from '../shared/appIdentity'
 import type {
-  WorkspaceAutomationFlowsLaunchResource,
   WorkspaceLaunchResource
 } from '../shared/workspace'
 import {
-  AUTOMATION_CENTER_WINDOW_MODE,
   EDITOR_WINDOW_MODE,
   WINDOW_MODE_ARGUMENT_PREFIX,
   type MdeWindowMode
@@ -100,8 +83,6 @@ type StartupDiagnosticsGlobal = typeof globalThis & {
 
 const startupDiagnosticPattern = /preload|security|unable to load preload/i
 const DEV_PRODUCT_NAME = `${APP_PRODUCT_NAME} Dev`
-const E2E_AUTOMATION_AUTONOMY_GATE_ENV = 'MDE_E2E_AUTOMATION_AUTONOMY_GATE'
-const E2E_AUTOMATION_JSONL_ADAPTER_ENV = 'MDE_E2E_AUTOMATION_JSONL_ADAPTER'
 const E2E_AGENT_CHAT_FAKE_CODEX_ENV = 'MDE_E2E_AGENT_CHAT_FAKE_CODEX'
 
 interface RuntimeIdentityApp {
@@ -308,26 +289,6 @@ const focusWindow = (window: BrowserWindow): void => {
   window.focus()
 }
 
-const isWorkspaceAutomationFlowsLaunchResource = (
-  value: WorkspaceLaunchResource | null
-): value is WorkspaceAutomationFlowsLaunchResource =>
-  typeof value === 'object' &&
-  value !== null &&
-  value.type === 'workspace-automation-flows'
-
-const normalizeWorkspaceAutomationFlowsLaunchResource = async (
-  launchPath: WorkspaceAutomationFlowsLaunchResource
-): Promise<WorkspaceAutomationFlowsLaunchResource> => {
-  try {
-    return {
-      ...launchPath,
-      workspaceRoot: await realpath(launchPath.workspaceRoot)
-    }
-  } catch {
-    return launchPath
-  }
-}
-
 export const createEditorWindowTracker = (): {
   readonly focusOrCreateMainWindow: (
     openEditorWindow: (() => Promise<BrowserWindow>) | null
@@ -417,47 +378,6 @@ export const createMainWindow = async (
 ): Promise<BrowserWindow> =>
   createMdeWindow(BrowserWindow, EDITOR_WINDOW_MODE, onWindowCreated)
 
-export const createAutomationCenterWindow = async (
-  BrowserWindow: BrowserWindowConstructor,
-  onWindowCreated: (window: BrowserWindow) => void = () => undefined
-): Promise<BrowserWindow> =>
-  createMdeWindow(BrowserWindow, AUTOMATION_CENTER_WINDOW_MODE, onWindowCreated)
-
-export const createAutomationCenterWindowManager = (
-  BrowserWindow: BrowserWindowConstructor,
-  onWindowCreated: (window: BrowserWindow) => void = () => undefined
-): {
-  readonly openOrFocusAutomationCenterWindow: () => Promise<BrowserWindow>
-} => {
-  let automationCenterWindow: BrowserWindow | null = null
-
-  const setAutomationCenterWindow = (window: BrowserWindow): void => {
-    automationCenterWindow = window
-
-    window.once('closed', () => {
-      if (automationCenterWindow === window) {
-        automationCenterWindow = null
-      }
-    })
-
-    onWindowCreated(window)
-  }
-
-  return {
-    openOrFocusAutomationCenterWindow: async () => {
-      if (automationCenterWindow) {
-        focusWindow(automationCenterWindow)
-        return automationCenterWindow
-      }
-
-      return createAutomationCenterWindow(
-        BrowserWindow,
-        setAutomationCenterWindow
-      )
-    }
-  }
-}
-
 const bootstrap = async (): Promise<void> => {
   const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = (await import(
     'electron'
@@ -483,9 +403,6 @@ const bootstrap = async (): Promise<void> => {
   }
 
   const editorWindowTracker = createEditorWindowTracker()
-  let openAutomationCenterWindow:
-    | (() => Promise<BrowserWindow>)
-    | null = null
   let workspaceSession: WorkspaceHandlerSession | null = null
   let openAppWindow:
     | ((launchPath?: WorkspaceLaunchResource | null) => Promise<BrowserWindow>)
@@ -518,19 +435,6 @@ const bootstrap = async (): Promise<void> => {
   })
 
   await app.whenReady()
-  const homePath = process.env[E2E_HOME_PATH_ENV] ?? app.getPath('home')
-
-  try {
-    await linkBuiltInAutomationToolSkills({
-      homePath,
-      repoRoot: app.getAppPath(),
-      resourcesPath: process.resourcesPath
-    })
-  } catch (error) {
-    recordStartupError(
-      `Failed to link built-in automation tool skills: ${error instanceof Error ? error.message : String(error)}`
-    )
-  }
   registerMdeCliInBackground({ app })
   configureAutoUpdates({
     app,
@@ -594,107 +498,10 @@ const bootstrap = async (): Promise<void> => {
     ipcMain,
     runtime: agentChatRuntime
   })
-  const automationAppDataPath = app.getPath('userData')
-  const automationStore = createAutomationStore({
-    appDataPath: automationAppDataPath
-  })
-  const automationAdapterCapabilities =
-    process.env[E2E_AUTOMATION_AUTONOMY_GATE_ENV] === 'false'
-      ? { autonomyGate: false }
-      : undefined
-  const jsonlAdapterPath = process.env[E2E_AUTOMATION_JSONL_ADAPTER_ENV]
-  const automationAdapterRegistry = createAutomationAdapterRegistry(
-    jsonlAdapterPath
-      ? [
-          createJsonlAgentCliAdapter({
-            commandPath: jsonlAdapterPath,
-            engine: 'codex'
-          })
-        ]
-      : [
-          automationAdapterCapabilities === undefined
-            ? createAgentChatAutomationAdapter({
-                runtime: agentChatRuntime
-              })
-            : createFakeAgentCliAdapter({
-                capabilities: automationAdapterCapabilities,
-                commandPath: 'codex',
-                engine: 'codex'
-              }),
-          createFakeAgentCliAdapter({
-            ...(automationAdapterCapabilities !== undefined
-              ? { capabilities: automationAdapterCapabilities }
-              : {}),
-            commandPath: 'claude',
-            engine: 'claude-code'
-          })
-        ]
-  )
-  const automationRuntime = createAutomationRuntime({
-    adapterRegistry: automationAdapterRegistry,
-    profileId: automationAppDataPath,
-    runtimeBridge: createMdeRuntimeBridge({
-      appDataPath: automationAppDataPath
-    }),
-    store: automationStore
-  })
-  const automationRuntimeCoordinator = createAutomationRuntimeCoordinator({
-    owner: createAutomationRuntimeOwner({
-      appDataPath: automationAppDataPath
-    }),
-    runtime: automationRuntime,
-    store: automationStore
-  })
-
-  await automationRuntimeCoordinator.start()
-
-  registerAutomationHandlers({
-    adapterRegistry: automationAdapterRegistry,
-    getActiveWorkspaceRoot: workspaceSession.getActiveWorkspaceRoot,
-    homePath,
-    ipcMain,
-    repoRoot: app.getAppPath(),
-    runtime: automationRuntimeCoordinator,
-    store: automationStore
-  })
-  const automationCenterWindowManager = createAutomationCenterWindowManager(
-    BrowserWindow
-  )
-  openAutomationCenterWindow =
-    automationCenterWindowManager.openOrFocusAutomationCenterWindow
-  ipcMain.handle(WINDOW_CHANNELS.openAutomationCenter, async () => {
-    if (!openAutomationCenterWindow) {
-      throw new Error('Automation Center window creation is not ready')
-    }
-
-    await openAutomationCenterWindow()
-  })
   ipcMain.handle(WINDOW_CHANNELS.focusWorkspaceWindow, () => {
     focusMainWindow()
   })
   openAppWindow = async (launchPath = null) => {
-    if (isWorkspaceAutomationFlowsLaunchResource(launchPath)) {
-      const normalizedLaunchPath =
-        await normalizeWorkspaceAutomationFlowsLaunchResource(launchPath)
-      const existingWindowId = workspaceSession?.getWindowIdForWorkspaceRoot(
-        normalizedLaunchPath.workspaceRoot
-      )
-      const existingWindow =
-        existingWindowId === undefined || existingWindowId === null
-          ? null
-          : editorWindowTracker.getWindowByWebContentsId(existingWindowId)
-
-      if (existingWindow !== null) {
-        focusWindow(existingWindow)
-        existingWindow.webContents.send(
-          WORKSPACE_CHANNELS.launchPath,
-          normalizedLaunchPath
-        )
-        return existingWindow
-      }
-
-      launchPath = normalizedLaunchPath
-    }
 
     return createMainWindow(BrowserWindow, (window) => {
       workspaceSession?.setPendingLaunchPath(window.webContents, launchPath)
@@ -712,10 +519,6 @@ const bootstrap = async (): Promise<void> => {
     if (process.platform !== 'darwin') {
       app.quit()
     }
-  })
-
-  app.on('before-quit', () => {
-    void automationRuntimeCoordinator.prepareForShutdown()
   })
 }
 

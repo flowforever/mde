@@ -2,8 +2,8 @@ export const AGENT_CHAT_ENGINE_IDS = ['codex', 'claude'] as const
 
 export type AgentChatEngineId = (typeof AGENT_CHAT_ENGINE_IDS)[number]
 
-export type AgentChatHost = 'editor' | 'automation-center'
-export type AgentChatSessionPurpose = 'document-chat' | 'automation-task' | 'debug'
+export type AgentChatHost = 'editor'
+export type AgentChatSessionPurpose = 'document-chat' | 'debug'
 export type AgentChatPermissionMode = 'max-permission'
 export type AgentChatSessionState =
   | 'draft'
@@ -54,15 +54,7 @@ export interface AgentChatSessionBinding {
   readonly workspaceRoot: string
 }
 
-export interface AgentChatAutomationAuthoringContext {
-  readonly diagnostics: readonly string[]
-  readonly executorRefs: readonly string[]
-  readonly flowPath?: string
-  readonly runtimeConstraints?: readonly string[]
-}
-
 export interface AgentChatContextManifest {
-  readonly automationAuthoringContext?: AgentChatAutomationAuthoringContext
   readonly currentDocumentPath?: string
   readonly currentDocumentSnapshot: string
   readonly modelName?: string

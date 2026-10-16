@@ -69,11 +69,7 @@ const isWorkspaceLaunchResource = (
       typeof resource.filePath === 'string'
     )
   }
-
-  return (
-    resource.type === 'workspace-automation-flows' &&
-    typeof resource.workspaceRoot === 'string'
-  )
+  return false
 }
 
 const assertWorkspaceLaunchResource = (

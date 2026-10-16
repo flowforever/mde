@@ -228,18 +228,9 @@ describe('Release automation config', () => {
     expect(electronBuilderConfig.files).toEqual(
       expect.arrayContaining(['out/**/*', 'package.json'])
     )
-    expect(electronBuilderConfig.extraResources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          from: '../../bin/mde.js',
-          to: 'cli/mde'
-        }),
-        expect.objectContaining({
-          from: '../../skills/automation-flow-helper',
-          to: 'skills/automation-flow-helper'
-        })
-      ])
-    )
+    expect(electronBuilderConfig.extraResources).toEqual([
+      { from: '../../bin/mde.js', to: 'cli/mde' }
+    ])
     expect(electronBuilderConfig.files).not.toContain('../../out/**/*')
     expect(desktopPackageJson.scripts?.['release:github']).toBe(
       'pnpm run release:github:mac'

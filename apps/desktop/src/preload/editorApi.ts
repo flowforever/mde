@@ -6,7 +6,6 @@ import type {
   EditorApi,
   FileContents,
   ImageAsset,
-  WorkspaceAutomationFlowsLaunchResource,
   WorkspaceFileLaunchResource,
   WorkspaceLaunchResource,
   WorkspaceSearchResult
@@ -37,11 +36,7 @@ export const createEditorApi = (
       _event: Electron.IpcRendererEvent,
       resourcePath: unknown
     ): void => {
-      if (
-        typeof resourcePath === 'string' ||
-        isWorkspaceAutomationFlowsLaunchResource(resourcePath) ||
-        isWorkspaceFileLaunchResource(resourcePath)
-      ) {
+      if (typeof resourcePath === 'string' || isWorkspaceFileLaunchResource(resourcePath)) {
         callback(resourcePath)
       }
     }
@@ -234,13 +229,3 @@ const isWorkspaceFileLaunchResource = (
   (value as WorkspaceFileLaunchResource).type === 'workspace-file' &&
   typeof (value as WorkspaceFileLaunchResource).workspaceRoot === 'string' &&
   typeof (value as WorkspaceFileLaunchResource).filePath === 'string'
-
-const isWorkspaceAutomationFlowsLaunchResource = (
-  value: unknown
-): value is WorkspaceAutomationFlowsLaunchResource =>
-  typeof value === 'object' &&
-  value !== null &&
-  (value as WorkspaceAutomationFlowsLaunchResource).type ===
-    'workspace-automation-flows' &&
-  typeof (value as WorkspaceAutomationFlowsLaunchResource).workspaceRoot ===
-    'string'

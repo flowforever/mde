@@ -187,246 +187,6 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "app.shell",
     standardName: "App Shell",
   },
-  automationArchivedToggle: {
-    componentId: "automation.archived-toggle",
-    constantPath: "automation.archivedToggle",
-    standardName: "Automation Archived Toggle",
-  },
-  automationBlockedStartDiagnosticRow: {
-    componentId: "automation.blocked-start-diagnostic-row",
-    constantPath: "automation.blockedStartDiagnosticRow",
-    standardName: "Automation Blocked Start Diagnostic Row",
-  },
-  automationBlockedStartDiagnosticsPanel: {
-    componentId: "automation.blocked-start-diagnostics-panel",
-    constantPath: "automation.blockedStartDiagnosticsPanel",
-    standardName: "Automation Blocked Start Diagnostics Panel",
-  },
-  automationBucketFilterButton: {
-    componentId: "automation.bucket-filter-button",
-    constantPath: "automation.bucketFilterButton",
-    standardName: "Automation Bucket Filter Button",
-  },
-  automationCenterWindow: {
-    componentId: "automation.center-window",
-    constantPath: "automation.centerWindow",
-    standardName: "Automation Center Window",
-  },
-  automationDecisionApproveButton: {
-    componentId: "automation.decision-approve-button",
-    constantPath: "automation.decisionApproveButton",
-    standardName: "Automation Decision Approve Button",
-  },
-  automationDecisionPanel: {
-    componentId: "automation.decision-panel",
-    constantPath: "automation.decisionPanel",
-    standardName: "Automation Decision Panel",
-  },
-  automationDecisionStatusMessage: {
-    componentId: "automation.decision-status-message",
-    constantPath: "automation.decisionStatusMessage",
-    standardName: "Automation Decision Status Message",
-  },
-  automationDiagnosticList: {
-    componentId: "automation.diagnostic-list",
-    constantPath: "automation.diagnosticList",
-    standardName: "Automation Diagnostic List",
-  },
-  automationDiagnosticManagementButton: {
-    componentId: "automation.diagnostic-management-button",
-    constantPath: "automation.diagnosticManagementButton",
-    standardName: "Automation Diagnostic Management Button",
-  },
-  automationEditorCloseButton: {
-    componentId: "automation.editor-close-button",
-    constantPath: "automation.editorCloseButton",
-    standardName: "Automation Editor Close Button",
-  },
-  automationEditorHost: {
-    componentId: "automation.editor-host",
-    constantPath: "automation.editorHost",
-    standardName: "Automation Editor Host",
-  },
-  automationEditorSaveButton: {
-    componentId: "automation.editor-save-button",
-    constantPath: "automation.editorSaveButton",
-    standardName: "Automation Editor Save Button",
-  },
-  automationExecutionRecordRow: {
-    componentId: "automation.execution-record-row",
-    constantPath: "automation.executionRecordRow",
-    standardName: "Automation Execution Record Row",
-  },
-  automationExecutionRecordsPanel: {
-    componentId: "automation.execution-records-panel",
-    constantPath: "automation.executionRecordsPanel",
-    standardName: "Automation Execution Records Panel",
-  },
-  automationExecutionRootLabel: {
-    componentId: "automation.execution-root-label",
-    constantPath: "automation.executionRootLabel",
-    standardName: "Automation Execution Root Label",
-  },
-  automationExecutorSelector: {
-    componentId: "automation.executor-selector",
-    constantPath: "automation.executorSelector",
-    standardName: "Automation Executor Selector",
-  },
-  automationFlowEnabledSection: {
-    componentId: "automation.flow-enabled-section",
-    constantPath: "automation.flowEnabledSection",
-    standardName: "Automation Flow Enabled Section",
-  },
-  automationFlowFilterToggle: {
-    componentId: "automation.flow-filter-toggle",
-    constantPath: "automation.flowFilterToggle",
-    standardName: "Automation Flow Filter Toggle",
-  },
-  automationFlowLifecycleButton: {
-    componentId: "automation.flow-lifecycle-button",
-    constantPath: "automation.flowLifecycleButton",
-    standardName: "Automation Flow Lifecycle Button",
-  },
-  automationFlowline: {
-    componentId: "automation.flowline",
-    constantPath: "automation.flowline",
-    standardName: "Automation Flowline",
-  },
-  automationFlowlineCloseButton: {
-    componentId: "automation.flowline-close-button",
-    constantPath: "automation.flowlineCloseButton",
-    standardName: "Automation Flowline Close Button",
-  },
-  automationFlowlinePhase: {
-    componentId: "automation.flowline-phase",
-    constantPath: "automation.flowlinePhase",
-    standardName: "Automation Flowline Phase",
-  },
-  automationFlowNotEnabledSection: {
-    componentId: "automation.flow-not-enabled-section",
-    constantPath: "automation.flowNotEnabledSection",
-    standardName: "Automation Flow Not Enabled Section",
-  },
-  automationFlowRow: {
-    componentId: "automation.flow-row",
-    constantPath: "automation.flowRow",
-    standardName: "Automation Flow Row",
-  },
-  automationFlowToolbar: {
-    componentId: "automation.flow-toolbar",
-    constantPath: "automation.flowToolbar",
-    standardName: "Automation Flow Toolbar",
-  },
-  automationGlobalFlowSection: {
-    componentId: "automation.global-flow-section",
-    constantPath: "automation.globalFlowSection",
-    standardName: "Automation Global Flow Section",
-  },
-  automationPrimaryExecutorLabel: {
-    componentId: "automation.primary-executor-label",
-    constantPath: "automation.primaryExecutorLabel",
-    standardName: "Automation Primary Executor Label",
-  },
-  automationReturnWorkspaceButton: {
-    componentId: "automation.return-workspace-button",
-    constantPath: "automation.returnWorkspaceButton",
-    standardName: "Automation Return Workspace Button",
-  },
-  automationRunHistoryDetailButton: {
-    componentId: "automation.run-history-detail-button",
-    constantPath: "automation.runHistoryDetailButton",
-    standardName: "Automation Run History Detail Button",
-  },
-  automationRunHistoryDetailCloseButton: {
-    componentId: "automation.run-history-detail-close-button",
-    constantPath: "automation.runHistoryDetailCloseButton",
-    standardName: "Automation Run History Detail Close Button",
-  },
-  automationRunHistoryDetailDialog: {
-    componentId: "automation.run-history-detail-dialog",
-    constantPath: "automation.runHistoryDetailDialog",
-    standardName: "Automation Run History Detail Dialog",
-  },
-  automationRunHistoryNativeSessionButton: {
-    componentId: "automation.run-history-native-session-button",
-    constantPath: "automation.runHistoryNativeSessionButton",
-    standardName: "Automation Run History Native Session Button",
-  },
-  automationRunHistoryPanel: {
-    componentId: "automation.run-history-panel",
-    constantPath: "automation.runHistoryPanel",
-    standardName: "Automation Run History Panel",
-  },
-  automationRunHistoryRow: {
-    componentId: "automation.run-history-row",
-    constantPath: "automation.runHistoryRow",
-    standardName: "Automation Run History Row",
-  },
-  automationScopeFilterManagementButton: {
-    componentId: "automation.scope-filter-management-button",
-    constantPath: "automation.scopeFilterManagementButton",
-    standardName: "Automation Scope Filter Management Button",
-  },
-  automationScopeFilterToggle: {
-    componentId: "automation.scope-filter-toggle",
-    constantPath: "automation.scopeFilterToggle",
-    standardName: "Automation Scope Filter Toggle",
-  },
-  automationSelectedExecutorStartButton: {
-    componentId: "automation.selected-executor-start-button",
-    constantPath: "automation.selectedExecutorStartButton",
-    standardName: "Automation Selected Executor Start Button",
-  },
-  automationSidebarResizeHandle: {
-    componentId: "automation.sidebar-resize-handle",
-    constantPath: "automation.sidebarResizeHandle",
-    standardName: "Automation Sidebar Resize Handle",
-  },
-  automationSignalStack: {
-    componentId: "automation.signal-stack",
-    constantPath: "automation.signalStack",
-    standardName: "Automation Signal Stack",
-  },
-  automationSignalTaskRow: {
-    componentId: "automation.signal-task-row",
-    constantPath: "automation.signalTaskRow",
-    standardName: "Automation Signal Task Row",
-  },
-  automationStatusLight: {
-    componentId: "automation.status-light",
-    constantPath: "automation.statusLight",
-    standardName: "Automation Status Light",
-  },
-  automationTaskStack: {
-    componentId: "automation.task-stack",
-    constantPath: "automation.taskStack",
-    standardName: "Automation Task Stack",
-  },
-  automationTemplatePicker: {
-    componentId: "automation.template-picker",
-    constantPath: "automation.templatePicker",
-    standardName: "Automation Template Picker",
-  },
-  automationValidationPanel: {
-    componentId: "automation.validation-panel",
-    constantPath: "automation.validationPanel",
-    standardName: "Automation Validation Panel",
-  },
-  automationWorkspaceFilterCard: {
-    componentId: "automation.workspace-filter-card",
-    constantPath: "automation.workspaceFilterCard",
-    standardName: "Automation Workspace Filter Card",
-  },
-  automationWorkspaceFilterPanel: {
-    componentId: "automation.workspace-filter-panel",
-    constantPath: "automation.workspaceFilterPanel",
-    standardName: "Automation Workspace Filter Panel",
-  },
-  automationWorkspaceFilters: {
-    componentId: "automation.workspace-filters",
-    constantPath: "automation.workspaceFilters",
-    standardName: "Automation Workspace Filters",
-  },
   editorActionButton: {
     componentId: "editor.action-button",
     constantPath: "editor.actionButton",
@@ -512,46 +272,6 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "editor.titlebar",
     standardName: "Editor Titlebar",
   },
-  explorerAddAutomationExecutorButton: {
-    componentId: "explorer.add-automation-executor-button",
-    constantPath: "explorer.addAutomationExecutorButton",
-    standardName: "Add Automation Executor Button",
-  },
-  explorerAddAutomationFlowButton: {
-    componentId: "explorer.add-automation-flow-button",
-    constantPath: "explorer.addAutomationFlowButton",
-    standardName: "Add Automation Flow Button",
-  },
-  explorerApplyGlobalFlowButton: {
-    componentId: "explorer.apply-global-flow-button",
-    constantPath: "explorer.applyGlobalFlowButton",
-    standardName: "Apply Global Flow Button",
-  },
-  explorerAutomationExecutorRow: {
-    componentId: "explorer.automation-executor-row",
-    constantPath: "explorer.automationExecutorRow",
-    standardName: "Explorer Automation Executor Row",
-  },
-  explorerAutomationFlowMenu: {
-    componentId: "explorer.automation-flow-menu",
-    constantPath: "explorer.automationFlowMenu",
-    standardName: "Explorer Automation Flow Menu",
-  },
-  explorerAutomationFlowRow: {
-    componentId: "explorer.automation-flow-row",
-    constantPath: "explorer.automationFlowRow",
-    standardName: "Explorer Automation Flow Row",
-  },
-  explorerAutomationFlowsPanel: {
-    componentId: "explorer.automation-flows-panel",
-    constantPath: "explorer.automationFlowsPanel",
-    standardName: "Explorer Automation Flows Panel",
-  },
-  explorerAutomationHomeButton: {
-    componentId: "explorer.automation-home-button",
-    constantPath: "explorer.automationHomeButton",
-    standardName: "Automation Home Button",
-  },
   explorerContextMenu: {
     componentId: "explorer.context-menu",
     constantPath: "explorer.contextMenu",
@@ -561,11 +281,6 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "explorer.context-menu-item",
     constantPath: "explorer.contextMenuItem",
     standardName: "Explorer Context Menu Item",
-  },
-  explorerDeleteAutomationFlowButton: {
-    componentId: "explorer.delete-automation-flow-button",
-    constantPath: "explorer.deleteAutomationFlowButton",
-    standardName: "Delete Automation Flow Button",
   },
   explorerDeleteConfirmationPopover: {
     componentId: "explorer.delete-confirmation-popover",
@@ -596,11 +311,6 @@ export const COMPONENT_NAME_ID_MAP = {
     componentId: "explorer.inline-name-field",
     constantPath: "explorer.inlineNameField",
     standardName: "Explorer Inline Name Field",
-  },
-  explorerJumpGlobalAutomationFlowButton: {
-    componentId: "explorer.jump-global-automation-flow-button",
-    constantPath: "explorer.jumpGlobalAutomationFlowButton",
-    standardName: "Jump Global Automation Flow Button",
   },
   explorerNewFolderButton: {
     componentId: "explorer.new-folder-button",
@@ -637,25 +347,10 @@ export const COMPONENT_NAME_ID_MAP = {
     constantPath: "explorer.recoverDeletedDocumentsButton",
     standardName: "Recover Deleted Documents Button",
   },
-  explorerRefreshAutomationSkillsButton: {
-    componentId: "explorer.refresh-automation-skills-button",
-    constantPath: "explorer.refreshAutomationSkillsButton",
-    standardName: "Refresh Automation Skills Button",
-  },
   explorerRefreshButton: {
     componentId: "explorer.refresh-button",
     constantPath: "explorer.refreshButton",
     standardName: "Refresh Explorer Button",
-  },
-  explorerRemoveAppliedGlobalFlowButton: {
-    componentId: "explorer.remove-applied-global-flow-button",
-    constantPath: "explorer.removeAppliedGlobalFlowButton",
-    standardName: "Remove Applied Global Flow Button",
-  },
-  explorerRenameAutomationFlowButton: {
-    componentId: "explorer.rename-automation-flow-button",
-    constantPath: "explorer.renameAutomationFlowButton",
-    standardName: "Rename Automation Flow Button",
   },
   explorerResizeHandle: {
     componentId: "explorer.resize-handle",
@@ -1038,87 +733,6 @@ export const COMPONENT_IDS = {
     sessionPicker: COMPONENT_NAME_ID_MAP.agentChatSessionPicker.componentId,
     thinkingStatus: COMPONENT_NAME_ID_MAP.agentChatThinkingStatus.componentId,
   },
-  automation: {
-    archivedToggle: COMPONENT_NAME_ID_MAP.automationArchivedToggle.componentId,
-    blockedStartDiagnosticRow:
-      COMPONENT_NAME_ID_MAP.automationBlockedStartDiagnosticRow.componentId,
-    blockedStartDiagnosticsPanel:
-      COMPONENT_NAME_ID_MAP.automationBlockedStartDiagnosticsPanel.componentId,
-    bucketFilterButton:
-      COMPONENT_NAME_ID_MAP.automationBucketFilterButton.componentId,
-    centerWindow: COMPONENT_NAME_ID_MAP.automationCenterWindow.componentId,
-    diagnosticList: COMPONENT_NAME_ID_MAP.automationDiagnosticList.componentId,
-    diagnosticManagementButton:
-      COMPONENT_NAME_ID_MAP.automationDiagnosticManagementButton.componentId,
-    decisionApproveButton:
-      COMPONENT_NAME_ID_MAP.automationDecisionApproveButton.componentId,
-    decisionPanel: COMPONENT_NAME_ID_MAP.automationDecisionPanel.componentId,
-    decisionStatusMessage:
-      COMPONENT_NAME_ID_MAP.automationDecisionStatusMessage.componentId,
-    editorCloseButton:
-      COMPONENT_NAME_ID_MAP.automationEditorCloseButton.componentId,
-    editorHost: COMPONENT_NAME_ID_MAP.automationEditorHost.componentId,
-    editorSaveButton:
-      COMPONENT_NAME_ID_MAP.automationEditorSaveButton.componentId,
-    executorSelector:
-      COMPONENT_NAME_ID_MAP.automationExecutorSelector.componentId,
-    executionRecordRow:
-      COMPONENT_NAME_ID_MAP.automationExecutionRecordRow.componentId,
-    executionRecordsPanel:
-      COMPONENT_NAME_ID_MAP.automationExecutionRecordsPanel.componentId,
-    executionRootLabel:
-      COMPONENT_NAME_ID_MAP.automationExecutionRootLabel.componentId,
-    flowEnabledSection:
-      COMPONENT_NAME_ID_MAP.automationFlowEnabledSection.componentId,
-    flowFilterToggle:
-      COMPONENT_NAME_ID_MAP.automationFlowFilterToggle.componentId,
-    flowLifecycleButton:
-      COMPONENT_NAME_ID_MAP.automationFlowLifecycleButton.componentId,
-    flowRow: COMPONENT_NAME_ID_MAP.automationFlowRow.componentId,
-    flowline: COMPONENT_NAME_ID_MAP.automationFlowline.componentId,
-    flowlineCloseButton:
-      COMPONENT_NAME_ID_MAP.automationFlowlineCloseButton.componentId,
-    flowlinePhase: COMPONENT_NAME_ID_MAP.automationFlowlinePhase.componentId,
-    flowNotEnabledSection:
-      COMPONENT_NAME_ID_MAP.automationFlowNotEnabledSection.componentId,
-    flowToolbar: COMPONENT_NAME_ID_MAP.automationFlowToolbar.componentId,
-    globalFlowSection:
-      COMPONENT_NAME_ID_MAP.automationGlobalFlowSection.componentId,
-    primaryExecutorLabel:
-      COMPONENT_NAME_ID_MAP.automationPrimaryExecutorLabel.componentId,
-    returnWorkspaceButton:
-      COMPONENT_NAME_ID_MAP.automationReturnWorkspaceButton.componentId,
-    runHistoryDetailButton:
-      COMPONENT_NAME_ID_MAP.automationRunHistoryDetailButton.componentId,
-    runHistoryDetailCloseButton:
-      COMPONENT_NAME_ID_MAP.automationRunHistoryDetailCloseButton.componentId,
-    runHistoryDetailDialog:
-      COMPONENT_NAME_ID_MAP.automationRunHistoryDetailDialog.componentId,
-    runHistoryNativeSessionButton:
-      COMPONENT_NAME_ID_MAP.automationRunHistoryNativeSessionButton.componentId,
-    runHistoryPanel:
-      COMPONENT_NAME_ID_MAP.automationRunHistoryPanel.componentId,
-    runHistoryRow: COMPONENT_NAME_ID_MAP.automationRunHistoryRow.componentId,
-    sidebarResizeHandle:
-      COMPONENT_NAME_ID_MAP.automationSidebarResizeHandle.componentId,
-    scopeFilterManagementButton:
-      COMPONENT_NAME_ID_MAP.automationScopeFilterManagementButton.componentId,
-    scopeFilterToggle:
-      COMPONENT_NAME_ID_MAP.automationScopeFilterToggle.componentId,
-    selectedExecutorStartButton:
-      COMPONENT_NAME_ID_MAP.automationSelectedExecutorStartButton.componentId,
-    signalStack: COMPONENT_NAME_ID_MAP.automationSignalStack.componentId,
-    signalTaskRow: COMPONENT_NAME_ID_MAP.automationSignalTaskRow.componentId,
-    statusLight: COMPONENT_NAME_ID_MAP.automationStatusLight.componentId,
-    taskStack: COMPONENT_NAME_ID_MAP.automationTaskStack.componentId,
-    templatePicker: COMPONENT_NAME_ID_MAP.automationTemplatePicker.componentId,
-    validationPanel: COMPONENT_NAME_ID_MAP.automationValidationPanel.componentId,
-    workspaceFilterCard:
-      COMPONENT_NAME_ID_MAP.automationWorkspaceFilterCard.componentId,
-    workspaceFilterPanel:
-      COMPONENT_NAME_ID_MAP.automationWorkspaceFilterPanel.componentId,
-    workspaceFilters: COMPONENT_NAME_ID_MAP.automationWorkspaceFilters.componentId,
-  },
   app: {
     dropTargetOverlay: COMPONENT_NAME_ID_MAP.appDropTargetOverlay.componentId,
     shell: COMPONENT_NAME_ID_MAP.appShell.componentId,
@@ -1152,26 +766,8 @@ export const COMPONENT_IDS = {
     titlebar: COMPONENT_NAME_ID_MAP.editorTitlebar.componentId,
   },
   explorer: {
-    addAutomationExecutorButton:
-      COMPONENT_NAME_ID_MAP.explorerAddAutomationExecutorButton.componentId,
-    addAutomationFlowButton:
-      COMPONENT_NAME_ID_MAP.explorerAddAutomationFlowButton.componentId,
-    applyGlobalFlowButton:
-      COMPONENT_NAME_ID_MAP.explorerApplyGlobalFlowButton.componentId,
-    automationExecutorRow:
-      COMPONENT_NAME_ID_MAP.explorerAutomationExecutorRow.componentId,
-    automationFlowMenu:
-      COMPONENT_NAME_ID_MAP.explorerAutomationFlowMenu.componentId,
-    automationFlowRow:
-      COMPONENT_NAME_ID_MAP.explorerAutomationFlowRow.componentId,
-    automationFlowsPanel:
-      COMPONENT_NAME_ID_MAP.explorerAutomationFlowsPanel.componentId,
-    automationHomeButton:
-      COMPONENT_NAME_ID_MAP.explorerAutomationHomeButton.componentId,
     contextMenu: COMPONENT_NAME_ID_MAP.explorerContextMenu.componentId,
     contextMenuItem: COMPONENT_NAME_ID_MAP.explorerContextMenuItem.componentId,
-    deleteAutomationFlowButton:
-      COMPONENT_NAME_ID_MAP.explorerDeleteAutomationFlowButton.componentId,
     deleteConfirmationPopover:
       COMPONENT_NAME_ID_MAP.explorerDeleteConfirmationPopover.componentId,
     deletedDocumentRow:
@@ -1182,8 +778,6 @@ export const COMPONENT_IDS = {
       COMPONENT_NAME_ID_MAP.explorerDirectoryDisclosureButton.componentId,
     header: COMPONENT_NAME_ID_MAP.explorerHeader.componentId,
     inlineNameField: COMPONENT_NAME_ID_MAP.explorerInlineNameField.componentId,
-    jumpGlobalAutomationFlowButton:
-      COMPONENT_NAME_ID_MAP.explorerJumpGlobalAutomationFlowButton.componentId,
     newFolderButton: COMPONENT_NAME_ID_MAP.explorerNewFolderButton.componentId,
     newMarkdownFileButton:
       COMPONENT_NAME_ID_MAP.explorerNewMarkdownFileButton.componentId,
@@ -1195,12 +789,6 @@ export const COMPONENT_IDS = {
     recoverDeletedDocumentsButton:
       COMPONENT_NAME_ID_MAP.explorerRecoverDeletedDocumentsButton.componentId,
     refreshButton: COMPONENT_NAME_ID_MAP.explorerRefreshButton.componentId,
-    refreshAutomationSkillsButton:
-      COMPONENT_NAME_ID_MAP.explorerRefreshAutomationSkillsButton.componentId,
-    removeAppliedGlobalFlowButton:
-      COMPONENT_NAME_ID_MAP.explorerRemoveAppliedGlobalFlowButton.componentId,
-    renameAutomationFlowButton:
-      COMPONENT_NAME_ID_MAP.explorerRenameAutomationFlowButton.componentId,
     resizeHandle: COMPONENT_NAME_ID_MAP.explorerResizeHandle.componentId,
     showHiddenEntriesButton:
       COMPONENT_NAME_ID_MAP.explorerShowHiddenEntriesButton.componentId,

@@ -1338,64 +1338,19 @@ test('opens a workspace from a command line path', async () => {
   }
 })
 
-test('opens Automation Center in a separate window from Explorer Home', async () => {
+test('opens and saves a workspace without automation controls', async () => {
   const workspacePath = await createFixtureWorkspace()
-  const { app, startupDiagnostics, window } = await launchElectronApp({
-    args: [workspacePath]
-  })
-
+  const { app, startupDiagnostics, window } = await launchElectronApp({ args: [workspacePath] })
   try {
-    await expect(
-      window.getByRole('button', { name: /README\.md Markdown file/i })
-    ).toBeVisible({ timeout: E2E_UI_READY_TIMEOUT_MS })
-
-    const automationWindowPromise = app.waitForEvent('window', {
-      timeout: E2E_UI_READY_TIMEOUT_MS
-    })
-
-    await window
-      .getByRole('button', { name: /open automation center/i })
-      .click()
-
-    const automationWindow = await automationWindowPromise
-
-    await automationWindow.waitForLoadState('domcontentloaded')
-    await expect(
-      automationWindow.getByRole('main', { name: /automation center/i })
-    ).toHaveAttribute(
-      'data-component-id',
-      COMPONENT_IDS.automation.centerWindow
-    )
-    await expect(
-      automationWindow.getByRole('region', { name: /signal stack/i })
-    ).toHaveAttribute(
-      'data-component-id',
-      COMPONENT_IDS.automation.signalStack
-    )
-    await expect(
-      automationWindow.locator(
-        '[data-component-id="automation.bucket-filter-button"]'
-      )
-    ).toHaveCount(4)
-    await expect(window.locator('.app-shell')).toBeVisible()
-    await expect(
-      window.getByRole('button', { name: /README\.md Markdown file/i })
-    ).toBeVisible()
-
-    await window.bringToFront()
-    const unexpectedWindowPromise = app
-      .waitForEvent('window', { timeout: 1_000 })
-      .then(() => true)
-      .catch(() => false)
-
-    await window
-      .getByRole('button', { name: /open automation center/i })
-      .click()
-
-    expect(await unexpectedWindowPromise).toBe(false)
-    await expect(
-      automationWindow.getByRole('main', { name: /automation center/i })
-    ).toBeVisible()
+    await window.getByRole('button', { name: /README\.md Markdown file/i }).click()
+    await expect(window.getByTestId('markdown-block-editor')).toContainText('Root markdown file.')
+    await expect(window.locator('[data-component-id="explorer.automation-home-button"]')).toHaveCount(0)
+    await expect(window.locator('[data-component-id="explorer.automation-flows-panel"]')).toHaveCount(0)
+    expect(app.windows()).toHaveLength(1)
+    await focusTextEndInEditor(window, 'Root markdown file.')
+    await window.keyboard.type(' Editing remains available.')
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+    await expect.poll(() => readFile(join(workspacePath, 'README.md'), 'utf8')).toContain('Editing remains available.')
     expect(startupDiagnostics.errors).toEqual([])
   } finally {
     await app.close()
@@ -3885,15 +3840,25 @@ test('previews and restores an earlier current-file version from history', async
       .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
       .toContain('Version history e2e edit')
 
-    await window.getByRole('button', { name: /^version history$/i }).click()
+    const toggleHistory = async (): Promise<void> => {
+      await expect(async () => {
+        const expandActions = window.getByRole('button', { name: /^show all editor actions$/i })
+        if (await expandActions.isVisible()) {
+          await expandActions.click()
+        }
+        await window.getByRole('button', { name: /^version history$/i }).click({ timeout: 1_000 })
+      }).toPass({ timeout: 10_000 })
+    }
+
+    await toggleHistory()
     await expect(
       window.getByRole('complementary', { name: /^version history$/i })
     ).toBeVisible()
-    await window.getByRole('button', { name: /^version history$/i }).click()
+    await toggleHistory()
     await expect(
       window.getByRole('complementary', { name: /^version history$/i })
     ).toHaveCount(0)
-    await window.getByRole('button', { name: /^version history$/i }).click()
+    await toggleHistory()
     await expect(
       window.getByRole('complementary', { name: /^version history$/i })
     ).toBeVisible()

@@ -565,3 +565,29 @@ test('hides Editor Agent Chat when the Codex sustained protocol is unavailable',
     await app.close()
   }
 })
+
+
+test('uses ordinary document chat for a legacy flow Markdown file', async () => {
+  const workspacePath = await createFixtureWorkspace()
+  const flowRoot = join(workspacePath, '.mde', 'automation-flows')
+  await mkdir(flowRoot, { recursive: true })
+  const flowPath = join(flowRoot, 'legacy.md')
+  await writeFile(flowPath, '# Legacy flow document\n', 'utf8')
+  const fakeBinPath = await installFakeCodexCli()
+  const { app, startupDiagnostics, window } = await launchElectronApp({
+    args: [flowPath],
+    env: { MDE_E2E_AGENT_CHAT_FAKE_CODEX: '1', PATH: `${fakeBinPath}${delimiter}${process.env.PATH ?? ''}` }
+  })
+  try {
+    await expect(window.getByTestId('markdown-block-editor')).toContainText('Legacy flow document')
+    await window.getByRole('button', { name: /^Agent Chat$/ }).click()
+    const panel = window.getByRole('complementary', { name: /^Agent Chat$/ })
+    await expect(panel).toContainText('legacy.md')
+    await panel.getByRole('textbox', { name: /message agent chat/i }).fill('Explain this document')
+    await panel.getByRole('button', { name: /^Send$/ }).click()
+    await expect(panel).toContainText('Fake codex response')
+    expect(startupDiagnostics.errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

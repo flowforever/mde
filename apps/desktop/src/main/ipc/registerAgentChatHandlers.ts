@@ -122,15 +122,15 @@ const assertCreateDraftRequest = (
     throw new Error('Editor Agent Chat V1 only supports Codex')
   }
 
+  if (request.host === 'automation-center' || request.sessionPurpose === 'automation-task') {
+    throw new Error('invalid-context')
+  }
+
   return {
     engineId: 'codex',
-    host: request.host === 'automation-center' ? 'automation-center' : 'editor',
+    host: 'editor',
     sessionPurpose:
-      request.sessionPurpose === 'automation-task'
-        ? 'automation-task'
-        : request.sessionPurpose === 'debug'
-          ? 'debug'
-          : 'document-chat',
+      request.sessionPurpose === 'debug' ? 'debug' : 'document-chat',
     workspaceRoot: assertString(request.workspaceRoot, 'Workspace root')
   }
 }

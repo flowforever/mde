@@ -6,7 +6,6 @@ declare const require: (moduleName: 'electron') => Pick<
 >
 
 import { createEditorApi } from './editorApi'
-import { createAutomationApi } from './automationApi'
 import { createAiApi } from './aiApi'
 import { createAgentChatApi } from './agentChatApi'
 import { createUpdateApi } from './updateApi'
@@ -27,12 +26,9 @@ const mdeWindowApi: MdeWindowApi = {
   focusWorkspaceWindow: () =>
     ipcRenderer.invoke(WINDOW_CHANNELS.focusWorkspaceWindow) as Promise<void>,
   getWindowMode: () => getWindowModeFromArgv(process.argv),
-  openAutomationCenter: () =>
-    ipcRenderer.invoke(WINDOW_CHANNELS.openAutomationCenter) as Promise<void>
 }
 
 contextBridge.exposeInMainWorld('mdeWindow', mdeWindowApi)
-contextBridge.exposeInMainWorld('mdeAutomation', createAutomationApi(ipcRenderer))
 contextBridge.exposeInMainWorld('agentChatApi', createAgentChatApi(ipcRenderer))
 contextBridge.exposeInMainWorld('editorApi', createEditorApi(ipcRenderer, webUtils))
 contextBridge.exposeInMainWorld('aiApi', createAiApi(ipcRenderer))
