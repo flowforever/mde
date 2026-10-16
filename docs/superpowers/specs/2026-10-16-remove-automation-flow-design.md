@@ -1,7 +1,7 @@
 # Remove Automation Flow
 
 Date: 2026-10-16
-Status: Implemented locally and verified on 2026-10-16; not released
+Status: Implemented and release-verified for v1.6.8 on 2026-10-16; publication tracked on GitHub
 
 ## Intent and approval
 
@@ -274,8 +274,8 @@ was changed. Their required implementation coverage is defined above.
 
 The removal was implemented in an isolated managed worktree. Ordinary editor
 and Agent Chat capabilities remain; existing automation files and installed
-user-global helper links are not cleaned up. No production release or push has
-been performed.
+user-global helper links are not cleaned up. At local completion no release or
+push had been performed; the user subsequently authorized PR and release.
 
 The earlier environment issue was resolved using the pinned pnpm 10.18.2 and the
 existing frozen lockfile. Final checks passed:
@@ -299,3 +299,45 @@ helper installation. The full E2E run exposed an existing history-test assumptio
 that toolbar actions are always expanded. The test now opens the existing
 overflow control when necessary and retains all preview, restore, and disk
 assertions; production toolbar behavior was unchanged.
+
+## Release preparation: v1.6.8
+
+The user authorized a new branch/Pull Request and publication. Remote v1.6.7 was
+the latest valid release, so the iteration policy selects v1.6.8. Root, desktop,
+and the changed private Agent Chat package manifests use 1.6.8. The pnpm lockfile
+was regenerated successfully; version-only edits do not change workspace links.
+
+Release checks passed: root lint, typecheck, production build, docs build,
+450 unit tests, 194 integration tests, and 59 Agent Chat package tests.
+The desktop package-local full test entry also passed its unit/integration
+suites, 64 desktop E2Es, and one editor-performance smoke. Its E2E command is
+the same command dispatched by the root entry. The release-workflow coverage
+check passed 703 tests: lines/statements 87.67%, branches 83.17%, functions 91.46%.
+Nine manual screenshots were already regenerated for this same UI state.
+Git whitespace checks passed. Independent review found no Critical/Important
+issues; the empty component-reference table header remains a deferred Minor.
+
+One fresh exploratory round passed for the approved removal scope using an
+isolated home/profile, Unicode/nested workspace, legacy malformed state, and fake
+Codex. Usability passed for ordinary editing, settings, English/Chinese switching,
+legacy Markdown browsing, and Chat. Performance showed no freeze or excessive
+idle activity in the small fixture. Single-sample observations under concurrent
+release-check load: app shell 596ms (not full workspace readiness), idle aggregate
+CPU about 0.035%, working set about 405MiB; no large-workspace benchmark claim.
+Response observations: language switch 61ms, edit plus explicit save to verified
+disk 44ms, reload to saved content 92-196ms, legacy document opening 56ms.
+Fake Chat timing does not certify real AI/network performance. Visual inspection
+passed for the target at 1200px and at 900px with Explorer collapsed. All legacy
+file snapshots stayed byte-identical before startup, after exploration and shutdown.
+
+Ruling: the existing 900px layout weakness with both Explorer and Chat expanded
+is outside the approved removal scope. The editor can narrow to 180px and headings
+wrap character-by-character. Baseline bd9479a..d878b8c has unchanged Chat width,
+grid and padding code. This is a pre-existing Minor, not a removal regression.
+Cost of preserving it: collapse Explorer or widen the window to restore editing space.
+
+Exploration evidence: /tmp/mde-release-1.6.8/exploration-1792141637958/ (report.json,
+screenshots, timings and legacy-byte checks). The isolated app closed successfully.
+
+The feature PR and Release workflow track publication. Preparation or a pushed
+tag alone does not establish that both platforms finished.
