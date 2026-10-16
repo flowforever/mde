@@ -41,6 +41,7 @@ const shellQuote = (value: string): string =>
 const installFakeShellPathCodexCli = async (): Promise<{
   readonly fakeBinPath: string
   readonly fakeShellPath: string
+  readonly fakeZdotdirPath: string
 }> => installFakeShellPathCodexCliWithOptions()
 
 const installFakeShellPathCodexCliWithOptions = async (
@@ -51,6 +52,7 @@ const installFakeShellPathCodexCliWithOptions = async (
 ): Promise<{
   readonly fakeBinPath: string
   readonly fakeShellPath: string
+  readonly fakeZdotdirPath: string
 }> => {
   const loginStatus = options.loginStatus ?? 'authenticated'
   const turnErrorMessageLiteral = JSON.stringify(options.turnErrorMessage ?? null)
@@ -61,7 +63,17 @@ const installFakeShellPathCodexCliWithOptions = async (
   const fakeCodexPath = join(fakeBinPath, 'codex')
   const fakeInterpreterPath = join(fakeShellPathRoot, 'mde-test-node')
   const fakeShellPath = join(fakeShellPathRoot, 'shell')
+  const fakeZdotdirPath = join(fakeShellPathRoot, 'zdotdir')
   const resolvedShellPath = [fakeBinPath, fakeShellPathRoot].join(delimiter)
+
+  // AI discovery invokes /bin/zsh directly, while the runner uses SHELL.
+  // Give both the fixture PATH without reading the developer's shell profile.
+  await mkdir(fakeZdotdirPath)
+  await writeFile(
+    join(fakeZdotdirPath, '.zprofile'),
+    `export PATH=${shellQuote(resolvedShellPath)}\n`,
+    'utf8'
+  )
 
   await writeFile(
     fakeInterpreterPath,
@@ -152,7 +164,16 @@ const installFakeShellPathCodexCliWithOptions = async (
   )
   await chmod(fakeCodexPath, 0o755)
 
-  return { fakeBinPath, fakeShellPath }
+  return { fakeBinPath, fakeShellPath, fakeZdotdirPath }
+}
+
+const expectOnlyFixtureCodex = async (
+  page: Page,
+  fakeBinPath: string
+): Promise<void> => {
+  expect(await page.evaluate(() => window.aiApi?.detectTools())).toEqual({
+    tools: [{ commandPath: join(fakeBinPath, 'codex'), id: 'codex', name: 'Codex' }]
+  })
 }
 
 const ensureWorkspaceDialogOpen = async (window: Page): Promise<void> => {
@@ -311,16 +332,19 @@ test('opens Editor Agent Chat through the fake Codex sustained engine', async ()
 
 test('sends Editor Agent Chat through packaged app-server when Codex is only on the login-shell PATH', async () => {
   const workspacePath = await createFixtureWorkspace()
-  const { fakeShellPath } = await installFakeShellPathCodexCli()
+  const { fakeBinPath, fakeShellPath, fakeZdotdirPath } =
+    await installFakeShellPathCodexCli()
   const { app, startupDiagnostics, window } = await launchElectronApp({
     args: [workspacePath],
     env: {
       PATH: ['/usr/bin', '/bin'].join(delimiter),
-      SHELL: fakeShellPath
+      SHELL: fakeShellPath,
+      ZDOTDIR: fakeZdotdirPath
     }
   })
 
   try {
+    await expectOnlyFixtureCodex(window, fakeBinPath)
     await window
       .getByRole('button', { name: /README\.md Markdown file/i })
       .click({ timeout: E2E_UI_READY_TIMEOUT_MS })
@@ -354,18 +378,21 @@ test('sends Editor Agent Chat through packaged app-server when Codex is only on 
 
 test('shows the Codex app-server turn failure reason in Editor Agent Chat', async () => {
   const workspacePath = await createFixtureWorkspace()
-  const { fakeShellPath } = await installFakeShellPathCodexCliWithOptions({
-    turnErrorMessage: 'Codex session expired. Run codex login status.'
-  })
+  const { fakeBinPath, fakeShellPath, fakeZdotdirPath } =
+    await installFakeShellPathCodexCliWithOptions({
+      turnErrorMessage: 'Codex session expired. Run codex login status.'
+    })
   const { app, startupDiagnostics, window } = await launchElectronApp({
     args: [workspacePath],
     env: {
       PATH: ['/usr/bin', '/bin'].join(delimiter),
-      SHELL: fakeShellPath
+      SHELL: fakeShellPath,
+      ZDOTDIR: fakeZdotdirPath
     }
   })
 
   try {
+    await expectOnlyFixtureCodex(window, fakeBinPath)
     await window
       .getByRole('button', { name: /README\.md Markdown file/i })
       .click({ timeout: E2E_UI_READY_TIMEOUT_MS })
@@ -402,18 +429,21 @@ test('shows the Codex app-server turn failure reason in Editor Agent Chat', asyn
 
 test('hides Editor Agent Chat in packaged sparse GUI PATH when Codex is not logged in', async () => {
   const workspacePath = await createFixtureWorkspace()
-  const { fakeShellPath } = await installFakeShellPathCodexCliWithOptions({
-    loginStatus: 'authentication-required'
-  })
+  const { fakeBinPath, fakeShellPath, fakeZdotdirPath } =
+    await installFakeShellPathCodexCliWithOptions({
+      loginStatus: 'authentication-required'
+    })
   const { app, startupDiagnostics, window } = await launchElectronApp({
     args: [workspacePath],
     env: {
       PATH: ['/usr/bin', '/bin'].join(delimiter),
-      SHELL: fakeShellPath
+      SHELL: fakeShellPath,
+      ZDOTDIR: fakeZdotdirPath
     }
   })
 
   try {
+    await expectOnlyFixtureCodex(window, fakeBinPath)
     await window
       .getByRole('button', { name: /README\.md Markdown file/i })
       .click({ timeout: E2E_UI_READY_TIMEOUT_MS })
