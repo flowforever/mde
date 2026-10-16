@@ -1,7 +1,7 @@
 # Remove Automation Flow
 
 Date: 2026-10-16
-Status: Implemented and release-verified for v1.6.8 on 2026-10-16; publication tracked on GitHub
+Status: Implemented; v1.6.8 release CI failed before publication. Preparing v1.6.9 after the complete release-fix gates on 2026-10-16.
 
 ## Intent and approval
 
@@ -341,3 +341,98 @@ screenshots, timings and legacy-byte checks). The isolated app closed successful
 
 The feature PR and Release workflow track publication. Preparation or a pushed
 tag alone does not establish that both platforms finished.
+
+## Release fix required after v1.6.8 CI
+
+PR #2 merged as 4ebf999c44383350fb88f619513325157de103a2 and annotated tag
+v1.6.8 was pushed. Release run 38879869431 failed before release creation or
+artifact packaging: 61 desktop E2Es passed, three Agent Chat sparse/login-shell
+PATH cases failed to find expected action buttons. The tag must remain immutable.
+The user manual deployment run 38879809191 succeeded.
+
+Hypothesis under investigation: the test fake login shell supplies PATH to the
+Agent Chat runner, but ordinary AI tool discovery falls back to actual /bin/zsh;
+an existing developer Codex installation may mask a fixture-isolation defect.
+Return from release to the execute-picked-task release-fix lifecycle. Any fix
+must reproduce the failure, preserve the sparse-GUI/login-shell assertion, and
+pass architecture/review/manual-applicability/release-decision gates before
+preparing the next valid version. No production regression is assumed from the
+missing-button symptom alone. Logs: /tmp/mde-release-1.6.8/ci-failed.log.
+
+Release-fix SubAgent plan (execute-picked-task):
+
+- release_task_work_fix: reproduce the CI failure and implement/verify the scoped fix.
+- Fresh release_fix_architecture: inspect package/runtime boundaries and fixture isolation.
+- Fresh release_fix_review: inspect correctness, assertions, coverage, and regression risk.
+- Fresh release_fix_manual: assess manual applicability for the fix and recheck changed test paths; prior removal exploration remains evidence for unchanged production behavior.
+- Fresh release_fix_decision: decide release readiness and next non-reused version.
+- Fresh release_fix_publish: run release-new-version after all required gates pass, including metadata, notes, checks, PR, tag, and post-push verification.
+
+SubAgents are required for this fix loop by the repository release skill's explicit return to execute-picked-task. Parent owns orchestration/status; Task Work owns code/test edits; later release executor owns release metadata and publication.
+
+Release fix Task Work: commit 359e329cba877f3aa6b38146e7f11f92bcc189de changes
+only the desktop Agent Chat E2E fixture. Original three tests failed with inherited
+empty temporary ZDOTDIR, reproducing CI. Inherited user profile had supplied a
+developer-installed real Codex; isolated shell could not find it.
+The fix gives real zsh discovery its own fixture ZDOTDIR/.zprofile and checks
+real IPC detectTools returns exactly the fixture Codex. Sparse GUI PATH and
+original successful-turn, turn-error, and unauthenticated assertions remain.
+Final isolated focused run: 3 passed in 17.1s; lint/typecheck and build prerequisite
+passed. No production/manual changes; new UT/IT suites are not applicable to
+this fixture-only correction. Full release checks will follow.
+
+Architecture ALL PASS: fresh release_fix_architecture inspected the diff, shell
+quoting, platform assumptions, runtime discovery/runner/launch boundaries and
+RED/GREEN evidence. No findings. General review is in progress.
+
+Review ALL PASS: fresh release_fix_review found no correctness, isolation,
+assertion-strength, or regression findings. Sparse PATH and original turn/auth
+assertions remain intact. No production UT/IT/i18n/component/manual update is
+applicable to this test-only change. A fresh manual-applicability review follows.
+
+Manual divergent testing ALL PASS for the fixture-only release fix: fresh
+release_fix_manual independently inspected scope, RED/GREEN evidence, and prior
+real exploratory screenshots/report. One applicability round completed.
+Additional runtime exploration is N/A: usability has no changed user flow/copy/
+controls; performance changes only E2E fixture setup; response-speed logic is
+unchanged; visual assets/layout are unchanged. These automated tests are not
+misrepresented as manual interaction. Earlier real runtime exploration remains
+valid for unchanged production source and version-only metadata. No findings.
+Release Decision SubAgent is evaluating the next immutable version and handoff.
+
+Release Decision ALL PASS: fresh release_fix_decision confirmed that the full
+unreleased Automation Flow removal is release-worthy. Remote v1.6.8 is preserved
+and failed before release creation; remote v1.6.9 is absent, latest published
+version remains v1.6.7. Select v1.6.9. Fresh Release SubAgent owns final metadata,
+notes, full verification, PR, immutable tag, and both-platform/manual verification.
+
+
+## Release preparation: v1.6.9
+
+The immutable v1.6.8 tag remains at the original merge. Its CI failure produced
+no published release or installers. The next unused iteration is v1.6.9; root,
+desktop, and changed private Agent Chat package metadata now use 1.6.9. Complete
+notes include the unreleased Automation Flow removal and isolated Agent Chat
+login-shell fixture repair. No registry publication is part of this release.
+
+The user explicitly authorized a new branch and Pull Request plus publication.
+The fix branch will be merged only after its checks pass, and a new annotated tag
+will target the verified merged tree. Publication, both platform artifacts, and
+the new user manual deployment remain pending until GitHub Actions confirms them.
+Fresh full local checks passed against this final test/metadata state.
+
+No additional manual changes or screenshot refresh are needed for the test-only
+repair and version metadata. The original removal's manual update, nine Electron
+workflow screenshots, real exploratory round, and passed fix applicability gate
+remain applicable. No active requirement or bug document needs archiving.
+
+
+Final v1.6.9 local release verification ALL PASS: root lint, typecheck, build,
+450 unit tests, 194 integration tests, 59 Agent Chat package tests, owning desktop
+full test entry (its unit/integration suites plus 64 E2Es and one performance
+smoke), coverage (703 tests; lines/statements 87.67%, branches 83.17%, functions
+91.46%), docs build, and git whitespace checks. The root E2E aggregation entry
+dispatches the exact owning desktop E2E command exercised here. pnpm 10.18.2
+regenerated the lockfile offline and validated frozen mode with no lockfile diff;
+version-only workspace links remain unchanged. No package-lock.json exists.
+Logs: /tmp/mde-release-1.6.9/verification-results.json and per-check logs.
