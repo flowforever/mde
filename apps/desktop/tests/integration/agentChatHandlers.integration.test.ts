@@ -562,4 +562,32 @@ describe('agentChatHandlers integration', () => {
     expect(unsubscribes[0]).toHaveBeenCalledTimes(1)
     expect(sender.send).not.toHaveBeenCalled()
   })
+
+  it.each([
+    { host: 'automation-center', sessionPurpose: 'document-chat' },
+    { host: 'editor', sessionPurpose: 'automation-task' },
+  ])('rejects a retired chat request: %j', async (retired) => {
+    const { handlers, runtime } = registerHandlers();
+    await expect(handlers.get(AGENT_CHAT_CHANNELS.createDraftSession)!(
+      { sender: { id: 1, send: vi.fn() } },
+      { engineId: 'codex', workspaceRoot: '/workspace', ...retired },
+    )).rejects.toThrow();
+    expect(runtime.createDraftSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { request: {}, purpose: 'document-chat' },
+    { request: { host: 'editor', sessionPurpose: 'document-chat' }, purpose: 'document-chat' },
+    { request: { host: 'editor', sessionPurpose: 'debug' }, purpose: 'debug' },
+  ])('keeps editor session defaults and debug support: %j', async ({ request, purpose }) => {
+    const { handlers, runtime } = registerHandlers();
+    await handlers.get(AGENT_CHAT_CHANNELS.createDraftSession)!(
+      { sender: { id: 1, send: vi.fn() } },
+      { engineId: 'codex', workspaceRoot: '/workspace', ...request },
+    );
+    expect(runtime.createDraftSession).toHaveBeenCalledWith({
+      engineId: 'codex', host: 'editor', sessionPurpose: purpose, workspaceRoot: '/workspace',
+    });
+  });
+
 })

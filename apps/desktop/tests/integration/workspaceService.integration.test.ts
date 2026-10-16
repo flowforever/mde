@@ -511,8 +511,7 @@ describe('workspaceService integration', () => {
     ])
   })
 
-  it('opens automation-flow launch intents in an Explorer window', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'mde-workspace-'))
+  it('rejects retired automation-flow launch intents without opening a window', async () => {
     const openedPaths: unknown[] = []
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     const ipcMain = {
@@ -520,34 +519,15 @@ describe('workspaceService integration', () => {
         handlers.set(channel, handler)
       })
     }
-
     registerWorkspaceHandlers({
-      dialog: { showOpenDialog: vi.fn() },
-      ipcMain,
-      openPathInNewWindow: (resourcePath) => {
-        openedPaths.push(resourcePath)
-      },
+      dialog: { showOpenDialog: vi.fn() }, ipcMain,
+      openPathInNewWindow: (resourcePath) => { openedPaths.push(resourcePath) },
       workspaceService: createWorkspaceService()
     })
-
-    const openPathInNewWindow = handlers.get(
-      WORKSPACE_CHANNELS.openPathInNewWindow
-    )
-
-    await openPathInNewWindow?.(
-      createIpcEvent(304),
-      {
-        type: 'workspace-automation-flows',
-        workspaceRoot: workspacePath
-      }
-    )
-
-    expect(openedPaths).toEqual([
-      {
-        type: 'workspace-automation-flows',
-        workspaceRoot: workspacePath
-      }
-    ])
+    await expect(handlers.get(WORKSPACE_CHANNELS.openPathInNewWindow)?.(
+      createIpcEvent(304), { type: 'workspace-automation-flows', workspaceRoot: '/workspace' }
+    )).rejects.toThrow('Launch path must be a string or workspace launch resource')
+    expect(openedPaths).toEqual([])
   })
 
   it('inspects renderer-supplied paths through IPC without switching workspaces', async () => {

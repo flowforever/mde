@@ -2,8 +2,8 @@ export const AGENT_CHAT_ENGINE_IDS = ['codex', 'claude'] as const
 
 export type AgentChatEngineId = (typeof AGENT_CHAT_ENGINE_IDS)[number]
 
-export type AgentChatHost = 'editor' | 'automation-center'
-export type AgentChatSessionPurpose = 'document-chat' | 'automation-task' | 'debug'
+export type AgentChatHost = 'editor'
+export type AgentChatSessionPurpose = 'document-chat' | 'debug'
 export type AgentChatPermissionMode = 'max-permission'
 export type AgentChatSessionState =
   | 'draft'

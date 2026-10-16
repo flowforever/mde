@@ -3,13 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  createAutomationCenterWindowManager,
   createEditorWindowTracker,
   createMainWindow,
   createWindowOptions,
 } from "../../src/main/index";
 import {
-  AUTOMATION_CENTER_WINDOW_MODE,
   EDITOR_WINDOW_MODE,
   getWindowModeFromArgv,
   WINDOW_MODE_ARGUMENT_PREFIX,
@@ -70,86 +68,15 @@ const asFakeWindow = (window: unknown): FakeBrowserWindow =>
 const createWindowModeArgument = (windowMode: string): string =>
   `${WINDOW_MODE_ARGUMENT_PREFIX}${windowMode}`;
 
-describe("Automation Center window lifecycle", () => {
-  it("passes explicit window mode bootstrap arguments", () => {
-    expect(
-      createWindowOptions("preload.mjs", AUTOMATION_CENTER_WINDOW_MODE)
-        .webPreferences?.additionalArguments,
-    ).toContain(createWindowModeArgument(AUTOMATION_CENTER_WINDOW_MODE));
-    expect(
-      createWindowOptions("preload.mjs", EDITOR_WINDOW_MODE).webPreferences
-        ?.additionalArguments,
-    ).toContain(createWindowModeArgument(EDITOR_WINDOW_MODE));
-  });
+describe("Editor window lifecycle", () => {
 
   it("uses the last window mode argument so internal bootstrap arguments win", () => {
     expect(
       getWindowModeFromArgv([
-        createWindowModeArgument(AUTOMATION_CENTER_WINDOW_MODE),
+        createWindowModeArgument("automation-center"),
         createWindowModeArgument(EDITOR_WINDOW_MODE),
       ]),
     ).toBe(EDITOR_WINDOW_MODE);
-  });
-
-  it("creates one Automation Center window and focuses it on later opens", async () => {
-    const BrowserWindow = createBrowserWindowConstructor();
-    const manager = createAutomationCenterWindowManager(
-      BrowserWindow as never,
-    );
-
-    const firstWindow = asFakeWindow(
-      await manager.openOrFocusAutomationCenterWindow(),
-    );
-    const secondWindow = asFakeWindow(
-      await manager.openOrFocusAutomationCenterWindow(),
-    );
-
-    expect(BrowserWindow).toHaveBeenCalledTimes(1);
-    expect(secondWindow).toBe(firstWindow);
-    expect(firstWindow?.focus).toHaveBeenCalledTimes(1);
-    expect(
-      firstWindow.options.webPreferences?.additionalArguments,
-    ).toContain(createWindowModeArgument(AUTOMATION_CENTER_WINDOW_MODE));
-  });
-
-  it("reopens Automation Center after the previous Automation Center window closes", async () => {
-    const BrowserWindow = createBrowserWindowConstructor();
-    const manager = createAutomationCenterWindowManager(
-      BrowserWindow as never,
-    );
-
-    const firstWindow = asFakeWindow(
-      await manager.openOrFocusAutomationCenterWindow(),
-    );
-    firstWindow.emitOnce("closed");
-    const secondWindow = asFakeWindow(
-      await manager.openOrFocusAutomationCenterWindow(),
-    );
-
-    expect(BrowserWindow).toHaveBeenCalledTimes(2);
-    expect(secondWindow).not.toBe(firstWindow);
-  });
-
-  it("keeps editor windows in editor mode while Automation Center uses its own mode", async () => {
-    const BrowserWindow = createBrowserWindowConstructor();
-    const editorWindow = asFakeWindow(await createMainWindow(BrowserWindow as never));
-    const manager = createAutomationCenterWindowManager(
-      BrowserWindow as never,
-    );
-    const automationWindow = asFakeWindow(
-      await manager.openOrFocusAutomationCenterWindow(),
-    );
-
-    expect(
-      editorWindow.options.webPreferences?.additionalArguments,
-    ).toContain(createWindowModeArgument(EDITOR_WINDOW_MODE));
-    expect(
-      automationWindow.options.webPreferences?.additionalArguments,
-    ).toContain(createWindowModeArgument(AUTOMATION_CENTER_WINDOW_MODE));
-    expect(editorWindow.close).not.toHaveBeenCalled();
-    expect(editorWindow.loadFile).toHaveBeenCalledWith(
-      join(__dirname, "../../src/renderer/index.html"),
-    );
   });
 
   it("tracks the main window from editor windows only", () => {
@@ -201,20 +128,13 @@ describe("Automation Center window lifecycle", () => {
       tracker.getWindowByWebContentsId(secondEditorWindow.webContents.id),
     ).toBeNull();
   });
+});
 
-  it("does not close or reload the editor window when Automation Center closes", async () => {
-    const BrowserWindow = createBrowserWindowConstructor();
-    const editorWindow = asFakeWindow(await createMainWindow(BrowserWindow as never));
-    const manager = createAutomationCenterWindowManager(
-      BrowserWindow as never,
-    );
-    const automationWindow = asFakeWindow(
-      await manager.openOrFocusAutomationCenterWindow(),
-    );
 
-    automationWindow.emitOnce("closed");
-
-    expect(editorWindow.close).not.toHaveBeenCalled();
-    expect(editorWindow.loadFile).toHaveBeenCalledTimes(1);
-  });
+it("creates an editor window with isolated web preferences", async () => {
+  const BrowserWindow = createBrowserWindowConstructor();
+  const window = asFakeWindow(await createMainWindow(BrowserWindow as never));
+  expect(window.options.webPreferences?.additionalArguments).toContain(createWindowModeArgument(EDITOR_WINDOW_MODE));
+  expect(createWindowOptions("preload.mjs")).toMatchObject({ webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  expect(window.loadFile).toHaveBeenCalledWith(join(__dirname, "../../src/renderer/index.html"));
 });

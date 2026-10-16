@@ -20,15 +20,7 @@ export interface WorkspaceFileLaunchResource {
   readonly workspaceRoot: string
 }
 
-export interface WorkspaceAutomationFlowsLaunchResource {
-  readonly type: 'workspace-automation-flows'
-  readonly workspaceRoot: string
-}
-
-export type WorkspaceLaunchResource =
-  | string
-  | WorkspaceAutomationFlowsLaunchResource
-  | WorkspaceFileLaunchResource
+export type WorkspaceLaunchResource = string | WorkspaceFileLaunchResource
 
 export interface WorkspacePathInfo {
   readonly kind: 'directory' | 'markdown-file' | 'other' | 'unsupported-file'

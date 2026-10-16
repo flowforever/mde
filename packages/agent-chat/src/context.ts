@@ -24,7 +24,6 @@ const assertSessionPurpose = (
 ): AgentChatSessionPurpose => {
   if (
     value !== 'document-chat' &&
-    value !== 'automation-task' &&
     value !== 'debug'
   ) {
     throw new Error('Unsupported Agent Chat session purpose')

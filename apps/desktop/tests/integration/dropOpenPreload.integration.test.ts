@@ -23,4 +23,22 @@ describe('drop open preload integration', () => {
     )
     expect(webUtils.getPathForFile).toHaveBeenCalledWith(droppedFile)
   })
+
+  it('ignores retired flow launches and keeps normal file and workspace launch events', () => {
+    const ipcRenderer = { invoke: vi.fn(), on: vi.fn(), removeListener: vi.fn() };
+    const api = createEditorApi(ipcRenderer, { getPathForFile: vi.fn() });
+    const callback = vi.fn();
+    const dispose = api.onLaunchPath(callback);
+    const [channel, listener] = ipcRenderer.on.mock.calls[0] as [string, (event: unknown, resource: unknown) => void];
+    listener({}, { type: 'workspace-automation-flows', workspaceRoot: '/workspace' });
+    expect(callback).not.toHaveBeenCalled();
+    listener({}, '/workspace');
+    listener({}, { type: 'workspace-file', workspaceRoot: '/workspace', filePath: 'README.md' });
+    expect(callback.mock.calls).toEqual([
+      ['/workspace'], [{ type: 'workspace-file', workspaceRoot: '/workspace', filePath: 'README.md' }],
+    ]);
+    dispose();
+    expect(ipcRenderer.removeListener).toHaveBeenCalledWith(channel, listener);
+  });
+
 })

@@ -57,36 +57,6 @@ export const AGENT_CHAT_CHANNELS = Object.freeze({
   stopSession: "agent-chat:stop-session",
 });
 
-export const AUTOMATION_CHANNELS = Object.freeze({
-  archiveFlow: "automation:archive-flow",
-  applyGlobalFlowToWorkspace: "automation:apply-global-flow-to-workspace",
-  cancelRun: "automation:cancel-run",
-  createExecutorDraft: "automation:create-executor-draft",
-  createFlowDraft: "automation:create-flow-draft",
-  createFlowFromTemplate: "automation:create-flow-from-template",
-  deleteFlow: "automation:delete-flow",
-  getExplorerAutomationProjection: "automation:get-explorer-automation-projection",
-  getProjection: "automation:get-projection",
-  listCapabilityReports: "automation:list-capability-reports",
-  listReports: "automation:list-reports",
-  listTemplates: "automation:list-templates",
-  loadFlowDefinition: "automation:load-flow-definition",
-  openNativeSession: "automation:open-native-session",
-  openAutomationManagementTarget: "automation:open-management-target",
-  refreshSkillCatalog: "automation:refresh-skill-catalog",
-  removeAppliedGlobalFlowFromWorkspace:
-    "automation:remove-applied-global-flow-from-workspace",
-  renameFlow: "automation:rename-flow",
-  resumeRun: "automation:resume-run",
-  restoreFlow: "automation:restore-flow",
-  saveFlowDefinition: "automation:save-flow-definition",
-  setFlowLifecycle: "automation:set-flow-lifecycle",
-  startRun: "automation:start-run",
-  submitDecision: "automation:submit-decision",
-  updateFilters: "automation:update-filters",
-  validateTemplateInput: "automation:validate-template-input",
-});
-
 export const UPDATE_CHANNELS = Object.freeze({
   checkForUpdates: "update:check-for-updates",
   downloadAndOpen: "update:download-and-open",

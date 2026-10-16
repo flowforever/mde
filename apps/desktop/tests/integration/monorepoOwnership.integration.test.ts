@@ -47,6 +47,7 @@ describe('monorepo package ownership', () => {
     expect(desktopPackageJson.dependencies?.['@mde/editor-react']).toBe(
       'workspace:*'
     )
+    expect(desktopPackageJson.dependencies?.['@mde/automation-flow']).toBeUndefined()
     expect(typeof desktopPackageJson.dependencies?.['electron-updater']).toBe(
       'string'
     )
