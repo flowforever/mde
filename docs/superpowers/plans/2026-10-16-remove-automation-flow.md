@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Electron, React, BlockNote, pnpm 10.18.2, electron-vite, Vitest, Testing Library, Playwright, VitePress.
 
-**Spec:** [Approved removal specification](../specs/2026-10-16-remove-automation-flow-design.md). Read both documents before execution. The user's “continue” on 2026-10-16 approved the written specification; this plan still requires review and an execution-method selection.
+**Spec:** [Approved removal specification](../specs/2026-10-16-remove-automation-flow-design.md). Read both documents before execution. The user approved the written specification and this plan on 2026-10-16. Native execution completed locally; verification is recorded in the specification.
 
 ## Global Constraints
 
@@ -69,7 +69,7 @@ Paths abbreviated in the table are relative to the preceding fully qualified dir
 - Produces `MdeWindowRoot(): ReactElement`, rendered as `<MdeWindowRoot />`; `AgentChatContextManifest` retains document/model/permission/selection/workspace fields and loses `automationAuthoringContext`.
 - Keeps `AgentChatHost`, `AgentChatSessionPurpose`, and the automation preload/main interfaces temporarily available to the backend until Task 2. This avoids breaking its adapters during the first local commit.
 
-- [ ] **Step 1: Establish the execution workspace and verification baseline.** Read `AGENTS.md`, both documents, and `git status`. Use `superpowers:using-git-worktrees` before product edits. Restore access to the pinned package manager and install the existing lockfile without changing dependency declarations.
+- [x] **Step 1: Establish the execution workspace and verification baseline.** Read `AGENTS.md`, both documents, and `git status`. Use `superpowers:using-git-worktrees` before product edits. Restore access to the pinned package manager and install the existing lockfile without changing dependency declarations.
 
 ```sh
 pnpm --version
@@ -81,7 +81,7 @@ pnpm --filter @mde/agent-chat test
 
 Expected: pnpm reports `10.18.2`; commands exit zero. If setup still fails, record the actual error and stop execution before claiming a passing baseline. Keep any pre-existing test failure distinct from a removal regression.
 
-- [ ] **Step 2: Write the failing Explorer UT in the renamed Home suite.** Keep the existing `createState` helper, `text`, Testing Library setup, and `afterEach`. Replace the Home-specific tests with retained-controls coverage:
+- [x] **Step 2: Write the failing Explorer UT in the renamed Home suite.** Keep the existing `createState` helper, `text`, Testing Library setup, and `afterEach`. Replace the Home-specific tests with retained-controls coverage:
 
 ```tsx
 it.each(['en', 'zh'] as const)('has normal controls without automation in %s', (language) => {
@@ -110,7 +110,7 @@ it.each(['en', 'zh'] as const)('has normal controls without automation in %s', (
 
 Keep the collapsed-sidebar test, removing its retired callback prop. Add the same absence assertion with a real workspace state using the existing flow-suite `createState` workspace object before retiring that suite. In `appLanguage.test.ts`, preserve existing custom-pack parsing/fallback tests and add an extra retired `explorer.openAutomationCenter` override to a custom-pack fixture: normal Explorer labels still resolve through `createAppText`, and the old key creates no UI.
 
-- [ ] **Step 3: Write the failing chat-context UT.** Replace the two authoring-context tests in `packages/agent-chat/src/context.test.ts` with the following test; ordinary context and attachment tests remain:
+- [x] **Step 3: Write the failing chat-context UT.** Replace the two authoring-context tests in `packages/agent-chat/src/context.test.ts` with the following test; ordinary context and attachment tests remain:
 
 ```ts
 it('treats a legacy flow document as document content without executor instructions', () => {
@@ -143,7 +143,7 @@ it('treats a legacy flow document as document content without executor instructi
 
 The variable has extra properties deliberately: structural typing permits testing old wire data after the public type loses that field. Test both raw prompt building and normalization so neither path can inject the stale property.
 
-- [ ] **Step 4: Add the corresponding IT and desktop E2E failures.** In `componentNames.integration.test.ts`, replace only the automation-location assertion with:
+- [x] **Step 4: Add the corresponding IT and desktop E2E failures.** In `componentNames.integration.test.ts`, replace only the automation-location assertion with:
 
 ```ts
 it('has no retired automation component entries', () => {
@@ -176,7 +176,7 @@ await expect(window.locator('[data-component-id="explorer.automation-flows-panel
 expect(app.windows()).toHaveLength(1);
 ```
 
-- [ ] **Step 5: Run red tests before changing production code.**
+- [x] **Step 5: Run red tests before changing production code.**
 
 ```sh
 pnpm --filter @mde/desktop test:unit tests/unit/ExplorerPaneFeatureRemoval.test.tsx
@@ -187,7 +187,7 @@ pnpm exec playwright test --config apps/desktop/playwright.config.ts apps/deskto
 
 Name the replacement E2E case `opens and saves a workspace without automation controls` so the last command selects it. Expected red failures: old Home/panel, old component-map entries, and injected executor context. An import/configuration error is not the intended red result.
 
-- [ ] **Step 6: Remove the renderer integration and context implementation.** Remove automation imports, state, projection-refresh effects, flow/executor/global-flow callbacks, specialized launch branch, authoring-path/context helpers, and Explorer callback wiring from `App.tsx`. Remove flow state/storage/render functions and props from `ExplorerPane.tsx`, retaining normal Explorer and Recent Files. Replace the window root with:
+- [x] **Step 6: Remove the renderer integration and context implementation.** Remove automation imports, state, projection-refresh effects, flow/executor/global-flow callbacks, specialized launch branch, authoring-path/context helpers, and Explorer callback wiring from `App.tsx`. Remove flow state/storage/render functions and props from `ExplorerPane.tsx`, retaining normal Explorer and Recent Files. Replace the window root with:
 
 ```tsx
 import type { ReactElement } from 'react';
@@ -198,7 +198,7 @@ export const MdeWindowRoot = (): ReactElement => <App />;
 
 Update `main.tsx` to render `<MdeWindowRoot />` and drop its unused window-mode import. At the existing App launch listener, process the remaining recognized `workspace-file` object and string paths explicitly; ignore other object shapes while Task 2 still owns removal of the shared flow launch variant. Delete the renderer automation directory and its exclusive styles. In the chat package, delete `AgentChatAutomationAuthoringContext`, the manifest field, its normalization block, and `buildAutomationAuthoringContextSection`; remove that section from `buildCodexUserInputItems`. Keep model, selection, document text, attachments, and permission validation unchanged. Leave automation host/purpose types for Task 2.
 
-- [ ] **Step 7: Align tests, copy, component reference, and the current manual.** Remove feature-only UI suites listed above. In `shell.test.tsx`, delete only flow-panel launch/global-executor fixtures and assertions; retain ordinary multi-window, file-history, workspace, and Agent Chat cases. Remove automation-only keys from both built-in language packs and their exclusive tests. Remove retired component entries/aliases and corresponding manual rows in the same edit. Delete the Automation Center manual page/navigation and replace the workspace Automation Flows section with the exact retained-data guidance:
+- [x] **Step 7: Align tests, copy, component reference, and the current manual.** Remove feature-only UI suites listed above. In `shell.test.tsx`, delete only flow-panel launch/global-executor fixtures and assertions; retain ordinary multi-window, file-history, workspace, and Agent Chat cases. Remove automation-only keys from both built-in language packs and their exclusive tests. Remove retired component entries/aliases and corresponding manual rows in the same edit. Delete the Automation Center manual page/navigation and replace the workspace Automation Flows section with the exact retained-data guidance:
 
 ```markdown
 ## 旧版自动化数据
@@ -210,7 +210,7 @@ MDE 已移除 Automation Center 和 Automation Flow 管理及自动执行功能�
 
 Keep Recent Files prose under its own heading. Remove current feature claims from `user-manual/zh-CN/index.md`; distinguish retained old-data paths from supported runtime storage. Update `apps/desktop/package.json` default E2E script to run Markdown and Agent Chat suites followed by the existing performance smoke command; delete `test:e2e:automation-center`.
 
-- [ ] **Step 8: Verify this deliverable and commit only its files.** Run the red commands again, the full desktop unit/integration scripts, `pnpm --filter @mde/agent-chat test`, `pnpm run lint`, `pnpm run typecheck`, and `pnpm run docs:build`. Run the existing Agent Chat E2E suite. Expected: all pass; package/runtime automation tests remain available until Task 2. Stage only the listed renderer, context, tests, script, and manual paths, inspect `git diff --cached --check`, and commit as `feat: remove automation flow interfaces and authoring context`.
+- [x] **Step 8: Verify this deliverable and commit only its files.** Run the red commands again, the full desktop unit/integration scripts, `pnpm --filter @mde/agent-chat test`, `pnpm run lint`, `pnpm run typecheck`, and `pnpm run docs:build`. Run the existing Agent Chat E2E suite. Expected: all pass; package/runtime automation tests remain available until Task 2. Stage only the listed renderer, context, tests, script, and manual paths, inspect `git diff --cached --check`, and commit as `feat: remove automation flow interfaces and authoring context`.
 
 ### Task 2: Remove Runtime, IPC, Package, and Distributed Helper
 
@@ -230,7 +230,7 @@ Keep Recent Files prose under its own heading. Remove current feature claims fro
 - Retains `getWindowModeFromArgv(argv: readonly string[]): MdeWindowMode`; its only mode is `editor` and unknown modes return that value.
 - Adds test-only `seedLegacyAutomationFixture(input: { workspaceRoot: string; homeRoot: string; userDataRoot: string }): Promise<readonly string[]>` and `snapshotTree(root: string): Promise<Record<string, string>>`.
 
-- [ ] **Step 1: Add failing parser and chat-handler tests.** Use this complete parser case in the new desktop UT:
+- [x] **Step 1: Add failing parser and chat-handler tests.** Use this complete parser case in the new desktop UT:
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -262,7 +262,7 @@ it.each([
 });
 ```
 
-- [ ] **Step 2: Add actual bridge and bootstrap integration coverage.** In `preloadSurface.integration.test.ts`, bundle `apps/desktop/src/preload/index.ts` in memory through Vite (`configFile: false`, SSR build, `write: false`, CJS output, `electron` external). Run the generated chunk through `node:vm.runInNewContext` with a fake `require('electron')`, `process.argv`, and module/exports objects. Capture `contextBridge.exposeInMainWorld` and `ipcRenderer.invoke`; assert these actual exposures:
+- [x] **Step 2: Add actual bridge and bootstrap integration coverage.** In `preloadSurface.integration.test.ts`, bundle `apps/desktop/src/preload/index.ts` in memory through Vite (`configFile: false`, SSR build, `write: false`, CJS output, `electron` external). Run the generated chunk through `node:vm.runInNewContext` with a fake `require('electron')`, `process.argv`, and module/exports objects. Capture `contextBridge.exposeInMainWorld` and `ipcRenderer.invoke`; assert these actual exposures:
 
 ```ts
 expect([...exposed.keys()].sort()).toEqual([
@@ -291,9 +291,9 @@ expect(channels).not.toContain('window:open-automation-center');
 
 Restore environment variables, mocks, and temporary data after each test. Keep the bootstrap function private; no production export or new service layer is needed for this test.
 
-- [ ] **Step 3: Add launch-listener and retained-window regressions.** In `dropOpenPreload.integration.test.ts`, create the real `createEditorApi` with `on/invoke/removeListener` spies; subscribe through `onLaunchPath` and call the listener captured in `on.mock.calls`. An old `{ type: 'workspace-automation-flows', workspaceRoot: '/workspace' }` must not call the client callback; `'/workspace'` and `{ type: 'workspace-file', workspaceRoot: '/workspace', filePath: 'README.md' }` must call it. Dispose and assert the listener is removed. Migrate existing main-window creation, security options, last-argument precedence, focus/close, and webContents-ID lookup tests into `editorWindow.integration.test.ts`; remove only Center-manager cases.
+- [x] **Step 3: Add launch-listener and retained-window regressions.** In `dropOpenPreload.integration.test.ts`, create the real `createEditorApi` with `on/invoke/removeListener` spies; subscribe through `onLaunchPath` and call the listener captured in `on.mock.calls`. An old `{ type: 'workspace-automation-flows', workspaceRoot: '/workspace' }` must not call the client callback; `'/workspace'` and `{ type: 'workspace-file', workspaceRoot: '/workspace', filePath: 'README.md' }` must call it. Dispose and assert the listener is removed. Migrate existing main-window creation, security options, last-argument precedence, focus/close, and webContents-ID lookup tests into `editorWindow.integration.test.ts`; remove only Center-manager cases.
 
-- [ ] **Step 4: Add synthetic legacy fixture support and an E2E that fails on the current runtime.** The fixture writes these relative paths under caller-owned roots with `mkdir(dirname(path), { recursive: true })` and `writeFile`, returning the protected roots listed after this table:
+- [x] **Step 4: Add synthetic legacy fixture support and an E2E that fails on the current runtime.** The fixture writes these relative paths under caller-owned roots with `mkdir(dirname(path), { recursive: true })` and `writeFile`, returning the protected roots listed after this table:
 
 | Root | Relative path | Content |
 | --- | --- | --- |
@@ -448,7 +448,7 @@ test('preserves legacy automation files through startup, editing, and shutdown',
 
 Add an empty-profile case asserting that no `automation/` directory or global helper-skill link is created. Reuse the same isolated launch arrangement and assert `snapshotTree` returns `{ 'missing:root': '' }` for each absent feature path after close. Keep ordinary fake-Codex E2E from Task 1 in the default command.
 
-- [ ] **Step 5: Confirm meaningful red results.**
+- [x] **Step 5: Confirm meaningful red results.**
 
 ```sh
 pnpm --filter @mde/desktop test:unit tests/unit/windowMode.test.ts
@@ -458,7 +458,7 @@ pnpm exec playwright test --config apps/desktop/playwright.config.ts apps/deskto
 
 Expected failures are the accepted retired mode/request, exposed automation API, registered automation handlers, or legacy data initialization. Fix test setup errors before treating the run as a regression reproduction.
 
-- [ ] **Step 6: Remove the complete main-process feature and bridge.** In `main/index.ts`, delete automation imports/environment switches, helper registration, adapter/store/runtime/coordinator setup, handler registration, Center window manager, flow-management launch normalization/reuse branch, and the automation shutdown hook. Keep ordinary `createAgentChatRuntime`, native metadata storage, CLI registration, updater, workspace/file/AI/chat handlers, editor windows, and app lifecycle behavior. Remove the deleted service directory, automation handler/API/shared files, and channel group. Change window contracts to:
+- [x] **Step 6: Remove the complete main-process feature and bridge.** In `main/index.ts`, delete automation imports/environment switches, helper registration, adapter/store/runtime/coordinator setup, handler registration, Center window manager, flow-management launch normalization/reuse branch, and the automation shutdown hook. Keep ordinary `createAgentChatRuntime`, native metadata storage, CLI registration, updater, workspace/file/AI/chat handlers, editor windows, and app lifecycle behavior. Remove the deleted service directory, automation handler/API/shared files, and channel group. Change window contracts to:
 
 ```ts
 export const EDITOR_WINDOW_MODE = 'editor';
@@ -469,7 +469,7 @@ export const isMdeWindowMode = (value: unknown): value is MdeWindowMode => value
 
 Keep the parser's existing last-argument lookup and editor fallback. Remove `openAutomationCenter` from `MdeWindowApi` and preload exposure. In workspace types/validators/listeners, accept only strings and valid `workspace-file` objects; remove the flow variant. Keep normal `focusWorkspaceWindow` behavior.
 
-- [ ] **Step 7: Retire chat runtime types and reject old request values.** Set the host/purpose types to the Interfaces block. In `assertCreateDraftRequest`, before returning the normalized request, apply:
+- [x] **Step 7: Retire chat runtime types and reject old request values.** Set the host/purpose types to the Interfaces block. In `assertCreateDraftRequest`, before returning the normalized request, apply:
 
 ```ts
 if (
@@ -482,7 +482,7 @@ if (
 
 `invalid-context` is an existing stable diagnostic code, not new UI copy. Return `host: 'editor'` and `sessionPurpose: request.sessionPurpose === 'debug' ? 'debug' : 'document-chat'`; retain omitted-field defaults. Keep existing localized renderer error handling. Remove automation-purpose admission in package context validation. Do not rewrite bindings or add automatic native-session resume.
 
-- [ ] **Step 8: Remove package/distribution references and obsolete tests.** Delete `packages/automation-flow/`, its desktop dependency, all automation aliases/coverage/project entries in the exact configs from the file map, and the Electron helper resource. Delete only the repository helper source/link; retain standalone development skills and all user-global paths. Remove the remaining automation-only suites after migrating editor tests. Update ownership integration assertions to require the absent dependency/resource and the remaining package-local test scripts. Update the default desktop E2E command to include `automation-removal.e2e.test.ts` alongside Markdown and Agent Chat before performance smoke.
+- [x] **Step 8: Remove package/distribution references and obsolete tests.** Delete `packages/automation-flow/`, its desktop dependency, all automation aliases/coverage/project entries in the exact configs from the file map, and the Electron helper resource. Delete only the repository helper source/link; retain standalone development skills and all user-global paths. Remove the remaining automation-only suites after migrating editor tests. Update ownership integration assertions to require the absent dependency/resource and the remaining package-local test scripts. Update the default desktop E2E command to include `automation-removal.e2e.test.ts` alongside Markdown and Agent Chat before performance smoke.
 
 ```sh
 pnpm install --lockfile-only
@@ -492,7 +492,7 @@ rg -n 'automation|Automation|@mde/automation-flow' apps/desktop/src packages/age
 
 Classify every remaining hit: the two retired request-value guards and test/migration references are intentional; live services, dependencies, UI, authoring context, and aliases are not. Keep shared third-party dependencies still used by another workspace package. Never remove a package merely because its name was previously present under the deleted importer.
 
-- [ ] **Step 9: Run green verification and commit the coherent removal.** Run the red commands again, `pnpm run lint`, `pnpm run typecheck`, `pnpm run build`, root unit/integration checks, and `pnpm --filter @mde/agent-chat test`. Run the normal Agent Chat and new removal E2Es. Expected: all pass, legacy snapshots are byte-identical after close, no new automation state is created, and package-local commands remain runnable. Stage the listed main/bridge/package/config/skill/test changes and lockfile, review `git diff --cached --check`, and commit as `feat: retire automation runtime and package`.
+- [x] **Step 9: Run green verification and commit the coherent removal.** Run the red commands again, `pnpm run lint`, `pnpm run typecheck`, `pnpm run build`, root unit/integration checks, and `pnpm --filter @mde/agent-chat test`. Run the normal Agent Chat and new removal E2Es. Expected: all pass, legacy snapshots are byte-identical after close, no new automation state is created, and package-local commands remain runnable. Stage the listed main/bridge/package/config/skill/test changes and lockfile, review `git diff --cached --check`, and commit as `feat: retire automation runtime and package`.
 
 ### Task 3: Refresh Manual Evidence and Complete Verification
 
@@ -507,7 +507,7 @@ Classify every remaining hit: the two retired request-value guards and test/migr
 - Consumes Tasks 1 and 2's completed app and their UT/IT/E2E results.
 - Produces a current public manual, generated screenshots, passing required checks, and a precise local handoff. No new production API or migration is introduced.
 
-- [ ] **Step 1: Generate and inspect the real manual screenshots.**
+- [x] **Step 1: Generate and inspect the real manual screenshots.**
 
 ```sh
 pnpm run docs:screenshots
@@ -516,7 +516,7 @@ pnpm run docs:build
 
 Expected: the existing complete screenshot set is generated and the manual has no dead Automation Center route. Inspect Explorer, quick-start, editor, search, and AI screenshots for retired controls and machine-specific state. Regenerate through the same workflow after correcting fixture state; do not alter images manually.
 
-- [ ] **Step 2: Run the complete required check set once against the final source.**
+- [x] **Step 2: Run the complete required check set once against the final source.**
 
 ```sh
 pnpm run lint
@@ -531,7 +531,7 @@ pnpm --filter @mde/desktop test
 
 The root default E2E script must now run Markdown, ordinary Agent Chat, removal/data-preservation, and the existing editor-performance smoke flow. Package-local `test` remains an independent public verification entry. Where an owning-package command dispatches exactly the already completed suite with unchanged source, record the equivalent result instead of repeating expensive runs; otherwise execute it. Re-run only checks whose inputs change after a correction.
 
-- [ ] **Step 3: Review the final diff against the six spec acceptance criteria.**
+- [x] **Step 3: Review the final diff against the six spec acceptance criteria.**
 
 ```sh
 git diff --check
@@ -542,9 +542,9 @@ rg -n 'Automation Center|Automation Flows|automation-flow|automation-flows' user
 
 Current-manual hits must be limited to explicit old-data guidance. Confirm no user-home files were modified, all test fixture roots are isolated, the component map and manual remain equal, root scripts remain stable, and historical release notes/specs and independent development skills remain present. Remove only artifacts generated by this run, not unrelated files. Record exact commands and any blockers; failed checks prevent a completion claim.
 
-- [ ] **Step 4: Commit documentation evidence and hand off the verified change.** Stage only intended manual/screenshot changes and commit as `docs: update manual after automation removal`. Report the removed surfaces, retained data, test results, and any environment limits. If this work is later pushed as a production-ready release-branch change, use `skills/release-new-version/SKILL.md` for the repository's version, notes, tag, push, release verification, and completed-requirement archival policy. Plan-only commits never receive a release tag.
+- [x] **Step 4: Commit documentation evidence and hand off the verified change.** Stage only intended manual/screenshot changes and commit as `docs: update manual after automation removal`. Report the removed surfaces, retained data, test results, and any environment limits. If this work is later pushed as a production-ready release-branch change, use `skills/release-new-version/SKILL.md` for the repository's version, notes, tag, push, release verification, and completed-requirement archival policy. Plan-only commits never receive a release tag.
 
-## Plan Self-Review and Execution Gate
+## Plan Self-Review and Execution Record
 
 - Spec scope and boundaries map to Task 1 (UI, copy, authoring, manual) and Task 2 (runtime, contracts, package, skill distribution, old-data preservation).
 - All five Review Focus conditions have explicit owning tests above. Existing editor cases are migrated before deleting mixed automation suites.
@@ -553,4 +553,4 @@ Current-manual hits must be limited to explicit old-data guidance. Confirm no us
 - Plan code and paths were checked against the current repository. Runtime examples are implementation instructions, not tests executed during planning.
 - At planning time dependencies remain absent and the previously recorded pnpm fetch/verification failure has no passing replacement result. Execution Step 1 owns environment recovery; no runtime checks are claimed to pass.
 
-Review this written plan and choose an execution method before product changes. Native execution is recommended because the two code tasks modify closely related renderer/bridge/chat contracts; keeping their context together avoids repeated setup. Subagent-driven execution is also supported, with one implementer/reviewer gate per task. Both methods require a final independent review and the same verification and data-preservation evidence.
+Native execution was approved on 2026-10-16. Tasks 1–3 completed locally, with required automated checks and retained-data coverage passing. A whole-branch independent review is required before integration. No merge, push, or release is included in this local completion record.

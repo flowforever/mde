@@ -3840,15 +3840,25 @@ test('previews and restores an earlier current-file version from history', async
       .poll(async () => readFile(readmePath, 'utf8'), { timeout: 10_000 })
       .toContain('Version history e2e edit')
 
-    await window.getByRole('button', { name: /^version history$/i }).click()
+    const toggleHistory = async (): Promise<void> => {
+      await expect(async () => {
+        const expandActions = window.getByRole('button', { name: /^show all editor actions$/i })
+        if (await expandActions.isVisible()) {
+          await expandActions.click()
+        }
+        await window.getByRole('button', { name: /^version history$/i }).click({ timeout: 1_000 })
+      }).toPass({ timeout: 10_000 })
+    }
+
+    await toggleHistory()
     await expect(
       window.getByRole('complementary', { name: /^version history$/i })
     ).toBeVisible()
-    await window.getByRole('button', { name: /^version history$/i }).click()
+    await toggleHistory()
     await expect(
       window.getByRole('complementary', { name: /^version history$/i })
     ).toHaveCount(0)
-    await window.getByRole('button', { name: /^version history$/i }).click()
+    await toggleHistory()
     await expect(
       window.getByRole('complementary', { name: /^version history$/i })
     ).toBeVisible()
