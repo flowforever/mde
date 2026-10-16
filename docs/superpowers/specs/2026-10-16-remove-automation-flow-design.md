@@ -1,7 +1,7 @@
 # Remove Automation Flow
 
 Date: 2026-10-16
-Status: Conversational design approved; written specification awaiting user review
+Status: Written specification approved on 2026-10-16; implementation plan awaiting review
 
 ## Intent and approval
 
