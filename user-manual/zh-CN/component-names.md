@@ -17,60 +17,10 @@
 | Drop Target Overlay | `app.drop-target-overlay` | 拖拽目标覆盖层 | 主窗口覆盖层 | `apps/desktop/src/renderer/src/app/App.tsx` | 拖入外部资源时显示的覆盖提示。 |
 | Empty Editor State | `editor.empty-state` | 空编辑器状态 | 编辑器分栏 | `apps/desktop/src/renderer/src/app/App.tsx` | 未打开文件时的占位状态。 |
 
-## Automation Center
 
-Automation Center 覆盖独立自动化窗口、任务队列和右侧流程线详情。
 
 | Standard Name | Component ID | 中文名 | 位置 | 代码位置 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| Automation Archived Toggle | `automation.archived-toggle` | 自动化归档开关 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 控制是否显示已归档自动化流程。 |
-| Automation Bucket Filter Button | `automation.bucket-filter-button` | 自动化状态过滤按钮 | 自动化任务堆栈 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 在 Task Stack 中选择 Ready、Running、Needs me 或 Done。 |
-| Automation Center Window | `automation.center-window` | 自动化中心窗口 | 独立自动化窗口 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | Automation Center 渲染根容器。 |
-| Automation Decision Approve Button | `automation.decision-approve-button` | 自动化决策批准按钮 | 自动化流程线 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 在 Needs me 决策中批准并继续同一个自动化运行。 |
-| Automation Decision Panel | `automation.decision-panel` | 自动化决策面板 | 自动化流程线 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 显示当前任务的待处理决策提示。 |
-| Automation Decision Status Message | `automation.decision-status-message` | 自动化决策状态消息 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 提交人工决策失败时显示本地化的用户可读状态消息。 |
-| Automation Diagnostic List | `automation.diagnostic-list` | 自动化诊断列表 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 自动化设置与运行诊断列表。 |
-| Automation Diagnostic Management Button | `automation.diagnostic-management-button` | 自动化诊断管理按钮 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 从设置诊断进入对应 Automation Flows 管理位置。 |
-| Automation Blocked Start Diagnostic Row | `automation.blocked-start-diagnostic-row` | 自动化阻塞启动诊断行 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 阻止当前任务启动的单条诊断。 |
-| Automation Blocked Start Diagnostics Panel | `automation.blocked-start-diagnostics-panel` | 自动化阻塞启动诊断面板 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 显示阻止当前任务启动的诊断列表。 |
-| Automation Editor Close Button | `automation.editor-close-button` | 自动化编辑器关闭按钮 | 兼容残留自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 旧内嵌自动化编辑器的关闭按钮；当前生产入口使用普通 Markdown 编辑器。 |
-| Automation Editor Host | `automation.editor-host` | 自动化编辑器容器 | 兼容残留自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 旧内嵌自动化编辑器容器；当前生产入口使用普通 Markdown 编辑器。 |
-| Automation Editor Save Button | `automation.editor-save-button` | 自动化编辑器保存按钮 | 兼容残留自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 旧内嵌自动化编辑器的保存按钮；当前生产入口使用普通 Markdown 编辑器。 |
-| Automation Executor Selector | `automation.executor-selector` | 自动化执行器选择器 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 在多个可用执行器之间选择本次任务启动目标。 |
-| Automation Flow Enabled Section | `automation.flow-enabled-section` | 已启用自动化流程分组 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 收纳包含 automation-flow 的工作区过滤项。 |
-| Automation Flow Filter Toggle | `automation.flow-filter-toggle` | 自动化流程多选开关 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 将单个自动化流程加入或移出多选过滤范围。 |
-| Automation Flow Lifecycle Button | `automation.flow-lifecycle-button` | 自动化流程启停按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 直接启用或停用单个 automation-flow。 |
-| Automation Flow Not Enabled Section | `automation.flow-not-enabled-section` | 未启用自动化流程分组 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 收纳没有 automation-flow 的工作区过滤项。 |
-| Automation Flow Row | `automation.flow-row` | 自动化流程行 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个自动化流程的列表行。 |
-| Automation Flow Toolbar | `automation.flow-toolbar` | 自动化流程工具栏 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与现有 Explorer 左侧 panel 一致的流程操作工具栏。 |
-| Automation Global Flow Section | `automation.global-flow-section` | 全局自动化流程分组 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 收纳全局 automation-flow 过滤项。 |
-| Automation Signal Stack | `automation.signal-stack` | 自动化信号队列 | 自动化中心主任务区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | 自动化任务状态队列。 |
-| Automation Task Stack | `automation.task-stack` | 自动化任务堆栈 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与 prototype 对齐的 Needs me、Running、Ready、Done 状态入口组。 |
-| Automation Template Picker | `automation.template-picker` | 自动化模板选择器 | 兼容残留自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 旧内嵌模板编辑器控件；当前 Automation Center 不再提供模板管理入口。 |
-| Automation Validation Panel | `automation.validation-panel` | 自动化验证面板 | 兼容残留自动化编辑模式 | `apps/desktop/src/renderer/src/automation/AutomationFlowEditorHost.tsx` | 旧内嵌自动化编辑器验证区域；当前流程 Markdown 通过普通编辑器打开。 |
-| Automation Flowline | `automation.flowline` | 自动化流程线 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 选中任务的流程线详情区。 |
-| Automation Flowline Close Button | `automation.flowline-close-button` | 自动化流程线关闭按钮 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 清除当前选中的流程线详情。 |
-| Automation Flowline Phase | `automation.flowline-phase` | 自动化流程线阶段 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 流程线中由任务/运行数据生成的阶段项。 |
-| Automation Execution Record Row | `automation.execution-record-row` | 自动化执行记录行 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 展示选中任务的一次执行记录，包括状态、执行器和执行根目录。 |
-| Automation Execution Records Panel | `automation.execution-records-panel` | 自动化执行记录面板 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 汇总选中任务已有的执行记录。 |
-| Automation Execution Root Label | `automation.execution-root-label` | 自动化执行根目录标签 | 自动化中心任务卡片、右侧详情区和运行详情 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx`, `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx`, `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 当任务使用不同于当前工作区的执行根目录时显示该路径。 |
-| Automation Primary Executor Label | `automation.primary-executor-label` | 自动化主执行器标签 | 自动化中心任务卡片和右侧详情区 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx`, `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 显示当前任务的主执行器。 |
-| Automation Return Workspace Button | `automation.return-workspace-button` | 返回工作区按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 从 Automation Center 切回原工作区窗口。 |
-| Automation Run History Detail Button | `automation.run-history-detail-button` | 自动化运行记录详情按钮 | 自动化中心右侧运行记录 | `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 打开某条运行记录的解析结果和过程详情。 |
-| Automation Run History Detail Close Button | `automation.run-history-detail-close-button` | 自动化运行记录详情关闭按钮 | 自动化中心右侧运行记录详情弹窗 | `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 关闭运行记录详情弹窗。 |
-| Automation Run History Detail Dialog | `automation.run-history-detail-dialog` | 自动化运行记录详情弹窗 | 自动化中心右侧运行记录 | `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 展示 automation-flow 解析结果、过程和运行状态。 |
-| Automation Run History Native Session Button | `automation.run-history-native-session-button` | 自动化运行记录原生会话按钮 | 自动化中心右侧运行记录 | `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 打开某条运行记录对应的 Codex/Claude 原生会话。 |
-| Automation Run History Panel | `automation.run-history-panel` | 自动化运行记录面板 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 列出 automation-flow 的历史运行记录。 |
-| Automation Run History Row | `automation.run-history-row` | 自动化运行记录行 | 自动化中心右侧运行记录 | `apps/desktop/src/renderer/src/automation/AutomationRunHistory.tsx` | 单条 automation-flow 运行记录。 |
-| Automation Scope Filter Management Button | `automation.scope-filter-management-button` | 自动化范围管理按钮 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 跳转到全局或工作区自动化流程管理位置。 |
-| Automation Scope Filter Toggle | `automation.scope-filter-toggle` | 自动化范围过滤开关 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 将全局或工作区范围加入或移出过滤条件。 |
-| Automation Selected Executor Start Button | `automation.selected-executor-start-button` | 自动化所选执行器启动按钮 | 自动化中心右侧详情区 | `apps/desktop/src/renderer/src/automation/QuietFlowline.tsx` | 使用当前选择的执行器启动任务数据。 |
-| Automation Sidebar Resize Handle | `automation.sidebar-resize-handle` | 自动化侧边栏宽度调节柄 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/AutomationCenterWindow.tsx` | 与现有 Explorer 一致的左右拖拽调宽入口。 |
-| Automation Signal Task Row | `automation.signal-task-row` | 自动化信号任务卡片 | 信号队列 | `apps/desktop/src/renderer/src/automation/SignalStack.tsx` | task-first 队列中的单个投影任务卡片。 |
-| Automation Status Light | `automation.status-light` | 自动化状态灯 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 用颜色和无障碍标签表示流程状态。 |
-| Automation Workspace Filter Card | `automation.workspace-filter-card` | 自动化工作区过滤卡片 | 自动化工作区过滤面板 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 单个工作区及其自动化流程列表容器。 |
-| Automation Workspace Filter Panel | `automation.workspace-filter-panel` | 自动化工作区过滤面板 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 与 prototype 对齐的工作区流程过滤分组。 |
-| Automation Workspace Filters | `automation.workspace-filters` | 自动化工作区过滤器 | 自动化中心左侧过滤区 | `apps/desktop/src/renderer/src/automation/WorkspaceFlowFilters.tsx` | 工作区、流程、归档状态过滤入口。 |
 
 ## 工作区管理
 
@@ -95,7 +45,6 @@ Explorer 覆盖文件树、工具栏、上下文菜单、最近文件和已删�
 | Standard Name | Component ID | 中文名 | 位置 | 代码位置 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | Explorer Header | `explorer.header` | Explorer 标题 | Explorer 顶部 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 左侧栏标题区域。 |
-| Automation Home Button | `explorer.automation-home-button` | 自动化中心入口按钮 | Explorer 顶部 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 打开或聚焦 Automation Center 独立窗口。 |
 | Explorer Toolbar | `explorer.toolbar` | Explorer 工具栏 | Explorer 文件区顶部 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 搜索、新建、恢复、显示隐藏项和刷新按钮组。 |
 | Workspace Search Button | `explorer.workspace-search-button` | 工作区搜索按钮 | Explorer 工具栏 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 打开工作区全文搜索。 |
 | New Markdown File Button | `explorer.new-markdown-file-button` | 新建 Markdown 文件按钮 | Explorer 工具栏 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 在当前目录新建 Markdown 文件。 |
@@ -110,18 +59,6 @@ Explorer 覆盖文件树、工具栏、上下文菜单、最近文件和已删�
 | Explorer Context Menu | `explorer.context-menu` | Explorer 右键菜单 | Explorer 文件树 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 文件和目录的上下文操作菜单。 |
 | Explorer Context Menu Item | `explorer.context-menu-item` | Explorer 右键菜单项 | Explorer 右键菜单 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 复制、粘贴、重命名、隐藏和删除等菜单项。 |
 | Delete Confirmation Popover | `explorer.delete-confirmation-popover` | 删除确认浮层 | Explorer 文件树 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 删除文件或目录前的确认控件。 |
-| Explorer Automation Flows Panel | `explorer.automation-flows-panel` | Explorer 自动化流程面板 | Explorer 底部 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 当前工作区自动化流程和执行器的管理区域。 |
-| Add Automation Executor Button | `explorer.add-automation-executor-button` | 新增自动化执行器按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 为工作区或全局自动化流程新增 Markdown executor。 |
-| Add Automation Flow Button | `explorer.add-automation-flow-button` | 新增自动化流程按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 新建工作区自动化流程 Markdown。 |
-| Apply Global Flow Button | `explorer.apply-global-flow-button` | 应用全局流程按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 将全局自动化流程应用到当前工作区。 |
-| Delete Automation Flow Button | `explorer.delete-automation-flow-button` | 删除自动化流程按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 删除工作区或全局自动化流程及其 Markdown executor 目录。 |
-| Refresh Automation Skills Button | `explorer.refresh-automation-skills-button` | 刷新自动化 Skills 按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 手动刷新 Skill catalog 并重新加载自动化流程投影。 |
-| Rename Automation Flow Button | `explorer.rename-automation-flow-button` | 重命名自动化流程按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 进入自动化流程内联重命名状态。 |
-| Explorer Automation Flow Row | `explorer.automation-flow-row` | Explorer 自动化流程行 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 单个工作区或全局自动化流程行。 |
-| Explorer Automation Flow Menu | `explorer.automation-flow-menu` | Explorer 自动化流程菜单 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 单个自动化流程的新增执行器、跳转或移除操作。 |
-| Explorer Automation Executor Row | `explorer.automation-executor-row` | Explorer 自动化执行器行 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 单个 Markdown 或 Skill 执行器行。 |
-| Jump Global Automation Flow Button | `explorer.jump-global-automation-flow-button` | 跳转全局自动化流程按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 打开全局流程在 `~/.mde` 伪工作区中的 Markdown。 |
-| Remove Applied Global Flow Button | `explorer.remove-applied-global-flow-button` | 移除已应用全局流程按钮 | 自动化流程面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 从当前工作区移除全局自动化流程引用。 |
 | Recent Files Panel | `explorer.recent-files-panel` | 最近文件面板 | Explorer 底部 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 当前工作区最近打开的文件区域。 |
 | Recent File Row | `explorer.recent-file-row` | 最近文件行 | 最近文件面板 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 最近文件列表中的单个文件按钮。 |
 | Deleted Documents Panel | `explorer.deleted-documents-panel` | 已删除文档面板 | Explorer 底部 | `apps/desktop/src/renderer/src/explorer/ExplorerPane.tsx` | 可恢复删除文档列表。 |
